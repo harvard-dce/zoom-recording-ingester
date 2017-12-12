@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion : '2010-09-09'
+Description: Zoom to Opencast video ingester
+
+Resources:
+
+  DownloadUrlsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-urls"
+      KeySchema:
+        - AttributeName: DownloadUrl
+          KeyType: HASH
+      AttributeDefinitions:
+        - AttributeName: DownloadUrl
+          AttributeType: S
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+  DownloadUrlsRole:
+    Type: AWS::IAM::Role
+    DependsOn: DownloadUrlsTable
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: apigateway.amazonaws.com
+      Policies:
+        - PolicyName: !Sub "${AWS::StackName}-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:*"
+                  - "logs:*"
+                Resource: "*"
+
+  DownloadUrlsApi:
+    Type: AWS::ApiGateway::RestApi
+    DependsOn: DownloadUrlsTable
+    Properties:
+      Name: !Ref AWS::StackName
+
+  DownloadUrlsResource:
+    Type: AWS::ApiGateway::Resource
+    DependsOn: DownloadUrlsApi
+    Properties:
+      RestApiId:
+        Ref: DownloadUrlsApi
+      ParentId:
+        Fn::GetAtt: [DownloadUrlsApi, RootResourceId]
+      PathPart: "download_url"
+
+  DownloadUrlPut:
+    Type: AWS::ApiGateway::Method
+    DependsOn: DownloadUrlsApi
+    Properties:
+      ApiKeyRequired: true
+      RestApiId:
+        Ref: DownloadUrlsApi
+      ResourceId:
+        Ref: DownloadUrlsResource
+      HttpMethod: PUT
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Credentials: !GetAtt [DownloadUrlsRole, Arn]
+        Type: AWS
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:dynamodb:action/PutItem"
+        RequestTemplates:
+          application/json:
+            !Sub |
+              {
+                "TableName": "${AWS::StackName}-urls",
+                "Item": {
+                  "DownloadUrl": {
+                    "S": "$input.path('$.DownloadUrl')"
+                  }
+                }
+              }
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: 200
+
+  DownloadUrlDeploy:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - DownloadUrlsApi
+      - DownloadUrlsResource
+      - DownloadUrlPut
+    Properties:
+      RestApiId: !Ref DownloadUrlsApi
+      Description: "Deployment for the download urls api"
+      StageName: "testing"
+
+  DownloadUrlsStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref DownloadUrlDeploy
+      RestApiId: !Ref DownloadUrlsApi
+      StageName: "latest"
+      MethodSettings:
+        - DataTraceEnabled: true
+          MetricsEnabled: true
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          ResourcePath: "/*"
+
+  DownloadUrlsAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt [DownloadUrlsRole, Arn]
+
+  DownloadUrlsApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Enabled: true
+      StageKeys:
+        - RestApiId: !Ref DownloadUrlsApi
+          StageName: !Ref DownloadUrlsStage
