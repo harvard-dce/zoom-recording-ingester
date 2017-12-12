@@ -1,6 +1,10 @@
 AWSTemplateFormatVersion : '2010-09-09'
 Description: Zoom to Opencast video ingester
 
+Parameters:
+  WebhookLambdaCode:
+    Type: String
+
 Resources:
 
   DownloadUrlsTable:
@@ -29,6 +33,10 @@ Resources:
           Effect: Allow
           Principal:
             Service: apigateway.amazonaws.com
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
       Policies:
         - PolicyName: !Sub "${AWS::StackName}-policy"
           PolicyDocument:
@@ -38,6 +46,7 @@ Resources:
                 Action:
                   - "dynamodb:*"
                   - "logs:*"
+                  - "lambda:*"
                 Resource: "*"
 
   DownloadUrlsApi:
@@ -50,10 +59,8 @@ Resources:
     Type: AWS::ApiGateway::Resource
     DependsOn: DownloadUrlsApi
     Properties:
-      RestApiId:
-        Ref: DownloadUrlsApi
-      ParentId:
-        Fn::GetAtt: [DownloadUrlsApi, RootResourceId]
+      RestApiId: !Ref DownloadUrlsApi
+      ParentId: !GetAtt [DownloadUrlsApi, RootResourceId]
       PathPart: "download_url"
 
   DownloadUrlPut:
@@ -94,12 +101,48 @@ Resources:
             application/json: Empty
           StatusCode: 200
 
+  DownloadUrlWebhook:
+    Type: AWS::ApiGateway::Method
+    DependsOn: DownloadUrlsApi
+    Properties:
+      RestApiId:
+        Ref: DownloadUrlsApi
+      ResourceId:
+        Ref: DownloadUrlsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Credentials: !GetAtt [DownloadUrlsRole, Arn]
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DownloadUrlWebhookFunction.Arn}/invocations
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: 200
+
+  DownloadUrlWebhookFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: zoom-webhook.handler
+      Runtime: python3.6
+      Role: !GetAtt [DownloadUrlsRole, Arn]
+      FunctionName: !Sub "${AWS::StackName}-zoom-webhook-function"
+      Environment:
+        Variables:
+          DOWNLOAD_URLS_TABLE: !Sub "${AWS::StackName}-urls"
+          ZOOM_API_TOKEN: ""
+      Code:
+        S3Bucket: !Select [0, !Split ["/", !Ref WebhookLambdaCode]]
+        S3Key: !Select [1, !Split ["/", !Ref WebhookLambdaCode]]
+
   DownloadUrlDeploy:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
       - DownloadUrlsApi
       - DownloadUrlsResource
       - DownloadUrlPut
+      - DownloadUrlWebhook
     Properties:
       RestApiId: !Ref DownloadUrlsApi
       Description: "Deployment for the download urls api"

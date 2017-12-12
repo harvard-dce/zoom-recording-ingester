@@ -6,7 +6,7 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
 
 Python 3 is required.
 
-1. `pip install requirements_dev.txt`
+1. `pip install requirements/dev.txt`
 1. copy `example.env` to `.env` and update as necessary
 
 ## Commands
