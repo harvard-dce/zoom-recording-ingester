@@ -78,9 +78,13 @@ Resources:
               {
                 "TableName": "${AWS::StackName}-urls",
                 "Item": {
-                  "DownloadUrl": {
-                    "S": "$input.path('$.DownloadUrl')"
-                  }
+                  "DownloadUrl": { "S": "$input.path('$.download_url')" },
+                  "Duration": { "N": "$input.path('$.duration')" },
+                  "MeetingSeriesId": { "N": "$input.path('$.meeting_series_id')" },
+                  "MeetingUUID": { "S": "$input.path('$.meeting_uuid')" },
+                  "RecordingStart": { "S": "$input.path('$.recording_start')" },
+                  "RecordingEnd": { "S": "$input.path('$.recording_end')" },
+                  "Topic": { "S": "$input.path('$.topic')" }
                 }
               }
         IntegrationResponses:
