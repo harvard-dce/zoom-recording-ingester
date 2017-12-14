@@ -4,6 +4,8 @@ Description: Zoom to Opencast video ingester
 Parameters:
   WebhookLambdaCode:
     Type: String
+  ZoomDownloaderLambdaCode:
+    Type: String
 
 Resources:
 
@@ -20,6 +22,8 @@ Resources:
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
 
   DownloadUrlsRole:
     Type: AWS::IAM::Role
@@ -173,3 +177,28 @@ Resources:
       StageKeys:
         - RestApiId: !Ref DownloadUrlsApi
           StageName: !Ref DownloadUrlsStage
+
+  ZoomDownloaderFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: DownloadUrlsTable
+    Properties:
+      Handler: zoom-downloader.handler
+      Runtime: python3.6
+      Role: !GetAtt [DownloadUrlsRole, Arn]
+      FunctionName: !Sub "${AWS::StackName}-zoom-downloader-function"
+      Environment:
+        Variables:
+          ZOOM_VIDEOS_BUCKET: !Sub "${AWS::StackName}-videos"
+      Code:
+        S3Bucket: !Select [0, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
+        S3Key: !Select [1, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
+
+  ZoomDownloaderEventMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    DependsOn:
+      - DownloadUrlsTable
+      - ZoomDownloaderFunction
+    Properties:
+      FunctionName: !GetAtt [ZoomDownloaderFunction, Arn]
+      StartingPosition: TRIM_HORIZON
+      EventSourceArn: !GetAtt [DownloadUrlsTable, StreamArn]
