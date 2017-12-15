@@ -13,6 +13,7 @@ STACK_TAGS = env('STACK_TAGS')
 STACK_NAME = env('STACK_NAME', 'zoom-ingester')
 LAMBDA_CODE_BUCKET = env('LAMBDA_CODE_BUCKET')
 
+
 def profile_arg():
     if AWS_PROFILE is not None:
         return "--profile {}".format(AWS_PROFILE)

@@ -9,6 +9,11 @@ Parameters:
 
 Resources:
 
+  ZoomVideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-videos"
+
   DownloadUrlsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -48,10 +53,17 @@ Resources:
             Statement:
               - Effect: "Allow"
                 Action:
-                  - "dynamodb:*"
                   - "logs:*"
                   - "lambda:*"
                 Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:*"
+                Resource: !GetAtt [DownloadUrlsTable, Arn]
+              - Effect: "Allow"
+                Action:
+                  - "s3:*"
+                Resource: !GetAtt [ZoomVideosBucket, Arn]
 
   DownloadUrlsApi:
     Type: AWS::ApiGateway::RestApi
