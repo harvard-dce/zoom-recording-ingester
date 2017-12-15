@@ -1,0 +1,8 @@
+{
+  "type" : "RECORDING_MEETING_COMPLETED",
+  "content": {
+    "uuid": "foo",
+    "host_id": "bar",
+    "id": 12345
+  }
+}
