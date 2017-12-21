@@ -2,7 +2,7 @@
 import shutil
 from invoke import task
 from invoke.exceptions import Exit
-from os import getenv as env
+from os import symlink, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists
 
@@ -99,8 +99,12 @@ def __package_function(ctx, func):
     build_path = join(dirname(__file__), 'dist/{}'.format(func))
     zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
     function_path = join(dirname(__file__), 'functions/{}.py'.format(func))
+    function_dist_path = join(build_path, '{}.py'.format(func))
     ctx.run("pip install -U -r {} -t {}".format(req_file, build_path))
-    ctx.run("ln -s -f -r -t {} {}".format(build_path, function_path))
+    try:
+        symlink(function_path, function_dist_path)
+    except FileExistsError:
+        pass
     with ctx.cd(build_path):
         ctx.run("zip -r {} .".format(zip_path))
 
