@@ -62,8 +62,15 @@ Resources:
                 Resource: !GetAtt [DownloadUrlsTable, Arn]
               - Effect: "Allow"
                 Action:
+                  - "dynamodb:DescribeStream"
+                  - "dynamodb:GetRecords"
+                  - "dynamodb:GetShardIterator"
+                  - "dynamodb:ListStreams"
+                Resource: !Join ['', [!GetAtt [DownloadUrlsTable, Arn], "/stream/*"]]
+              - Effect: "Allow"
+                Action:
                   - "s3:*"
-                Resource: !GetAtt [ZoomVideosBucket, Arn]
+                Resource: !Join ['', [!GetAtt [ZoomVideosBucket, Arn], "/*"]]
 
   DownloadUrlsApi:
     Type: AWS::ApiGateway::RestApi
@@ -147,7 +154,8 @@ Resources:
       Environment:
         Variables:
           DOWNLOAD_URLS_TABLE: !Sub "${AWS::StackName}-urls"
-          ZOOM_API_TOKEN: ""
+          ZOOM_API_KEY: ""
+          ZOOM_API_SECRET: ""
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref WebhookLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref WebhookLambdaCode]]
