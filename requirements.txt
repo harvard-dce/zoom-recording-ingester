@@ -1,3 +1,10 @@
 invoke
 python-dotenv
 awscli
+pytest
+pytest-env
+moto
+tox
+
+-r functions/zoom-webhook.txt
+-r functions/zoom-downloader.txt

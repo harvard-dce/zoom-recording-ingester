@@ -4,14 +4,29 @@ import jwt
 import time
 import json
 from os import getenv as env
+from botocore.exceptions import ClientError
 
 DOWNLOAD_URLS_TABLE = env('DOWNLOAD_URLS_TABLE')
 ZOOM_API_KEY = env('ZOOM_API_KEY')
 ZOOM_API_SECRET = env('ZOOM_API_SECRET')
+MEETING_LOOKUP_RETRIES = 2
+MEETING_LOOKUP_RETRY_DELAY = 5
 
-dynamo = boto3.resource('dynamodb')
-table = dynamo.Table(DOWNLOAD_URLS_TABLE)
 
+class BadWebhookData(Exception):
+    pass
+
+
+class MeetingLookupFailure(Exception):
+    pass
+
+def resp_400(msg):
+    print("http 400 response: {}".format(msg))
+    return {
+        'statusCode': 400,
+        'headers': {},
+        'body': msg
+    }
 
 def handler(event, context):
     """
@@ -21,47 +36,66 @@ def handler(event, context):
     """
 
     if 'body' not in event:
-        print("Bad data: %s" % str(event))
-        return {
-            'statusCode': 400,
-            'headers': {},
-            'body': "No body in event"
-        }
+        return resp_400("bad data: no body in event")
 
-    # try except only for testing
+    payload = json.loads(event['body'])
+
     try:
-        body = json.loads(event['body'])
-    except Exception as e:
-        print(e)
-        body = event['body']
+        uuid = get_meeting_uuid(payload)
+    except BadWebhookData as e:
+        print(payload)
+        return resp_400("bad webhook data: {}".format(str(e)))
 
-    uuid = None
+    lookup_retries = MEETING_LOOKUP_RETRIES
+    while True:
+        try:
+            print("looking up meeting {}".format(uuid))
+            recording_data = get_recording_data(uuid)
+            break
+        except MeetingLookupFailure as e:
+            if lookup_retries > 0:
+                lookup_retries -= 1
+                print("retrying. {} retries left".format(lookup_retries))
+                time.sleep(MEETING_LOOKUP_RETRY_DELAY)
+            else:
+                print("retries exhausted.")
+                resp_400("Meeting lookup failure: {}".format(str(e)))
 
-    if 'type' in body:
-        uuid = body["content"]["uuid"]
-    elif 'status' in body:
-        if body['status'] == "RECORDING_MEETING_COMPLETED":
-            uuid = body["uuid"]
-        else:
-            print("Not handling notifications of type", body['status'])
-    else:
-        print("Bad data: %s" % str(event))
-        return {
-            'statusCode': 400,
-            'headers': {},
-            'body': event
-        }
+    records = generate_records(recording_data)
 
-    record = get_recording_data(uuid)
+    if not len(records):
+        return resp_400("No recordings to download")
 
-    if record is not None:
-        send_to_dynamodb(record)
+    dynamo = boto3.resource('dynamodb')
+    table = dynamo.Table(DOWNLOAD_URLS_TABLE)
+
+    for record in records:
+        send_to_dynamodb(record, table)
 
     return {
         'statusCode': 200,
         'headers': {},
         'body': "Success"
     }
+
+
+def get_meeting_uuid(payload):
+
+    if 'type' in payload:
+        if payload['type'] == 'RECORDING_MEETING_COMPLETED':
+            return payload["content"]["uuid"]
+        else:
+            raise BadWebhookData(
+                "Don't know how to handle 'type' of {}".format(payload['type'])
+            )
+    elif 'status' in payload:
+        if payload['status'] == "RECORDING_MEETING_COMPLETED":
+            return payload["uuid"]
+        else:
+            raise BadWebhookData(
+                "Don't know how to handle 'status' of {}".format(payload['status'])
+            )
+    raise BadWebhookData("Payload missing 'type' or 'status'")
 
 
 def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
@@ -72,73 +106,89 @@ def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
 
 def get_recording_data(uuid):
 
-    if uuid is None:
-        return None
-
     token = gen_token(seconds_valid=60)
 
-    r = requests.get("https://api.zoom.us/v2/meetings/%s/recordings" % uuid,
-                     headers={"Authorization": "Bearer %s" % token.decode()})
-    response = r.json()
+    try:
+        meeting_url = "https://api.zoom.us/v2/meetings/%s/recordings" % uuid
+        headers = {"Authorization": "Bearer %s" % token.decode()}
+        r = requests.get(meeting_url, headers=headers)
+        r.raise_for_status()
+        recording_data = r.json()
+        print("Recording lookup response: {}".format(str(recording_data)))
 
-    if 'code' in response:
-        if response['code'] == 3301:
-            print("No recording found for meeting %s" % uuid)
-        else:
-            print("Meeting: %s, Received response: %s, %s" % (uuid, response['code'], response['message']))
-        return None
+    except requests.HTTPError as e:
+        raise MeetingLookupFailure("Zoom API request error: {}, {}".format(r.content, repr(e)))
+    except requests.ConnectionError as e:
+        raise MeetingLookupFailure("Zoom API connection error: {}".format(repr(e)))
 
-    return format_metadata(response)
+    if 'code' in recording_data:
+        print("Meeting: {}, response code: '{}', message: '{}'".format(
+            uuid,
+            recording_data.get('code', ''),
+            recording_data.get('message', '')
+        ))
+
+        if recording_data['code'] == 3301:
+            raise MeetingLookupFailure("No recording found for meeting %s" % uuid)
+
+    return recording_data
 
 
-def format_metadata(recording):
+def generate_records(recording_data):
 
-    metadata = {}
+    records = []
 
-    for key in ['account_id', 'duration', 'host_id',
-                'start_time', 'timezone', 'topic', 'uuid']:
-        # dynamoDB does not accept values that are empty strings
-        if key in recording and recording[key] != '':
-            metadata[key] = recording[key]
+    if 'recording_files' not in recording_data:
+        return records
 
-    if 'meeting_number' in recording:
-        metadata['meeting_series_id'] = recording['meeting_number']
+    for file in recording_data['recording_files']:
+        record = {}
 
-    for data in recording['recording_files']:
-        if data['file_type'] == "MP4":
-            if data['status'] != 'completed':
+        if file['file_type'].lower() == "mp4":
+
+            if file['status'] != 'completed':
                 print("ERROR: Recording status not 'completed'")
-                return None
+                continue
 
-            if 'download_url' in data:
-                metadata['DownloadUrl'] = data['download_url']
+            if 'download_url' in file:
+                record['DownloadUrl'] = file['download_url']
             else:
                 print("ERROR: Download url not found.")
+                continue
 
-            for key in ['file_type', 'play_url',
-                        'recording_start', 'recording_end']:
-                if data[key] != '':
-                    metadata[key] = data[key]
+            for key in ['file_type', 'play_url', 'recording_start', 'recording_end']:
+                record[key] = file[key]
 
-            if 'file_size' in data and data['file_size'] != '':
-                metadata['file_size_bytes'] = data['file_size']
-            if 'id' in data and data['id'] != '':
-                metadata['file_id'] = data['id']
-            if 'meeting_id' in data and data['meeting_id'] != '':
-                metadata['meeting_uuid'] = data['meeting_id']
+            if 'file_size' in file:
+                record['file_size_bytes'] = file['file_size']
+            if 'id' in file:
+                record['file_id'] = file['id']
+            if 'meeting_id' in file:
+                record['meeting_uuid'] = file['meeting_id']
 
-            return metadata
+            for key in ['account_id', 'duration', 'host_id',
+                        'start_time', 'timezone', 'topic', 'uuid']:
+                if key in recording_data:
+                    record[key] = recording_data[key]
 
-    return None
+            if 'meeting_number' in recording_data:
+                record['meeting_series_id'] = recording_data['meeting_number']
+
+            # dynamoDB does not accept values that are empty strings
+            record = {k: v for k, v in record.items() if v}
+
+            records.append(record)
+
+    return records
 
 
-def send_to_dynamodb(record, dbtable=table):
+def send_to_dynamodb(record, dbtable):
     try:
         dbtable.put_item(Item=record, ConditionExpression="attribute_not_exists(DownloadUrl)")
         print("Record created at %s. Record: %s" % (dbtable.creation_date_time, record))
-    except Exception as e:
-        if type(e).__name__ == "ConditionalCheckFailedException":
+    except ClientError as e:
+        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
             print("Duplicate. URL: %s already in database" % record['DownloadUrl'])
             pass
         else:
-            print("Exception %s" % e)
+            raise

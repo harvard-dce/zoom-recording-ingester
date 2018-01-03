@@ -1,0 +1,13 @@
+language: python
+python:
+  - "3.6"
+install:
+  - pip install -r requirements.txt
+script: pytest ./tests
+sudo: false
+notifications:
+  email:
+    - jay_luker@harvard.edu
+    - nataliemona@g.harvard.edu
+env:
+  AWS_DEFAULT_REGION=us-east-1
