@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/harvard-dce/zoom-recording-ingester.svg?branch=master)](https://travis-ci.org/harvard-dce/zoom-recording-ingester)
+
 # Zoom Video Ingester
 
 A set of AWS services for downloading and ingesting Zoom meeting videos into Opencast
