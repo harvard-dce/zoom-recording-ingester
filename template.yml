@@ -219,6 +219,9 @@ Resources:
       - DownloadUrlsTable
       - ZoomDownloaderFunction
     Properties:
+      Enabled: true
+      BatchSize: 1
       FunctionName: !GetAtt [ZoomDownloaderFunction, Arn]
       StartingPosition: TRIM_HORIZON
       EventSourceArn: !GetAtt [DownloadUrlsTable, StreamArn]
+
