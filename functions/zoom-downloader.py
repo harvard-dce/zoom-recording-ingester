@@ -1,6 +1,7 @@
 import requests
 import boto3
 from os import getenv as env
+from bs4 import BeautifulSoup
 
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 MIN_CHUNK_SIZE = 5242880
@@ -36,13 +37,37 @@ def handler(event, context):
                              metadata['recording_start'],
                              metadata['file_type'].lower())
 
-    stream_file_to_s3(sample_video_url, filename, metadata)
+    video_url = retrieve_url(metadata['play_url'])
+
+    if video_url is None:
+        return {
+            'statusCode': 404,
+            'header': {},
+            'body': ""
+        }
+
+    stream_file_to_s3(video_url, filename, metadata)
 
     return {
         'statusCode': 200,
         'header': {},
         'body': ""
     }
+
+
+def retrieve_url(play_url):
+    r = requests.get(play_url)
+    r.raise_for_status()
+
+    soup = BeautifulSoup(r.content, "html.parser")
+
+    link = None
+
+    for source in soup.find_all("source"):
+        if source['src'].startswith("https"):
+            link = source['src']
+
+    return link
 
 
 def stream_file_to_s3(download_url, filename, metadata):
