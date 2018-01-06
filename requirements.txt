@@ -5,6 +5,7 @@ pytest
 pytest-env
 moto
 tox
+requests-mock
 
 -r functions/zoom-webhook.txt
 -r functions/zoom-downloader.txt
