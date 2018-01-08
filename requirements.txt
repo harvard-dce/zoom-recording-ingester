@@ -3,6 +3,7 @@ python-dotenv
 awscli
 pytest
 pytest-env
+pytest-mock
 moto
 tox
 requests-mock

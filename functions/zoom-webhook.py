@@ -20,6 +20,11 @@ class BadWebhookData(Exception):
 class MeetingLookupFailure(Exception):
     pass
 
+
+class ApiResponseParsingFailure(Exception):
+    pass
+
+
 def resp_400(msg):
     print("http 400 response: {}".format(msg))
     return {
@@ -58,10 +63,12 @@ def handler(event, context):
                 print("retrying. {} retries left".format(lookup_retries))
                 time.sleep(MEETING_LOOKUP_RETRY_DELAY)
             else:
-                print("retries exhausted.")
-                resp_400("Meeting lookup failure: {}".format(str(e)))
+                return resp_400("Meeting lookup retries exhausted: {}".format(str(e)))
 
-    records = generate_records(recording_data)
+    try:
+        records = generate_records(recording_data)
+    except ApiResponseParsingFailure as e:
+        return resp_400("Failed to parse Zoom API response")
 
     if not len(records):
         return resp_400("No recordings to download")
@@ -138,46 +145,48 @@ def generate_records(recording_data):
 
     records = []
 
-    if 'recording_files' not in recording_data:
-        return records
+    try:
 
-    for file in recording_data['recording_files']:
-        record = {}
+        for file in recording_data['recording_files']:
+            record = {}
 
-        if file['file_type'].lower() == "mp4":
+            if file['file_type'].lower() == "mp4":
 
-            if file['status'] != 'completed':
-                print("ERROR: Recording status not 'completed'")
-                continue
+                if file['status'] != 'completed':
+                    print("ERROR: Recording status not 'completed'")
+                    continue
 
-            if 'download_url' in file:
-                record['DownloadUrl'] = file['download_url']
-            else:
-                print("ERROR: Download url not found.")
-                continue
+                if 'download_url' in file:
+                    record['DownloadUrl'] = file['download_url']
+                else:
+                    raise ApiResponseParsingFailure("ERROR: Download url not found.")
+                    continue
 
-            for key in ['file_type', 'play_url', 'recording_start', 'recording_end']:
-                record[key] = file[key]
+                for key in ['file_type', 'play_url', 'recording_start', 'recording_end']:
+                    record[key] = file[key]
 
-            if 'file_size' in file:
-                record['file_size_bytes'] = file['file_size']
-            if 'id' in file:
-                record['file_id'] = file['id']
-            if 'meeting_id' in file:
-                record['meeting_uuid'] = file['meeting_id']
+                if 'file_size' in file:
+                    record['file_size_bytes'] = file['file_size']
+                if 'id' in file:
+                    record['file_id'] = file['id']
+                if 'meeting_id' in file:
+                    record['meeting_uuid'] = file['meeting_id']
 
-            for key in ['account_id', 'duration', 'host_id',
-                        'start_time', 'timezone', 'topic', 'uuid']:
-                if key in recording_data:
-                    record[key] = recording_data[key]
+                for key in ['account_id', 'duration', 'host_id',
+                            'start_time', 'timezone', 'topic', 'uuid']:
+                    if key in recording_data:
+                        record[key] = recording_data[key]
 
-            if 'meeting_number' in recording_data:
-                record['meeting_series_id'] = recording_data['meeting_number']
+                if 'meeting_number' in recording_data:
+                    record['meeting_series_id'] = recording_data['meeting_number']
 
-            # dynamoDB does not accept values that are empty strings
-            record = {k: v for k, v in record.items() if v}
+                # dynamoDB does not accept values that are empty strings
+                record = {k: v for k, v in record.items() if v}
 
-            records.append(record)
+                records.append(record)
+
+    except Exception as e:
+        raise ApiResponseParsingFailure(str(e))
 
     return records
 
