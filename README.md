@@ -18,14 +18,21 @@ to see a list of available commands.
 
 The current list of commands includes:
 
+##### `invoke create-code-bucket`
+
+Must be run once per setup. Will create an s3 bucket to which the packaged
+lambda code will be uploaded. Does nothing if the bucket already exists. The
+name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`
+
 ##### `invoke create`
 
-Build the Cloudformation stack
+Build the Cloudformation stack. Default stack name is "zoom-ingester". Set
+`STACK_NAME` in `.env` for something different.
 
 ##### `invoke update`
 
-Apply template changes to the stack
+Apply template changes to the stack.
 
 ##### `invoke delete`
 
-Delete the stack
+Delete the stack.

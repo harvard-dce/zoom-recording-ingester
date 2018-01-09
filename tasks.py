@@ -1,5 +1,4 @@
 
-import shutil
 from invoke import task
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
@@ -24,6 +23,16 @@ def stack_tags():
         return "--tags {}".format(STACK_TAGS)
     return ""
 
+
+@task
+def create_code_bucket(ctx):
+    cmd = "aws {} s3 ls {}".format(profile_arg(), LAMBDA_CODE_BUCKET)
+    exists = ctx.run(cmd, hide=True, warn=True)
+    if exists.ok:
+        print("Bucket exists!")
+    else:
+        cmd = "aws {} s3 mb s3://{}".format(profile_arg(), LAMBDA_CODE_BUCKET)
+        ctx.run(cmd)
 
 @task
 def package_webhook(ctx):
