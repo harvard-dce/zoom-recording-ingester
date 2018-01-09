@@ -14,9 +14,10 @@ def _load_env(ctx):
         'AWS_PROFILE',
         'STACK_TAGS',
         'STACK_NAME',
-        'LAMBDA_CODE_BUCKET'
+        'LAMBDA_CODE_BUCKET',
+        'NOTIFICATION_EMAIL'
     ]}
-    for var in ['STACK_NAME', 'LAMBDA_CODE_BUCKET']:
+    for var in ['STACK_NAME', 'LAMBDA_CODE_BUCKET', 'NOTIFICATION_EMAIL']:
         if ENV[var] is None:
             raise Exit("You must set {} in .env".format(var))
 
@@ -104,8 +105,10 @@ def __create_or_update(ctx, op):
            "--parameters "
            "ParameterKey=WebhookLambdaCode,ParameterValue={} "
            "ParameterKey=ZoomDownloaderLambdaCode,ParameterValue={} "
+           "ParameterKey=NotificationEmail,ParameterValue='{}'"
            ).format(profile_arg(), op, stack_tags(), ENV['STACK_NAME'], template_path,
-                    lambda_objects['zoom-webhook'], lambda_objects['zoom-downloader'])
+                    lambda_objects['zoom-webhook'], lambda_objects['zoom-downloader'],
+                    ENV['NOTIFICATION_EMAIL'])
     print(cmd)
     ctx.run(cmd)
 

@@ -6,6 +6,8 @@ Parameters:
     Type: String
   ZoomDownloaderLambdaCode:
     Type: String
+  NotificationEmail:
+    Type: CommaDelimitedList
 
 Resources:
 
@@ -185,3 +187,27 @@ Resources:
       StartingPosition: TRIM_HORIZON
       EventSourceArn: !GetAtt [ZoomIngesterTable, StreamArn]
 
+  ZoomIngesterNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Join [',', !Ref NotificationEmail]
+
+  ZoomWebhookErrorsMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+#      AlarmName: !Sub "${AWS::StackName}-webhook-errors-alarm"
+      AlarmDescription: "alarms on any webhook function error"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ZoomIngesterWebhookFunction
+      Namespace: Lambda
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      Statistic: Sum
