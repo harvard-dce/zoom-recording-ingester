@@ -14,7 +14,7 @@ Resources:
     Properties:
       BucketName: !Sub "${AWS::StackName}-videos"
 
-  DownloadUrlsTable:
+  ZoomIngesterTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: !Sub "${AWS::StackName}-urls"
@@ -30,9 +30,9 @@ Resources:
       StreamSpecification:
         StreamViewType: NEW_IMAGE
 
-  DownloadUrlsRole:
+  ZoomIngesterRole:
     Type: AWS::IAM::Role
-    DependsOn: DownloadUrlsTable
+    DependsOn: ZoomIngesterTable
     Properties:
       RoleName: !Sub "${AWS::StackName}-role"
       AssumeRolePolicyDocument:
@@ -53,103 +53,67 @@ Resources:
             Statement:
               - Effect: "Allow"
                 Action:
-                  - "logs:*"
                   - "lambda:*"
                 Resource: "*"
               - Effect: "Allow"
                 Action:
                   - "dynamodb:*"
-                Resource: !GetAtt [DownloadUrlsTable, Arn]
+                Resource: !GetAtt [ZoomIngesterTable, Arn]
               - Effect: "Allow"
                 Action:
                   - "dynamodb:DescribeStream"
                   - "dynamodb:GetRecords"
                   - "dynamodb:GetShardIterator"
                   - "dynamodb:ListStreams"
-                Resource: !Join ['', [!GetAtt [DownloadUrlsTable, Arn], "/stream/*"]]
+                Resource: !Join ['', [!GetAtt [ZoomIngesterTable, Arn], "/stream/*"]]
               - Effect: "Allow"
                 Action:
                   - "s3:*"
                 Resource: !Join ['', [!GetAtt [ZoomVideosBucket, Arn], "/*"]]
 
-  DownloadUrlsApi:
+  ZoomIngesterApi:
     Type: AWS::ApiGateway::RestApi
-    DependsOn: DownloadUrlsTable
+    DependsOn: ZoomIngesterTable
     Properties:
       Name: !Ref AWS::StackName
 
-  DownloadUrlsResource:
+  ZoomIngesterResource:
     Type: AWS::ApiGateway::Resource
-    DependsOn: DownloadUrlsApi
+    DependsOn: ZoomIngesterApi
     Properties:
-      RestApiId: !Ref DownloadUrlsApi
-      ParentId: !GetAtt [DownloadUrlsApi, RootResourceId]
+      RestApiId: !Ref ZoomIngesterApi
+      ParentId: !GetAtt [ZoomIngesterApi, RootResourceId]
       PathPart: "download_url"
 
-  DownloadUrlPut:
+  ZoomIngesterWebhook:
     Type: AWS::ApiGateway::Method
-    DependsOn: DownloadUrlsApi
-    Properties:
-      ApiKeyRequired: true
-      RestApiId:
-        Ref: DownloadUrlsApi
-      ResourceId:
-        Ref: DownloadUrlsResource
-      HttpMethod: PUT
-      AuthorizationType: NONE
-      Integration:
-        IntegrationHttpMethod: POST
-        Credentials: !GetAtt [DownloadUrlsRole, Arn]
-        Type: AWS
-        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:dynamodb:action/PutItem"
-        RequestTemplates:
-          application/json:
-            !Sub |
-              {
-                "TableName": "${AWS::StackName}-urls",
-                "Item": {
-                  "DownloadUrl": { "S": "$input.path('$.download_url')" },
-                  "Duration": { "N": "$input.path('$.duration')" },
-                  "MeetingSeriesId": { "N": "$input.path('$.meeting_series_id')" },
-                  "MeetingUUID": { "S": "$input.path('$.meeting_uuid')" },
-                  "RecordingStart": { "S": "$input.path('$.recording_start')" },
-                  "RecordingEnd": { "S": "$input.path('$.recording_end')" },
-                  "Topic": { "S": "$input.path('$.topic')" }
-                }
-              }
-        IntegrationResponses:
-          - StatusCode: 200
-      MethodResponses:
-        - ResponseModels:
-            application/json: Empty
-          StatusCode: 200
-
-  DownloadUrlWebhook:
-    Type: AWS::ApiGateway::Method
-    DependsOn: DownloadUrlsApi
+    DependsOn:
+      - ZoomIngesterApi
+      - ZoomIngesterWebhookFunction
     Properties:
       RestApiId:
-        Ref: DownloadUrlsApi
+        Ref: ZoomIngesterApi
       ResourceId:
-        Ref: DownloadUrlsResource
+        Ref: ZoomIngesterResource
       HttpMethod: POST
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Credentials: !GetAtt [DownloadUrlsRole, Arn]
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DownloadUrlWebhookFunction.Arn}/invocations
+        Credentials: !GetAtt [ZoomIngesterRole, Arn]
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ZoomIngesterWebhookFunction.Arn}/invocations
       MethodResponses:
         - ResponseModels:
             application/json: Empty
           StatusCode: 200
 
-  DownloadUrlWebhookFunction:
+  ZoomIngesterWebhookFunction:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-webhook.handler
       Runtime: python3.6
-      Role: !GetAtt [DownloadUrlsRole, Arn]
+      Timeout: 30
+      Role: !GetAtt [ZoomIngesterRole, Arn]
       FunctionName: !Sub "${AWS::StackName}-zoom-webhook-function"
       Environment:
         Variables:
@@ -160,23 +124,22 @@ Resources:
         S3Bucket: !Select [0, !Split ["/", !Ref WebhookLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref WebhookLambdaCode]]
 
-  DownloadUrlDeploy:
+  ZoomIngesterDeploy:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - DownloadUrlsApi
-      - DownloadUrlsResource
-      - DownloadUrlPut
-      - DownloadUrlWebhook
+      - ZoomIngesterApi
+      - ZoomIngesterResource
+      - ZoomIngesterWebhook
     Properties:
-      RestApiId: !Ref DownloadUrlsApi
+      RestApiId: !Ref ZoomIngesterApi
       Description: "Deployment for the download urls api"
       StageName: "testing"
 
-  DownloadUrlsStage:
+  ZoomIngesterStage:
     Type: AWS::ApiGateway::Stage
     Properties:
-      DeploymentId: !Ref DownloadUrlDeploy
-      RestApiId: !Ref DownloadUrlsApi
+      DeploymentId: !Ref ZoomIngesterDeploy
+      RestApiId: !Ref ZoomIngesterApi
       StageName: "latest"
       MethodSettings:
         - DataTraceEnabled: true
@@ -185,26 +148,23 @@ Resources:
           LoggingLevel: INFO
           ResourcePath: "/*"
 
-  DownloadUrlsAccount:
-    Type: AWS::ApiGateway::Account
-    Properties:
-      CloudWatchRoleArn: !GetAtt [DownloadUrlsRole, Arn]
-
-  DownloadUrlsApiKey:
+  ZoomIngesterApiKey:
     Type: AWS::ApiGateway::ApiKey
     Properties:
       Enabled: true
       StageKeys:
-        - RestApiId: !Ref DownloadUrlsApi
-          StageName: !Ref DownloadUrlsStage
+        - RestApiId: !Ref ZoomIngesterApi
+          StageName: !Ref ZoomIngesterStage
 
   ZoomDownloaderFunction:
     Type: AWS::Lambda::Function
-    DependsOn: DownloadUrlsTable
+    DependsOn: ZoomIngesterTable
     Properties:
       Handler: zoom-downloader.handler
       Runtime: python3.6
-      Role: !GetAtt [DownloadUrlsRole, Arn]
+      MemorySize: 512
+      Timeout: 300
+      Role: !GetAtt [ZoomIngesterRole, Arn]
       FunctionName: !Sub "${AWS::StackName}-zoom-downloader-function"
       Environment:
         Variables:
@@ -216,12 +176,12 @@ Resources:
   ZoomDownloaderEventMapping:
     Type: AWS::Lambda::EventSourceMapping
     DependsOn:
-      - DownloadUrlsTable
+      - ZoomIngesterTable
       - ZoomDownloaderFunction
     Properties:
       Enabled: true
       BatchSize: 1
       FunctionName: !GetAtt [ZoomDownloaderFunction, Arn]
       StartingPosition: TRIM_HORIZON
-      EventSourceArn: !GetAtt [DownloadUrlsTable, StreamArn]
+      EventSourceArn: !GetAtt [ZoomIngesterTable, StreamArn]
 
