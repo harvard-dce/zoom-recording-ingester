@@ -21,8 +21,25 @@ class MeetingLookupFailure(Exception):
     pass
 
 
+class NoRecordingExists(Exception):
+    pass
+
+
+class IgnoreEventType(Exception):
+    pass
+
+
 class ApiResponseParsingFailure(Exception):
     pass
+
+
+def resp_204(msg):
+    print("http 204 response: {}".format(msg))
+    return {
+        'statusCode': 204,
+        'headers': {},
+        'body': ''
+    }
 
 
 def resp_400(msg):
@@ -32,6 +49,7 @@ def resp_400(msg):
         'headers': {},
         'body': msg
     }
+
 
 def handler(event, context):
     """
@@ -50,6 +68,8 @@ def handler(event, context):
     except BadWebhookData as e:
         print(payload)
         return resp_400("bad webhook data: {}".format(str(e)))
+    except IgnoreEventType as e:
+        return resp_204(e)
 
     lookup_retries = MEETING_LOOKUP_RETRIES
     while True:
@@ -57,6 +77,8 @@ def handler(event, context):
             print("looking up meeting {}".format(uuid))
             recording_data = get_recording_data(uuid)
             break
+        except NoRecordingExists as e:
+            return resp_204(e)
         except MeetingLookupFailure as e:
             if lookup_retries > 0:
                 lookup_retries -= 1
@@ -67,7 +89,7 @@ def handler(event, context):
 
     try:
         records = generate_records(recording_data)
-    except ApiResponseParsingFailure as e:
+    except ApiResponseParsingFailure:
         return resp_400("Failed to parse Zoom API response")
 
     if not len(records):
@@ -92,7 +114,7 @@ def get_meeting_uuid(payload):
         if payload['type'] == 'RECORDING_MEETING_COMPLETED':
             return payload["content"]["uuid"]
         else:
-            raise BadWebhookData(
+            raise IgnoreEventType(
                 "Don't know how to handle 'type' of {}".format(payload['type'])
             )
     elif 'status' in payload:
@@ -113,30 +135,30 @@ def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
 
 def get_recording_data(uuid):
 
-    token = gen_token(seconds_valid=60)
+    token = gen_token(seconds_valid=600)
+    recording_data = {}
 
     try:
         meeting_url = "https://api.zoom.us/v2/meetings/%s/recordings" % uuid
         headers = {"Authorization": "Bearer %s" % token.decode()}
         r = requests.get(meeting_url, headers=headers)
-        r.raise_for_status()
         recording_data = r.json()
+        r.raise_for_status()
         print("Recording lookup response: {}".format(str(recording_data)))
 
     except requests.HTTPError as e:
-        raise MeetingLookupFailure("Zoom API request error: {}, {}".format(r.content, repr(e)))
+        if 'code' in recording_data and recording_data['code'] == 3301:
+            print("Meeting: {}, response code: '{}', message: '{}'".format(
+                uuid,
+                recording_data.get('code', ''),
+                recording_data.get('message', '')
+            ))
+
+            raise NoRecordingExists("No recording found for meeting %s" % uuid)
+        else:
+            raise MeetingLookupFailure("Zoom API request error: {}, {}".format(r.content, repr(e)))
     except requests.ConnectionError as e:
         raise MeetingLookupFailure("Zoom API connection error: {}".format(repr(e)))
-
-    if 'code' in recording_data:
-        print("Meeting: {}, response code: '{}', message: '{}'".format(
-            uuid,
-            recording_data.get('code', ''),
-            recording_data.get('message', '')
-        ))
-
-        if recording_data['code'] == 3301:
-            raise MeetingLookupFailure("No recording found for meeting %s" % uuid)
 
     return recording_data
 

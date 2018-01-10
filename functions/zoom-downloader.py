@@ -2,6 +2,7 @@ import requests
 import boto3
 from os import getenv as env
 from bs4 import BeautifulSoup
+from bs4 import SoupStrainer
 
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 MIN_CHUNK_SIZE = 5242880
@@ -57,13 +58,11 @@ def retrieve_url(play_url):
     r = requests.get(play_url)
     r.raise_for_status()
 
-    soup = BeautifulSoup(r.content, "html.parser")
+    only_source_tags = SoupStrainer("source", type="video/mp4")
 
-    link = None
+    source = BeautifulSoup(r.content, "html.parser", parse_only=only_source_tags)
 
-    for source in soup.find_all("source"):
-        if source['src'].startswith("https"):
-            link = source['src']
+    link = source.find("source")['src']
 
     return link
 
