@@ -8,7 +8,7 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
 
 Python 3 is required.
 
-1. `pip install requirements/dev.txt`
+1. `pip install -r requirements.txt`
 1. copy `example.env` to `.env` and update as necessary
 1. run `invoke create-code-bucket` to ensure the s3 bucket for packaged lambda
    code exists

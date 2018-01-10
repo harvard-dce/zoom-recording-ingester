@@ -46,10 +46,10 @@ def get_meetings(key, secret, date=datetime.date.today()):
 @click.option('--date', default=datetime.datetime.today(), help='Date of recordings. YYYY-MM-DD')
 @click.option('--max-recordings', default=1000, help='Maximum number of recordings to process.')
 @click.option('--current-format', default=True, help='Current or standard webhook format.')
-@click.option("--key", envvar="ZOOM_KEY",
-              help="zoom api key; defaults to $ZOOM_KEY")
-@click.option("--secret", envvar="ZOOM_SECRET",
-              help="zoom api secret; defaults to $ZOOM_SECRET")
+@click.option("--key", envvar="ZOOM_API_KEY",
+              help="zoom api key; defaults to $ZOOM_API_KEY")
+@click.option("--secret", envvar="ZOOM_API_SECRET",
+              help="zoom api secret; defaults to $ZOOM_API_SECRET")
 @click.option("--endpoint", envvar="AWS_API_ENDPOINT",
               help="AWS API Gateway endpoint defaults to $AWS_API_ENDPOINT")
 @click.option("--endpoint-key", envvar="AWS_API_KEY",
