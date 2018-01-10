@@ -15,7 +15,11 @@ def _load_env(ctx):
         'STACK_TAGS',
         'STACK_NAME',
         'LAMBDA_CODE_BUCKET',
-        'NOTIFICATION_EMAIL'
+        'NOTIFICATION_EMAIL',
+        'ZOOM_API_KEY',
+        'ZOOM_API_SECRET',
+        'ZOOM_LOGIN_USER',
+        'ZOOM_LOGIN_PASSWORD'
     ]}
     for var in ['STACK_NAME', 'LAMBDA_CODE_BUCKET', 'NOTIFICATION_EMAIL']:
         if ENV[var] is None:
@@ -105,10 +109,25 @@ def __create_or_update(ctx, op):
            "--parameters "
            "ParameterKey=WebhookLambdaCode,ParameterValue={} "
            "ParameterKey=ZoomDownloaderLambdaCode,ParameterValue={} "
-           "ParameterKey=NotificationEmail,ParameterValue='{}'"
-           ).format(profile_arg(), op, stack_tags(), ENV['STACK_NAME'], template_path,
-                    lambda_objects['zoom-webhook'], lambda_objects['zoom-downloader'],
-                    ENV['NOTIFICATION_EMAIL'])
+           "ParameterKey=NotificationEmail,ParameterValue='{}' "
+           "ParameterKey=ZoomApiKey,ParameterValue='{}' "
+           "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
+           "ParameterKey=ZoomLoginUser,ParameterValue='{}' "
+           "ParameterKey=ZoomLoginPassword,ParameterValue='{}' "
+           ).format(
+                profile_arg(),
+                op,
+                stack_tags(),
+                ENV['STACK_NAME'],
+                template_path,
+                lambda_objects['zoom-webhook'],
+                lambda_objects['zoom-downloader'],
+                ENV['NOTIFICATION_EMAIL'],
+                ENV['ZOOM_API_KEY'],
+                ENV['ZOOM_API_SECRET'],
+                ENV['ZOOM_LOGIN_USER'],
+                ENV['ZOOM_LOGIN_PASSWORD'],
+                )
     print(cmd)
     ctx.run(cmd)
 

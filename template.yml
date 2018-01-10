@@ -7,7 +7,15 @@ Parameters:
   ZoomDownloaderLambdaCode:
     Type: String
   NotificationEmail:
-    Type: CommaDelimitedList
+    Type: String
+  ZoomApiKey:
+    Type: String
+  ZoomApiSecret:
+    Type: String
+  ZoomLoginUser:
+    Type: String
+  ZoomLoginPassword:
+    Type: String
 
 Resources:
 
@@ -55,6 +63,7 @@ Resources:
             Statement:
               - Effect: "Allow"
                 Action:
+                  - "logs:*"
                   - "lambda:*"
                 Resource: "*"
               - Effect: "Allow"
@@ -120,8 +129,8 @@ Resources:
       Environment:
         Variables:
           DOWNLOAD_URLS_TABLE: !Sub "${AWS::StackName}-urls"
-          ZOOM_API_KEY: ""
-          ZOOM_API_SECRET: ""
+          ZOOM_API_KEY: !Ref ZoomApiKey
+          ZOOM_API_SECRET: !Ref ZoomApiSecret
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref WebhookLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref WebhookLambdaCode]]
@@ -171,6 +180,8 @@ Resources:
       Environment:
         Variables:
           ZOOM_VIDEOS_BUCKET: !Sub "${AWS::StackName}-videos"
+          ZOOM_LOGIN_USER: !Ref ZoomLoginUser
+          ZOOM_LOGIN_PASSWORD: !Ref ZoomLoginPassword
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
@@ -190,15 +201,15 @@ Resources:
   ZoomIngesterNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
+      TopicName: !Sub "${AWS::StackName}-notification-topic"
       Subscription:
         - Protocol: email
-          Endpoint: !Join [',', !Ref NotificationEmail]
+          Endpoint: !Ref NotificationEmail
 
   ZoomWebhookErrorsMetricAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-#      AlarmName: !Sub "${AWS::StackName}-webhook-errors-alarm"
-      AlarmDescription: "alarms on any webhook function error"
+      AlarmDescription: "alarms on any webhook function invocation error"
       AlarmActions:
         - !Ref ZoomIngesterNotificationTopic
       MetricName: Errors
@@ -206,6 +217,40 @@ Resources:
         - Name: FunctionName
           Value: !Ref ZoomIngesterWebhookFunction
       Namespace: Lambda
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      Statistic: Sum
+
+  ZoomWebhook4xxMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "alarms on any webhook function 4xx response"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: 4XXError
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref AWS::StackName
+      Namespace: ApiGateway
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      Statistic: Sum
+
+  ZoomWebhook5xxMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "alarms on any webhook function 5xx response"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: 5XXError
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref AWS::StackName
+      Namespace: ApiGateway
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Period: 60
       EvaluationPeriods: 1
