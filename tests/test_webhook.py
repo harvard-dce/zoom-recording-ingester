@@ -1,4 +1,3 @@
-
 import site
 from os.path import dirname
 site.addsitedir(dirname(dirname(__file__)))
@@ -49,7 +48,7 @@ def test_get_meeting_uuid():
 
     assert webhook.get_meeting_uuid(payloads[0]) == 'abcd-1234'
 
-    with pytest.raises(webhook.BadWebhookData):
+    with pytest.raises(webhook.IgnoreEventType):
         webhook.get_meeting_uuid(payloads[1])
 
     assert webhook.get_meeting_uuid(payloads[2]) == 'abcd-1234'
