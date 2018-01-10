@@ -2,12 +2,13 @@ import requests
 import time
 import requests
 import jwt
+import json
 import datetime
 from dotenv import load_dotenv
 from os.path import join, dirname
 import click
 
-load_dotenv(join(dirname(__file__), '.env'))
+load_dotenv(join(dirname(dirname(__file__)), '.env'))
 
 
 def gen_token(key, secret, seconds_valid=60):
@@ -46,10 +47,10 @@ def get_meetings(key, secret, date=datetime.date.today()):
 @click.option('--date', default=datetime.datetime.today(), help='Date of recordings. YYYY-MM-DD')
 @click.option('--max-recordings', default=1000, help='Maximum number of recordings to process.')
 @click.option('--current-format', default=True, help='Current or standard webhook format.')
-@click.option("--key", envvar="ZOOM_KEY",
-              help="zoom api key; defaults to $ZOOM_KEY")
-@click.option("--secret", envvar="ZOOM_SECRET",
-              help="zoom api secret; defaults to $ZOOM_SECRET")
+@click.option("--key", envvar="ZOOM_API_KEY",
+              help="zoom api key; defaults to $ZOOM_API_KEY")
+@click.option("--secret", envvar="ZOOM_API_SECRET",
+              help="zoom api secret; defaults to $ZOOM_API_SECRET")
 @click.option("--endpoint", envvar="AWS_API_ENDPOINT",
               help="AWS API Gateway endpoint defaults to $AWS_API_ENDPOINT")
 @click.option("--endpoint-key", envvar="AWS_API_KEY",
@@ -59,42 +60,43 @@ def send_notifications(date, max_recordings, key, secret,
 
     num_recordings = 0
 
-    if current_format:
-        template = {
-            "type": "RECORDING_MEETING_COMPLETED",
-            "content": {
-                "uuid": "test123",
-                "host_id": "bar",
-                "id": 12345
-            }
-        }
-    else:
-        template = {
-            "status": "RECORDING_MEETING_COMPLETED",
-            "uuid": "test123",
-            "host_id": "bar",
-            "id": 12345
-        }
-
     meeting_uuids = [m['uuid'] for m in get_meetings(key, secret, date=date)]
 
     for uuid in meeting_uuids:
-        if current_format:
-            template['content']['uuid'] = uuid
+        if current_format is True:
+            template = {
+                "type": "RECORDING_MEETING_COMPLETED",
+                "content":
+                    json.dumps({
+                        "uuid": uuid,
+                        "host_id": "bar",
+                        "id": 12345
+                    })
+            }
         else:
-            template['uuid'] = uuid
-        send_data = requests.post(endpoint,
-                                  headers={'x-api-key': endpoint_key,
-                                           'content-type': 'application/json'},
-                                  json=template)
+            template = {
+                "status": "RECORDING_MEETING_COMPLETED",
+                "uuid": uuid,
+                "host_id": "bar",
+                "id": 12345
+            }
 
-        send_data.raise_for_status()
-        print(send_data.status_code)
-        if send_data.status_code == 200:
-            num_recordings += 1
-            if num_recordings >= max_recordings:
-                break
-        time.sleep(1)
+        try:
+            send_data = requests.post(endpoint,
+                                      headers={'x-api-key': endpoint_key,
+                                               'content-type': 'application/json'},
+                                      data=template)
+
+            send_data.raise_for_status()
+            print(send_data.status_code)
+            if send_data.status_code == 200:
+                num_recordings += 1
+                if num_recordings >= max_recordings:
+                    break
+            time.sleep(1)
+        except requests.HTTPError as e:
+            print("%s %s" % (e.response.status_code, e.response.content))
+            break
 
 
 if __name__ == '__main__':
