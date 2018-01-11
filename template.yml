@@ -216,7 +216,7 @@ Resources:
       Dimensions:
         - Name: FunctionName
           Value: !Ref ZoomIngesterWebhookFunction
-      Namespace: Lambda
+      Namespace: AWS/Lambda
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Period: 60
       EvaluationPeriods: 1
@@ -233,7 +233,9 @@ Resources:
       Dimensions:
         - Name: ApiName
           Value: !Ref AWS::StackName
-      Namespace: ApiGateway
+        - Name: Stage
+          Value: "latest"
+      Namespace: AWS/ApiGateway
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Period: 60
       EvaluationPeriods: 1
@@ -250,9 +252,65 @@ Resources:
       Dimensions:
         - Name: ApiName
           Value: !Ref AWS::StackName
-      Namespace: ApiGateway
+        - Name: Stage
+          Value: "latest"
+      Namespace: AWS/ApiGateway
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Period: 60
       EvaluationPeriods: 1
       Threshold: 1
       Statistic: Sum
+
+  ZoomWebhookLatencyMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "alarms if the webhook method latency gets too high"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: Latency
+      Dimensions:
+        - Name: ApiName
+          Value: !Ref AWS::StackName
+        - Name: Stage
+          Value: "latest"
+      Namespace: AWS/ApiGateway
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 10000
+      Statistic: Average
+
+  ZoomDownloaderErrorsMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "alarms on any downloader function invocation error"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ZoomDownloaderFunction
+      Namespace: AWS/Lambda
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      Statistic: Sum
+
+  ZoomDownloaderInvocationsMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "alarms in the absence of new downloads in past 24hrs"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: Invocations
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ZoomDownloaderFunction
+      Namespace: AWS/Lambda
+      ComparisonOperator: LessThanThreshold
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 1
+      Statistic: Sum
+
