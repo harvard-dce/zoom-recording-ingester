@@ -61,6 +61,12 @@ def update_downloader(ctx):
 
 
 @task(_load_env)
+def package(ctx):
+    package_webhook(ctx)
+    package_downloader(ctx)
+
+
+@task(_load_env)
 def create(ctx):
     __create_or_update(ctx, "create")
 
@@ -79,6 +85,11 @@ def delete(ctx):
         ctx.run(cmd)
     else:
         print("not deleting stack")
+
+
+@task
+def test(ctx):
+    ctx.run('pytest ./tests')
 
 
 def profile_arg():
