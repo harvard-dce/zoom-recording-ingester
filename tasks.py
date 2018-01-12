@@ -1,103 +1,109 @@
 
-from invoke import task
+from invoke import task, Collection
 from invoke.exceptions import Exit
-from os import symlink, getenv
+from os import symlink, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists
 
+load_dotenv(join(dirname(__file__), '.env'))
+
+ns = Collection()
+
 
 @task
-def _load_env(ctx):
-    global ENV
-    load_dotenv(join(dirname(__file__), '.env'))
-    ENV = {var: getenv(var) for var in [
-        'AWS_PROFILE',
-        'STACK_TAGS',
-        'STACK_NAME',
-        'LAMBDA_CODE_BUCKET',
-        'NOTIFICATION_EMAIL',
-        'ZOOM_API_KEY',
-        'ZOOM_API_SECRET',
-        'ZOOM_LOGIN_USER',
-        'ZOOM_LOGIN_PASSWORD',
-        'OPENCAST_BASE_URL',
-        'OPENCAST_API_USER',
-        'OPENCAST_API_PASSWORD',
-    ]}
-    for var in ['STACK_NAME', 'LAMBDA_CODE_BUCKET', 'NOTIFICATION_EMAIL']:
-        if ENV[var] is None:
-            raise Exit("You must set {} in .env".format(var))
-
-
-@task(_load_env)
 def create_code_bucket(ctx):
-    cmd = "aws {} s3 ls {}".format(profile_arg(), ENV['LAMBDA_CODE_BUCKET'])
+    """
+    Create the s3 bucket for storing packaged lambda code
+    """
+    code_bucket = getenv('LAMBDA_CODE_BUCKET')
+    cmd = "aws {} s3 ls {}".format(profile_arg(), code_bucket)
     exists = ctx.run(cmd, hide=True, warn=True)
     if exists.ok:
         print("Bucket exists!")
     else:
-        cmd = "aws {} s3 mb s3://{}".format(profile_arg(), ENV['LAMBDA_CODE_BUCKET'])
+        cmd = "aws {} s3 mb s3://{}".format(profile_arg(), code_bucket)
         ctx.run(cmd)
 
 
-@task(_load_env)
-def package_webhook(ctx):
-    __package_function(ctx, 'zoom-webhook')
-    __function_to_s3(ctx, 'zoom-webhook')
-
-
-@task(_load_env)
-def package_downloader(ctx):
-    __package_function(ctx, 'zoom-downloader')
-    __function_to_s3(ctx, 'zoom-downloader')
-
-
-@task(_load_env)
-def package_uploader(ctx):
-    __package_function(ctx, 'zoom-uploader')
-    __function_to_s3(ctx, 'zoom-uploader')
-
-
-@task(_load_env)
-def update_webhook(ctx):
-    __package_function(ctx, 'zoom-webhook')
-    __update_function(ctx, 'zoom-webhook')
-
-
-@task(_load_env)
-def update_downloader(ctx):
-    __package_function(ctx, 'zoom-downloader')
-    __update_function(ctx, 'zoom-downloader')
-
-
-@task(_load_env)
-def update_uploader(ctx):
-    __package_function(ctx, 'zoom-uploader')
-    __update_function(ctx, 'zoom-uploader')
-
-
-@task(_load_env)
-def package(ctx):
+@task
+def package_all(ctx):
+    """
+    Create zip packages w/ lambda function code + dependencies and upload to s3
+    """
     package_webhook(ctx)
     package_downloader(ctx)
     package_uploader(ctx)
 
 
-@task(_load_env)
+@task
+def package_webhook(ctx):
+    __package_function(ctx, 'zoom-webhook')
+    __function_to_s3(ctx, 'zoom-webhook')
+
+
+@task
+def package_downloader(ctx):
+    __package_function(ctx, 'zoom-downloader')
+    __function_to_s3(ctx, 'zoom-downloader')
+
+
+@task
+def package_uploader(ctx):
+    __package_function(ctx, 'zoom-uploader')
+    __function_to_s3(ctx, 'zoom-uploader')
+
+
+@task
+def update_all(ctx):
+    """
+    Package, upload and register new code for all lambda functions
+    """
+    update_webhook(ctx)
+    update_downloader(ctx)
+    update_uploader(ctx)
+
+
+@task
+def update_webhook(ctx):
+    package_webhook(ctx)
+    __update_function(ctx, 'zoom-webhook')
+
+
+@task
+def update_downloader(ctx):
+    package_downloader(ctx)
+    __update_function(ctx, 'zoom-downloader')
+
+
+@task
+def update_uploader(ctx):
+    package_uploader(ctx)
+    __update_function(ctx, 'zoom-uploader')
+
+
+@task
 def create(ctx):
+    """
+    Build the Cloudformation stack identified by $STACK_NAME
+    """
     __create_or_update(ctx, "create")
 
 
-@task(_load_env)
+@task
 def update(ctx):
+    """
+    Update the Cloudformation stack identified by $STACK_NAME
+    """
     __create_or_update(ctx, "update")
 
 
-@task(_load_env)
+@task
 def delete(ctx):
-
+    """
+    Delete the Cloudformation stack identified by $STACK_NAME
+    """
     cmd = ("aws {} cloudformation delete-stack "
-           "--stack-name {}").format(profile_arg(), ENV['STACK_NAME'])
+           "--stack-name {}").format(profile_arg(), getenv("STACK_NAME"))
     if input('are you sure? [y/N] ').lower().strip().startswith('y'):
         ctx.run(cmd)
     else:
@@ -106,30 +112,73 @@ def delete(ctx):
 
 @task
 def test(ctx):
+    """
+    Execute the pytest tests
+    """
     ctx.run('pytest ./tests')
 
 
+ns.add_task(create_code_bucket)
+ns.add_task(test)
+
+package_ns = Collection('package')
+package_ns.add_task(package_all, 'all')
+package_ns.add_task(package_webhook, 'webhook')
+package_ns.add_task(package_downloader, 'downloader')
+package_ns.add_task(package_uploader, 'uploader')
+ns.add_collection(package_ns)
+
+update_ns = Collection('update')
+update_ns.add_task(update_all, 'all')
+update_ns.add_task(update_webhook, 'webhook')
+update_ns.add_task(update_downloader, 'downloader')
+update_ns.add_task(update_uploader, 'uploader')
+ns.add_collection(update_ns)
+
+stack_ns = Collection('stack')
+stack_ns.add_task(create)
+stack_ns.add_task(update)
+stack_ns.add_task(delete)
+ns.add_collection(stack_ns)
+
+
+###############################################################################
+
+
+def getenv(var, required=True):
+    val = env(var)
+    if required and val is None:
+        raise Exit("{} not defined".format(var))
+    return val
+
+
 def profile_arg():
-    if ENV['AWS_PROFILE'] is not None:
-        return "--profile {}".format(ENV['AWS_PROFILE'])
+    profile = getenv("AWS_PROFILE", False)
+    if profile is not None:
+        return "--profile {}".format(profile)
     return ""
+
 
 def stack_tags():
-    if ENV['STACK_TAGS'] is not None:
-        return "--tags {}".format(ENV['STACK_TAGS'])
+    tags = getenv("STACK_TAGS")
+    if tags is not None:
+        return "--tags {}".format(tags)
     return ""
 
-def __create_or_update(ctx, op):
-    template_path = join(dirname(__file__), 'template.yml')
 
+def __create_or_update(ctx, op):
+
+    template_path = join(dirname(__file__), 'template.yml')
     lambda_objects = {}
 
     for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
         zip_path = join(dirname(__file__), 'functions', func + '.zip')
         if not exists(zip_path):
-            print("No zip found for {}! Did you run the package-* commands?".format(func))
+            print("No zip found for {}!".format(func))
+            print("Did you run the package-* commands?")
             raise Exit(1)
-        lambda_objects[func] = '/'.join([ENV['LAMBDA_CODE_BUCKET'], func + '.zip'])
+        func_code = '/'.join([getenv("LAMBDA_CODE_BUCKET"), func + '.zip'])
+        lambda_objects[func] = func_code
 
     cmd = ("aws {} cloudformation {}-stack {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
@@ -150,19 +199,19 @@ def __create_or_update(ctx, op):
                 profile_arg(),
                 op,
                 stack_tags(),
-                ENV['STACK_NAME'],
+                getenv("STACK_NAME"),
                 template_path,
                 lambda_objects['zoom-webhook'],
                 lambda_objects['zoom-downloader'],
                 lambda_objects['zoom-uploader'],
-                ENV['NOTIFICATION_EMAIL'],
-                ENV['ZOOM_API_KEY'],
-                ENV['ZOOM_API_SECRET'],
-                ENV['ZOOM_LOGIN_USER'],
-                ENV['ZOOM_LOGIN_PASSWORD'],
-                ENV['OPENCAST_BASE_URL'],
-                ENV['OPENCAST_API_USER'],
-                ENV['OPENCAST_API_PASSWORD'],
+                getenv("NOTIFICATION_EMAIL"),
+                getenv("ZOOM_API_KEY"),
+                getenv("ZOOM_API_SECRET"),
+                getenv("ZOOM_LOGIN_USER"),
+                getenv("ZOOM_LOGIN_PASSWORD"),
+                getenv("OPENCAST_BASE_URL"),
+                getenv("OPENCAST_API_USER"),
+                getenv("OPENCAST_API_PASSWORD")
                 )
     print(cmd)
     ctx.run(cmd)
@@ -185,15 +234,23 @@ def __package_function(ctx, func):
 
 def __function_to_s3(ctx, func):
     zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
-    ctx.run("aws {} s3 cp {} s3://{}".format(profile_arg(), zip_path, ENV['LAMBDA_CODE_BUCKET']))
+    ctx.run("aws {} s3 cp {} s3://{}".format(
+        profile_arg(),
+        zip_path,
+        getenv("LAMBDA_CODE_BUCKET"))
+    )
 
 
 def __update_function(ctx, func):
     zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
-    lambda_function_name = "{}-{}-function".format(ENV['STACK_NAME'], func)
+    lambda_function_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
     cmd = ("aws {} lambda update-function-code "
-           "--function-name {} --zip-file fileb://{} --publish"
-           ).format(profile_arg(), lambda_function_name, zip_path)
+           "--function-name {} --publish --s3-bucket {} --s3-key {}.zip"
+           ).format(
+                profile_arg(),
+                lambda_function_name,
+                getenv('LAMBDA_CODE_BUCKET'),
+                func
+            )
     print(cmd)
     ctx.run(cmd)
-
