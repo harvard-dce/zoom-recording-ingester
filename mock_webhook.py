@@ -83,18 +83,23 @@ def send_notifications(date, max_recordings, key, secret,
             template['content']['uuid'] = uuid
         else:
             template['uuid'] = uuid
-        send_data = requests.post(endpoint,
-                                  headers={'x-api-key': endpoint_key,
-                                           'content-type': 'application/json'},
-                                  json=template)
 
-        send_data.raise_for_status()
-        print(send_data.status_code)
-        if send_data.status_code == 200:
-            num_recordings += 1
-            if num_recordings >= max_recordings:
-                break
-        time.sleep(1)
+        try:
+            send_data = requests.post(endpoint,
+                                      headers={'x-api-key': endpoint_key,
+                                               'content-type': 'application/json'},
+                                      json=template)
+
+            send_data.raise_for_status()
+            print(send_data.status_code)
+            if send_data.status_code == 200:
+                num_recordings += 1
+                if num_recordings >= max_recordings:
+                    break
+            time.sleep(1)
+        except requests.HTTPError as e:
+            print("%s %s" % (e.response.status_code, e.response.content))
+            break
 
 
 if __name__ == '__main__':
