@@ -85,8 +85,8 @@ def test_get_recording_data(mocker):
 
     # test 'no recordings'
     with requests_mock.mock() as req_mock:
-        req_mock.get(requests_mock.ANY, status_code=200, json={'code': 3301})
-        with pytest.raises(webhook.MeetingLookupFailure) as excinfo:
+        req_mock.get(requests_mock.ANY, status_code=404, json={'code': 3301})
+        with pytest.raises(webhook.NoRecordingFound) as excinfo:
             webhook.get_recording_data('abcd-1234')
         assert 'No recording found' in str(excinfo.value)
 

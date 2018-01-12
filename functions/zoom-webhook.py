@@ -21,7 +21,7 @@ class MeetingLookupFailure(Exception):
     pass
 
 
-class NoRecordingExists(Exception):
+class NoRecordingFound(Exception):
     pass
 
 
@@ -77,7 +77,7 @@ def handler(event, context):
             print("looking up meeting {}".format(uuid))
             recording_data = get_recording_data(uuid)
             break
-        except NoRecordingExists as e:
+        except NoRecordingFound as e:
             return resp_204(e)
         except MeetingLookupFailure as e:
             if lookup_retries > 0:
@@ -136,25 +136,26 @@ def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
 def get_recording_data(uuid):
 
     token = gen_token(seconds_valid=600)
-    recording_data = {}
 
     try:
         meeting_url = "https://api.zoom.us/v2/meetings/%s/recordings" % uuid
         headers = {"Authorization": "Bearer %s" % token.decode()}
         r = requests.get(meeting_url, headers=headers)
-        recording_data = r.json()
         r.raise_for_status()
+        recording_data = r.json()
         print("Recording lookup response: {}".format(str(recording_data)))
 
     except requests.HTTPError as e:
-        if 'code' in recording_data and recording_data['code'] == 3301:
-            print("Meeting: {}, response code: '{}', message: '{}'".format(
-                uuid,
-                recording_data.get('code', ''),
-                recording_data.get('message', '')
-            ))
+        if e.response.status_code == 404:
+            recording_data = e.response.json()
+            if 'code' in recording_data and recording_data['code'] == 3301:
+                print("Meeting: {}, response code: '{}', message: '{}'".format(
+                    uuid,
+                    recording_data.get('code', ''),
+                    recording_data.get('message', '')
+                ))
 
-            raise NoRecordingExists("No recording found for meeting %s" % uuid)
+            raise NoRecordingFound("No recording found for meeting %s" % uuid)
         else:
             raise MeetingLookupFailure("Zoom API request error: {}, {}".format(r.content, repr(e)))
     except requests.ConnectionError as e:
