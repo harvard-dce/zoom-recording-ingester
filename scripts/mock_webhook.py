@@ -2,12 +2,13 @@ import requests
 import time
 import requests
 import jwt
+import json
 import datetime
 from dotenv import load_dotenv
 from os.path import join, dirname
 import click
 
-load_dotenv(join(dirname(__file__), '.env'))
+load_dotenv(join(dirname(dirname(__file__)), '.env'))
 
 
 def gen_token(key, secret, seconds_valid=60):
@@ -59,36 +60,32 @@ def send_notifications(date, max_recordings, key, secret,
 
     num_recordings = 0
 
-    if current_format:
-        template = {
-            "type": "RECORDING_MEETING_COMPLETED",
-            "content": {
-                "uuid": "test123",
-                "host_id": "bar",
-                "id": 12345
-            }
-        }
-    else:
-        template = {
-            "status": "RECORDING_MEETING_COMPLETED",
-            "uuid": "test123",
-            "host_id": "bar",
-            "id": 12345
-        }
-
     meeting_uuids = [m['uuid'] for m in get_meetings(key, secret, date=date)]
 
     for uuid in meeting_uuids:
-        if current_format:
-            template['content']['uuid'] = uuid
+        if current_format is True:
+            template = {
+                "type": "RECORDING_MEETING_COMPLETED",
+                "content":
+                    json.dumps({
+                        "uuid": uuid,
+                        "host_id": "bar",
+                        "id": 12345
+                    })
+            }
         else:
-            template['uuid'] = uuid
+            template = {
+                "status": "RECORDING_MEETING_COMPLETED",
+                "uuid": uuid,
+                "host_id": "bar",
+                "id": 12345
+            }
 
         try:
             send_data = requests.post(endpoint,
                                       headers={'x-api-key': endpoint_key,
                                                'content-type': 'application/json'},
-                                      json=template)
+                                      data=template)
 
             send_data.raise_for_status()
             print(send_data.status_code)

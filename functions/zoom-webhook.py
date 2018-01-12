@@ -3,6 +3,7 @@ import boto3
 import jwt
 import time
 import json
+import urllib
 from os import getenv as env
 from botocore.exceptions import ClientError
 
@@ -58,10 +59,17 @@ def handler(event, context):
     the actual download url so we have to fetch that in a Zoom api call.
     """
 
+    print("EVENT:", event)
+
     if 'body' not in event:
         return resp_400("bad data: no body in event")
 
-    payload = json.loads(event['body'])
+    try:
+        payload = {key: value[0] for key, value in urllib.parse.parse_qs(event['body']).items()}
+    except Exception as e:
+        return resp_400(repr(e))
+
+    print("PAYLOAD:", payload)
 
     try:
         uuid = get_meeting_uuid(payload)
@@ -111,18 +119,22 @@ def handler(event, context):
 def get_meeting_uuid(payload):
 
     if 'type' in payload:
+        print(payload['type'])
         if payload['type'] == 'RECORDING_MEETING_COMPLETED':
-            return payload["content"]["uuid"]
+            try:
+                return json.loads(payload['content'])['uuid']
+            except Exception as e:
+                raise BadWebhookData(e)
         else:
             raise IgnoreEventType(
-                "Don't know how to handle 'type' of {}".format(payload['type'])
+                "Handling not implemented for 'type' of {}".format(payload['type'])
             )
     elif 'status' in payload:
         if payload['status'] == "RECORDING_MEETING_COMPLETED":
             return payload["uuid"]
         else:
-            raise BadWebhookData(
-                "Don't know how to handle 'status' of {}".format(payload['status'])
+            raise IgnoreEventType(
+                "Handling not implement for 'status' of {}".format(payload['status'])
             )
     raise BadWebhookData("Payload missing 'type' or 'status'")
 
