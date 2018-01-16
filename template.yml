@@ -30,6 +30,13 @@ Resources:
             Status: Enabled
             ExpirationInDays: 14
 
+  ZoomIngesterUploadQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-uploads.fifo"
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600 # 14 days
+
   ZoomIngesterTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -175,7 +182,9 @@ Resources:
 
   ZoomDownloaderFunction:
     Type: AWS::Lambda::Function
-    DependsOn: ZoomIngesterTable
+    DependsOn:
+      - ZoomIngesterTable
+      - ZoomIngesterUploadQueue
     Properties:
       Handler: zoom-downloader.handler
       Runtime: python3.6
@@ -188,6 +197,7 @@ Resources:
           ZOOM_VIDEOS_BUCKET: !Sub "${AWS::StackName}-videos"
           ZOOM_LOGIN_USER: !Ref ZoomLoginUser
           ZOOM_LOGIN_PASSWORD: !Ref ZoomLoginPassword
+          UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
@@ -319,3 +329,22 @@ Resources:
       EvaluationPeriods: 1
       Threshold: 1
       Statistic: Sum
+
+  ZoomUploadQueueDepthMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "alarm if too many pending uploads build up in queue"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt [ZoomIngesterUploadQueue, QueueName]
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300
+      Threshold: 40
+      EvaluationPeriods: 1
+      ComparisonOperator: GreaterThanThreshold
+      InsufficientDataActions:
+        - !Ref ZoomIngesterNotificationTopic
