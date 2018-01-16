@@ -23,6 +23,12 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AWS::StackName}-videos"
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteAfterTwoWeeks
+            Prefix: ""
+            Status: Enabled
+            ExpirationInDays: 14
 
   ZoomIngesterTable:
     Type: AWS::DynamoDB::Table
@@ -313,4 +319,3 @@ Resources:
       EvaluationPeriods: 1
       Threshold: 1
       Statistic: Sum
-
