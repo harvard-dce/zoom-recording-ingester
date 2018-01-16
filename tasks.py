@@ -19,7 +19,10 @@ def _load_env(ctx):
         'ZOOM_API_KEY',
         'ZOOM_API_SECRET',
         'ZOOM_LOGIN_USER',
-        'ZOOM_LOGIN_PASSWORD'
+        'ZOOM_LOGIN_PASSWORD',
+        'OPENCAST_BASE_URL',
+        'OPENCAST_API_USER',
+        'OPENCAST_API_PASSWORD',
     ]}
     for var in ['STACK_NAME', 'LAMBDA_CODE_BUCKET', 'NOTIFICATION_EMAIL']:
         if ENV[var] is None:
@@ -36,6 +39,7 @@ def create_code_bucket(ctx):
         cmd = "aws {} s3 mb s3://{}".format(profile_arg(), ENV['LAMBDA_CODE_BUCKET'])
         ctx.run(cmd)
 
+
 @task(_load_env)
 def package_webhook(ctx):
     __package_function(ctx, 'zoom-webhook')
@@ -46,6 +50,12 @@ def package_webhook(ctx):
 def package_downloader(ctx):
     __package_function(ctx, 'zoom-downloader')
     __function_to_s3(ctx, 'zoom-downloader')
+
+
+@task(_load_env)
+def package_uploader(ctx):
+    __package_function(ctx, 'zoom-uploader')
+    __function_to_s3(ctx, 'zoom-uploader')
 
 
 @task(_load_env)
@@ -61,9 +71,16 @@ def update_downloader(ctx):
 
 
 @task(_load_env)
+def update_uploader(ctx):
+    __package_function(ctx, 'zoom-uploader')
+    __update_function(ctx, 'zoom-uploader')
+
+
+@task(_load_env)
 def package(ctx):
     package_webhook(ctx)
     package_downloader(ctx)
+    package_uploader(ctx)
 
 
 @task(_load_env)
@@ -107,7 +124,7 @@ def __create_or_update(ctx, op):
 
     lambda_objects = {}
 
-    for func in ['zoom-webhook', 'zoom-downloader']:
+    for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
         zip_path = join(dirname(__file__), 'functions', func + '.zip')
         if not exists(zip_path):
             print("No zip found for {}! Did you run the package-* commands?".format(func))
@@ -120,11 +137,15 @@ def __create_or_update(ctx, op):
            "--parameters "
            "ParameterKey=WebhookLambdaCode,ParameterValue={} "
            "ParameterKey=ZoomDownloaderLambdaCode,ParameterValue={} "
+           "ParameterKey=ZoomUploaderLambdaCode,ParameterValue={} "
            "ParameterKey=NotificationEmail,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
            "ParameterKey=ZoomLoginUser,ParameterValue='{}' "
            "ParameterKey=ZoomLoginPassword,ParameterValue='{}' "
+           "ParameterKey=OpencastBaseUrl,ParameterValue='{}' "
+           "ParameterKey=OpencastApiUser,ParameterValue='{}' "
+           "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -133,11 +154,15 @@ def __create_or_update(ctx, op):
                 template_path,
                 lambda_objects['zoom-webhook'],
                 lambda_objects['zoom-downloader'],
+                lambda_objects['zoom-uploader'],
                 ENV['NOTIFICATION_EMAIL'],
                 ENV['ZOOM_API_KEY'],
                 ENV['ZOOM_API_SECRET'],
                 ENV['ZOOM_LOGIN_USER'],
                 ENV['ZOOM_LOGIN_PASSWORD'],
+                ENV['OPENCAST_BASE_URL'],
+                ENV['OPENCAST_API_USER'],
+                ENV['OPENCAST_API_PASSWORD'],
                 )
     print(cmd)
     ctx.run(cmd)

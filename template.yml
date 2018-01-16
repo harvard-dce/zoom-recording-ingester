@@ -6,6 +6,8 @@ Parameters:
     Type: String
   ZoomDownloaderLambdaCode:
     Type: String
+  ZoomUploaderLambdaCode:
+    Type: String
   NotificationEmail:
     Type: String
   ZoomApiKey:
@@ -15,6 +17,12 @@ Parameters:
   ZoomLoginUser:
     Type: String
   ZoomLoginPassword:
+    Type: String
+  OpencastBaseUrl:
+    Type: String
+  OpencastApiUser:
+    Type: String
+  OpencastApiPassword:
     Type: String
 
 Resources:
@@ -36,6 +44,8 @@ Resources:
       QueueName: !Sub "${AWS::StackName}-uploads.fifo"
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 300
 
   ZoomIngesterRecordingsTable:
     Type: AWS::DynamoDB::Table
@@ -69,6 +79,8 @@ Resources:
           Effect: Allow
           Principal:
             Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
       Policies:
         - PolicyName: !Sub "${AWS::StackName}-policy"
           PolicyDocument:
@@ -93,7 +105,11 @@ Resources:
               - Effect: "Allow"
                 Action:
                   - "s3:*"
-                Resource: !Join ['', [!GetAtt [ZoomVideosBucket, Arn], "/*"]]
+                Resource: !GetAtt [ZoomVideosBucket, Arn]
+              - Effect: "Allow"
+                Action:
+                  - "sqs:*"
+                Resource: !GetAtt [ZoomIngesterUploadQueue, Arn]
 
   ZoomIngesterApi:
     Type: AWS::ApiGateway::RestApi
@@ -197,7 +213,7 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-zoom-downloader-function"
       Environment:
         Variables:
-          ZOOM_VIDEOS_BUCKET: !Sub "${AWS::StackName}-videos"
+          ZOOM_VIDEOS_BUCKET: !Ref ZoomVideosBucket
           ZOOM_LOGIN_USER: !Ref ZoomLoginUser
           ZOOM_LOGIN_PASSWORD: !Ref ZoomLoginPassword
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
@@ -216,6 +232,26 @@ Resources:
       FunctionName: !GetAtt [ZoomDownloaderFunction, Arn]
       StartingPosition: TRIM_HORIZON
       EventSourceArn: !GetAtt [ZoomIngesterRecordingsTable, StreamArn]
+
+  ZoomUploaderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: zoom-uploader.handler
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 300
+      Role: !GetAtt [ZoomIngesterRole, Arn]
+      FunctionName: !Sub "${AWS::StackName}-zoom-uploader-function"
+      Environment:
+        Variables:
+          ZOOM_VIDEOS_BUCKET: !Ref ZoomVideosBucket
+          UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
+          OPENCAST_BASE_URL: !Ref OpencastBaseUrl
+          OPENCAST_API_USER: !Ref OpencastApiUser
+          OPENCAST_API_PASSWORD: !Ref OpencastApiPassword
+      Code:
+        S3Bucket: !Select [0, !Split ["/", !Ref ZoomUploaderLambdaCode]]
+        S3Key: !Select [1, !Split ["/", !Ref ZoomUploaderLambdaCode]]
 
   ZoomIngesterNotificationTopic:
     Type: AWS::SNS::Topic
