@@ -1,0 +1,118 @@
+
+{
+  "uuid": "9j2PV3X1SC6C4Qg6WMByTw==",
+  "meeting_number": 695444470,
+  "account_id": "Z05XQQycSaO2Y2EzepwGtQ",
+  "host_id": "gEUqBiyfR2OKBJH482GRlA",
+  "host_name":
+  "topic": "MGMT E-2035 (14821) 2017",
+  "start_time": "2017-12-07T00:41:03Z",
+  "timezone": "America/Denver",
+  "duration": 131,
+  "total_size": 183801202,
+  "recording_count": 9,
+  "recording_files": [
+    {
+      "id": "a00d4268-f731-4e9b-8e6a-05f26d7a661e",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T01:12:21Z",
+      "recording_end": "2017-12-07T01:47:23Z",
+      "file_type": "MP4",
+      "file_size": 57503625,
+      "play_url": "https://api.zoom.us/recording/play/q2mlCI1IGStyCtq12sfxdNlIR4JazeFekUBjwjlsuOWAwdH3c7q1NmZQ2oY-B3Jd",
+      "download_url": "https://api.zoom.us/recording/download/q2mlCI1IGStyCtq12sfxdNlIR4JazeFekUBjwjlsuOWAwdH3c7q1NmZQ2oY-B3Jd",
+      "status": "completed",
+      "s3_object": "9j2PV3X1SC6C4Qg6WMByTw==-a00d4268-f731-4e9b-8e6a-05f26d7a661e.MP4",
+      "track_sequence": 1,
+      "view_type": "host"
+    },
+    {
+      "id": "e0e803e1-ab51-42c7-9001-0bca4e24d76d",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T01:12:21Z",
+      "recording_end": "2017-12-07T01:47:23Z",
+      "file_type": "M4A",
+      "file_size": 14265954,
+      "play_url": "https://api.zoom.us/recording/play/AmkswVqwa6rheEHnvbKUsiJHi94M79mmfeiIsv2WJ17gUFIz-du6xEj3kwdkoDG3",
+      "download_url": "https://api.zoom.us/recording/download/AmkswVqwa6rheEHnvbKUsiJHi94M79mmfeiIsv2WJ17gUFIz-du6xEj3kwdkoDG3",
+      "status": "completed"
+    },
+    {
+      "id": "8376632a-9b13-4a33-98b8-658690d030e7",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T01:12:21Z",
+      "recording_end": "2017-12-07T01:47:23Z",
+      "file_type": "CHAT",
+      "file_size": 558,
+      "play_url": "https://api.zoom.us/recording/play/ioZ1YbttdnO52HlD8mDkU0RCsBw7gTgqloV_WWdQexFFFmRu9N-q5CEac7DQzJQv",
+      "download_url": "https://api.zoom.us/recording/download/ioZ1YbttdnO52HlD8mDkU0RCsBw7gTgqloV_WWdQexFFFmRu9N-q5CEac7DQzJQv",
+      "status": "completed"
+    },
+    {
+      "id": "ebc3a2f2-50c9-4735-acc9-79d5da40b336",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T01:51:25Z",
+      "recording_end": "2017-12-07T02:19:17Z",
+      "file_type": "MP4",
+      "file_size": 45613038,
+      "play_url": "https://api.zoom.us/recording/play/5RQYAodh0rba1_omS9j5RykSCTxRGNMQhR59zQQYds_mhUk59hi5sfiCt21jqeoT",
+      "download_url": "https://api.zoom.us/recording/download/5RQYAodh0rba1_omS9j5RykSCTxRGNMQhR59zQQYds_mhUk59hi5sfiCt21jqeoT",
+      "status": "completed"
+    },
+    {
+      "id": "d3da9e9b-ed29-4e7d-8394-426a97169dff",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T01:51:25Z",
+      "recording_end": "2017-12-07T02:19:17Z",
+      "file_type": "M4A",
+      "file_size": 11347347,
+      "play_url": "https://api.zoom.us/recording/play/IgzlPnvpgF7K6mnvR8NJ0zg6nRW8LQEzDRtfTB7PktT8UGSnS15iwsjJR0_0eQBV",
+      "download_url": "https://api.zoom.us/recording/download/IgzlPnvpgF7K6mnvR8NJ0zg6nRW8LQEzDRtfTB7PktT8UGSnS15iwsjJR0_0eQBV",
+      "status": "completed"
+    },
+    {
+      "id": "b306dec9-b74f-4603-8961-c8915ed0a4c5",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T01:51:25Z",
+      "recording_end": "2017-12-07T02:19:17Z",
+      "file_type": "CHAT",
+      "file_size": 271,
+      "play_url": "https://api.zoom.us/recording/play/x7uo-fEqoM7bPkcXUQRvDXtfzNTzhbtpvWPhyLPXnTdG-dUBMYBcwD4C4A1ZL-4Y",
+      "download_url": "https://api.zoom.us/recording/download/x7uo-fEqoM7bPkcXUQRvDXtfzNTzhbtpvWPhyLPXnTdG-dUBMYBcwD4C4A1ZL-4Y",
+      "status": "completed"
+    },
+    {
+      "id": "e8f3de00-2360-468b-bc0c-193ecc86f602",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T02:23:12Z",
+      "recording_end": "2017-12-07T02:51:00Z",
+      "file_type": "MP4",
+      "file_size": 43740258,
+      "play_url": "https://api.zoom.us/recording/play/EtjnLVYWV4G5MNHd2g_VvuuTQhPm5jfuinBnLU2gGGFkAvbhyjc4iEBaZNXS-Fq0",
+      "download_url": "https://api.zoom.us/recording/download/EtjnLVYWV4G5MNHd2g_VvuuTQhPm5jfuinBnLU2gGGFkAvbhyjc4iEBaZNXS-Fq0",
+      "status": "completed"
+    },
+    {
+      "id": "efc38c9e-3a2a-4826-9e93-954b90ee601f",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T02:23:12Z",
+      "recording_end": "2017-12-07T02:51:00Z",
+      "file_type": "M4A",
+      "file_size": 11327747,
+      "play_url": "https://api.zoom.us/recording/play/QVGmi71XbulYqtZ_7AsYivj00Wvi7ybBMdj9BW6vguzVE72_Psblf8AABoKgafkZ",
+      "download_url": "https://api.zoom.us/recording/download/QVGmi71XbulYqtZ_7AsYivj00Wvi7ybBMdj9BW6vguzVE72_Psblf8AABoKgafkZ",
+      "status": "completed"
+    },
+    {
+      "id": "b3770d78-2831-43fa-9a7c-91047c4b902b",
+      "meeting_id": "9j2PV3X1SC6C4Qg6WMByTw==",
+      "recording_start": "2017-12-07T02:23:12Z",
+      "recording_end": "2017-12-07T02:51:00Z",
+      "file_type": "CHAT",
+      "file_size": 2404,
+      "play_url": "https://api.zoom.us/recording/play/22GR3haZku_aa8EjVgT2E-UgLOIAmzujc7n4S7RGv29ms3JQJHxjD6CMs5IE5AaH",
+      "download_url": "https://api.zoom.us/recording/download/22GR3haZku_aa8EjVgT2E-UgLOIAmzujc7n4S7RGv29ms3JQJHxjD6CMs5IE5AaH",
+      "status": "completed"
+    }
+  ]
+}
