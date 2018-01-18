@@ -22,7 +22,7 @@ Resources:
   ZoomVideosBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${AWS::StackName}-videos"
+      BucketName: !Sub "${AWS::StackName}-recording-files"
       LifecycleConfiguration:
         Rules:
           - Id: DeleteAfterTwoWeeks
@@ -37,15 +37,15 @@ Resources:
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
 
-  ZoomIngesterTable:
+  ZoomIngesterRecordingsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "${AWS::StackName}-urls"
+      TableName: !Sub "${AWS::StackName}-recordings"
       KeySchema:
-        - AttributeName: DownloadUrl
+        - AttributeName: meeting_uuid
           KeyType: HASH
       AttributeDefinitions:
-        - AttributeName: DownloadUrl
+        - AttributeName: meeting_uuid
           AttributeType: S
       ProvisionedThroughput:
         ReadCapacityUnits: 1
@@ -55,7 +55,7 @@ Resources:
 
   ZoomIngesterRole:
     Type: AWS::IAM::Role
-    DependsOn: ZoomIngesterTable
+    DependsOn: ZoomIngesterRecordingsTable
     Properties:
       RoleName: !Sub "${AWS::StackName}-role"
       AssumeRolePolicyDocument:
@@ -82,14 +82,14 @@ Resources:
               - Effect: "Allow"
                 Action:
                   - "dynamodb:*"
-                Resource: !GetAtt [ZoomIngesterTable, Arn]
+                Resource: !GetAtt [ZoomIngesterRecordingsTable, Arn]
               - Effect: "Allow"
                 Action:
                   - "dynamodb:DescribeStream"
                   - "dynamodb:GetRecords"
                   - "dynamodb:GetShardIterator"
                   - "dynamodb:ListStreams"
-                Resource: !Join ['', [!GetAtt [ZoomIngesterTable, Arn], "/stream/*"]]
+                Resource: !Join ['', [!GetAtt [ZoomIngesterRecordingsTable, Arn], "/stream/*"]]
               - Effect: "Allow"
                 Action:
                   - "s3:*"
@@ -97,7 +97,7 @@ Resources:
 
   ZoomIngesterApi:
     Type: AWS::ApiGateway::RestApi
-    DependsOn: ZoomIngesterTable
+    DependsOn: ZoomIngesterRecordingsTable
     Properties:
       Name: !Ref AWS::StackName
 
@@ -107,7 +107,7 @@ Resources:
     Properties:
       RestApiId: !Ref ZoomIngesterApi
       ParentId: !GetAtt [ZoomIngesterApi, RootResourceId]
-      PathPart: "download_url"
+      PathPart: "new_recording"
 
   ZoomIngesterWebhook:
     Type: AWS::ApiGateway::Method
@@ -121,6 +121,9 @@ Resources:
         Ref: ZoomIngesterResource
       HttpMethod: POST
       AuthorizationType: NONE
+      RequestParameters:
+        method.request.querystring.type: false
+        method.request.querystring.content: false
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
@@ -141,7 +144,7 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-zoom-webhook-function"
       Environment:
         Variables:
-          DOWNLOAD_URLS_TABLE: !Sub "${AWS::StackName}-urls"
+          DOWNLOAD_URLS_TABLE: !Ref ZoomIngesterRecordingsTable
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
       Code:
@@ -156,7 +159,7 @@ Resources:
       - ZoomIngesterWebhook
     Properties:
       RestApiId: !Ref ZoomIngesterApi
-      Description: "Deployment for the download urls api"
+      Description: "Deployment for the zoom ingester api"
       StageName: "testing"
 
   ZoomIngesterStage:
@@ -183,7 +186,7 @@ Resources:
   ZoomDownloaderFunction:
     Type: AWS::Lambda::Function
     DependsOn:
-      - ZoomIngesterTable
+      - ZoomIngesterRecordingsTable
       - ZoomIngesterUploadQueue
     Properties:
       Handler: zoom-downloader.handler
@@ -205,14 +208,14 @@ Resources:
   ZoomDownloaderEventMapping:
     Type: AWS::Lambda::EventSourceMapping
     DependsOn:
-      - ZoomIngesterTable
+      - ZoomIngesterRecordingsTable
       - ZoomDownloaderFunction
     Properties:
       Enabled: true
       BatchSize: 1
       FunctionName: !GetAtt [ZoomDownloaderFunction, Arn]
       StartingPosition: TRIM_HORIZON
-      EventSourceArn: !GetAtt [ZoomIngesterTable, StreamArn]
+      EventSourceArn: !GetAtt [ZoomIngesterRecordingsTable, StreamArn]
 
   ZoomIngesterNotificationTopic:
     Type: AWS::SNS::Topic
