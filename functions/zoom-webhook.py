@@ -97,6 +97,11 @@ def handler(event, context):
             return resp_204("No recordings ready to download")
     except ApiResponseParsingFailure:
         return resp_400("Failed to parse Zoom API response")
+          
+    try:
+        recording_data.update(get_host_data(payload['host_id']))
+    except MeetingLookupFailure as e:
+        return resp_400(repr(e))
 
     now = datetime.utcnow().isoformat()
     db_record = {
@@ -131,7 +136,10 @@ def parse_payload(event_body):
         del payload['type']
         if 'content' in payload:
             try:
-                payload['uuid'] = json.loads(payload['content'])['uuid']
+                content = json.loads(payload['content'])
+                payload['uuid'] = content['uuid']
+                payload['host_id'] = content['host_id']
+                payload['id'] = content['id']
                 del payload['content']
             except Exception as e:
                 raise BadWebhookData("Failed to parse payload 'content' value")
@@ -152,7 +160,6 @@ def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
 
 
 def get_recording_data(uuid):
-
     token = gen_token(seconds_valid=600)
 
     try:
@@ -180,6 +187,29 @@ def get_recording_data(uuid):
         raise MeetingLookupFailure("Zoom API connection error: {}".format(repr(e)))
 
     return recording_data
+
+
+def get_host_data(host_id):
+
+    host_data = {}
+
+    try:
+        r = requests.get("https://api.zoom.us/v2/users/%s" % host_id,
+                         headers={"Authorization": "Bearer %s" % gen_token().decode()})
+        r.raise_for_status()
+        response = r.json()
+
+        print("Retrieved host data:", response)
+
+        host_data['host_name'] = "{} {}".format(response['first_name'], response['last_name'])
+        host_data['host_email'] = response['email']
+
+    except KeyError as e:
+        raise MeetingLookupFailure("Missing host data. {}".format(repr(e)))
+    except requests.HTTPError as e:
+        raise MeetingLookupFailure("Zoom API request error: {}, {}".format(r.content, repr(e)))
+
+    return host_data
 
 
 def verify_status(recording_data):

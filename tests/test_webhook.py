@@ -49,8 +49,8 @@ def test_parse_payload():
          "Failed to parse payload 'content'"),
         ('type=SOME_TYPE&content={"no_uuid_here": 1}', webhook.BadWebhookData,
          "Failed to parse payload 'content'"),
-        ('type=SOME_TYPE&host_id=xyz789&content={"uuid": "1234abcd"}',
-         {'status': 'SOME_TYPE', 'uuid': '1234abcd', 'host_id': 'xyz789'}, None),
+        ('type=SOME_TYPE&content={"uuid": "1234abcd", "host_id": "xyz789", "id": "123"}',
+         {'status': 'SOME_TYPE', 'uuid': '1234abcd', 'host_id': 'xyz789', 'id': '123'}, None),
         ('id=1&uuid=abcd1234', webhook.BadWebhookData,
          "payload missing 'status'"),
         ('id=1&uuid=abcd1234&status=SOME_STATUS&host_id=xyz789',
@@ -109,7 +109,6 @@ def test_get_recording_data(mocker):
 
 def test_verify_status():
 
-
     rec_data = [
         ({}, False, None),
         ({'recording_files': []}, False, None),
@@ -131,10 +130,14 @@ def test_verify_status():
 def test_handler_happy_trail(mocker):
 
     event = {
-        "body" : "id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED"
+        "id": 1,
+        "uuid": "abcd-1234",
+        "host_id": "foobarbaz",
+        "status": "RECORDING_MEETING_COMPLETED"
     }
 
     recording_data = {
+        'host_id': '',
         'recording_files': [
             {
                 'id': '1234',
@@ -144,14 +147,25 @@ def test_handler_happy_trail(mocker):
         ]
     }
 
+    host_data = {
+        'host_name': "",
+        'host_email': ""
+    }
+
     mock_get_recording_data = mocker.patch.object(
         webhook,
         'get_recording_data',
         return_value=recording_data
     )
+
+    mocker.patch.object(
+        webhook,
+        'get_host_data',
+        return_value=host_data
+    )
     mocker.patch.object(webhook, 'save_to_dynamodb')
 
-    resp = webhook.handler(event, None)
+    resp = pass_webhook_to_handler(event)
 
     mock_get_recording_data.assert_called_once_with("abcd-1234")
     assert resp['statusCode'] == 200
@@ -159,7 +173,10 @@ def test_handler_happy_trail(mocker):
 
 def test_api_lookup_too_many_retries(mocker):
     event = {
-        "body" : "id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED"
+        "id": 1,
+        "uuid": "abcd-1234",
+        "host_id": "foobarbaz",
+        "status": "RECORDING_MEETING_COMPLETED"
     }
 
     mock_get_recording_data = mocker.patch.object(webhook, 'get_recording_data')
@@ -171,7 +188,7 @@ def test_api_lookup_too_many_retries(mocker):
             for i in range(webhook.MEETING_LOOKUP_RETRIES + 1)
     ]
 
-    resp = webhook.handler(event, None)
+    resp = pass_webhook_to_handler(event)
 
     assert mock_get_recording_data.call_count == 3
     assert resp['statusCode'] == 400
@@ -179,10 +196,7 @@ def test_api_lookup_too_many_retries(mocker):
 
 
 def test_api_lookup_retries(mocker):
-
-    event = {
-        "body" : "id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED"
-    }
+    event = {'id': 1, 'uuid': 'abcd-1234', 'host_id': 'foobarbaz', 'status': "RECORDING_MEETING_COMPLETED"}
 
     mock_get_recording_data = mocker.patch.object(webhook, 'get_recording_data')
     mocker.patch.object(webhook, 'MEETING_LOOKUP_RETRY_DELAY', new=0)
@@ -193,9 +207,13 @@ def test_api_lookup_retries(mocker):
         {'recording_files': []}
     ]
 
-    resp = webhook.handler(event, None)
+    resp = pass_webhook_to_handler(event)
 
     assert mock_get_recording_data.call_count == 3
     assert resp['statusCode'] == 204
     assert resp['body'] == ''
+
+
+def pass_webhook_to_handler(event):
+    return webhook.handler({'body': urllib.parse.urlencode(event)}, None)
 
