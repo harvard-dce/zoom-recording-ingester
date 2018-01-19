@@ -3,7 +3,8 @@ import boto3
 import jwt
 import time
 import json
-import urllib
+from datetime import datetime
+from urllib.parse import parse_qsl
 from os import getenv as env
 from botocore.exceptions import ClientError
 
@@ -39,7 +40,7 @@ def resp_204(msg):
     return {
         'statusCode': 204,
         'headers': {},
-        'body': ''
+        'body': "" # 204 = no content
     }
 
 
@@ -65,28 +66,24 @@ def handler(event, context):
         return resp_400("bad data: no body in event")
 
     try:
-        payload = {key: value[0] for key, value in urllib.parse.parse_qs(event['body']).items()}
-    except Exception as e:
-        return resp_400(repr(e))
-
-    print("PAYLOAD:", payload)
-
-    try:
-        uuid = get_meeting_uuid(payload)
+        payload = parse_payload(event['body'])
+        print('PAYLOAD: ' + str(payload))
     except BadWebhookData as e:
-        print(payload)
-        return resp_400("bad webhook data: {}".format(str(e)))
-    except IgnoreEventType as e:
-        return resp_204(e)
+        return resp_400("bad webhook payload data: {}".format(str(e)))
+
+    if payload['status'] != 'RECORDING_MEETING_COMPLETED':
+        return resp_204(
+            "Handling not implement for status '{}'".format(payload['status'])
+        )
 
     lookup_retries = MEETING_LOOKUP_RETRIES
     while True:
         try:
-            print("looking up meeting {}".format(uuid))
-            recording_data = get_recording_data(uuid)
+            print("looking up meeting {}".format(payload['uuid']))
+            recording_data = get_recording_data(payload['uuid'])
             break
         except NoRecordingFound as e:
-            return resp_204(e)
+            return resp_204(str(e))
         except MeetingLookupFailure as e:
             if lookup_retries > 0:
                 lookup_retries -= 1
@@ -96,24 +93,29 @@ def handler(event, context):
                 return resp_400("Meeting lookup retries exhausted: {}".format(str(e)))
 
     try:
-        recording_data.update(get_host_data(recording_data))
+        if not verify_status(recording_data):
+            return resp_204("No recordings ready to download")
+    except ApiResponseParsingFailure:
+        return resp_400("Failed to parse Zoom API response")
+          
+    try:
+        recording_data.update(get_host_data(payload['host_id']))
     except MeetingLookupFailure as e:
         return resp_400(repr(e))
 
-    try:
-        print(recording_data)
-        records = generate_records(recording_data)
-    except ApiResponseParsingFailure:
-        return resp_400("Failed to parse Zoom API response")
+    
+    now = datetime.utcnow().isoformat()
+    db_record = {
+        'meeting_uuid': payload['uuid'],
+        'recording_data': json.dumps(recording_data),
+        'created': now,
+        'updated': now
+    }
 
-    if not len(records):
-        return resp_400("No recordings to download")
-
-    dynamo = boto3.resource('dynamodb')
-    table = dynamo.Table(DOWNLOAD_URLS_TABLE)
-
-    for record in records:
-        send_to_dynamodb(record, table)
+    if 'dryrun' not in event:
+        save_to_dynamodb(db_record)
+    else:
+        print("dryrun: skipping dynamodb put item")
 
     return {
         'statusCode': 200,
@@ -122,26 +124,34 @@ def handler(event, context):
     }
 
 
-def get_meeting_uuid(payload):
+def parse_payload(event_body):
+
+    try:
+        payload = dict(parse_qsl(event_body, strict_parsing=True))
+    except ValueError as e:
+        raise BadWebhookData(str(e))
+
     if 'type' in payload:
-        print(payload['type'])
-        if payload['type'] == 'RECORDING_MEETING_COMPLETED':
+        print("Got old-style payload")
+        payload['status'] = payload['type']
+        del payload['type']
+        if 'content' in payload:
             try:
-                return json.loads(payload['content'])['uuid']
+                content = json.loads(payload['content'])
+                payload['uuid'] = content['uuid']
+                payload['host_id'] = content['host_id']
+                payload['id'] = content['id']
+                del payload['content']
             except Exception as e:
-                raise BadWebhookData(e)
+                raise BadWebhookData("Failed to parse payload 'content' value")
         else:
-            raise IgnoreEventType(
-                "Handling not implemented for 'type' of {}".format(payload['type'])
-            )
-    elif 'status' in payload:
-        if payload['status'] == "RECORDING_MEETING_COMPLETED":
-            return payload["uuid"]
-        else:
-            raise IgnoreEventType(
-                "Handling not implement for 'status' of {}".format(payload['status'])
-            )
-    raise BadWebhookData("Payload missing 'type' or 'status'")
+            raise BadWebhookData("payload missing 'content' value")
+    elif 'status' not in payload:
+        raise BadWebhookData("payload missing 'status' value")
+    else:
+        print("Got new-style payload")
+
+    return payload
 
 
 def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
@@ -180,12 +190,12 @@ def get_recording_data(uuid):
     return recording_data
 
 
-def get_host_data(recording_data):
+def get_host_data(host_id):
 
     host_data = {}
 
     try:
-        r = requests.get("https://api.zoom.us/v2/users/%s" % recording_data['host_id'],
+        r = requests.get("https://api.zoom.us/v2/users/%s" % host_id,
                          headers={"Authorization": "Bearer %s" % gen_token().decode()})
         r.raise_for_status()
         response = r.json()
@@ -203,64 +213,54 @@ def get_host_data(recording_data):
     return host_data
 
 
-def generate_records(recording_data):
-    records = []
+def verify_status(recording_data):
+
+    if 'recording_files' not in recording_data \
+            or not len(recording_data['recording_files']):
+        return False
+
+    for file in recording_data['recording_files']:
+
+        file_id = file['id']
+        status = file['status']
+        print("file '{}' has status {}".format(file_id, status))
+
+        if status != 'completed':
+            print("ERROR: Recording status not 'completed'")
+            return False
+
+        if 'download_url' not in file:
+            raise ApiResponseParsingFailure(
+                "ERROR: file '{}' is missing a download_url".format(file_id)
+            )
+
+    return True
+
+
+def save_to_dynamodb(record):
+
+    dynamo = boto3.resource('dynamodb')
+    table = dynamo.Table(DOWNLOAD_URLS_TABLE)
 
     try:
-
-        for file in recording_data['recording_files']:
-            record = {}
-
-            if file['file_type'].lower() == "mp4":
-
-                if file['status'] != 'completed':
-                    print("ERROR: Recording status not 'completed'")
-                    continue
-
-                if 'download_url' in file:
-                    record['DownloadUrl'] = file['download_url']
-                else:
-                    raise ApiResponseParsingFailure("ERROR: Download url not found.")
-                    continue
-
-                for key in ['file_type', 'play_url', 'recording_start', 'recording_end']:
-                    record[key] = file[key]
-
-                if 'file_size' in file:
-                    record['file_size_bytes'] = file['file_size']
-                if 'id' in file:
-                    record['file_id'] = file['id']
-                if 'meeting_id' in file:
-                    record['meeting_uuid'] = file['meeting_id']
-                if 'duration' in recording_data:
-                    record['meeting_duration_minutes'] = recording_data['duration']
-
-                for key in ['account_id','host_id', 'host_name', 'host_email',
-                            'start_time', 'timezone', 'topic', 'uuid']:
-                    if key in recording_data:
-                        record[key] = recording_data[key]
-
-                if 'meeting_number' in recording_data:
-                    record['meeting_series_id'] = recording_data['meeting_number']
-
-                # dynamoDB does not accept values that are empty strings
-                record = {k: v for k, v in record.items() if v}
-
-                records.append(record)
-
-    except Exception as e:
-        raise ApiResponseParsingFailure(str(e))
-
-    return records
-
-
-def send_to_dynamodb(record, dbtable):
-    try:
-        dbtable.put_item(Item=record, ConditionExpression="attribute_not_exists(DownloadUrl)")
-        print("Record created at %s. Record: %s" % (dbtable.creation_date_time, record))
+        table.put_item(Item=record, ConditionExpression="attribute_not_exists(meeting_uuid)")
     except ClientError as e:
         if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            print("Duplicate. URL: %s already in database" % record['DownloadUrl'])
+            print("Duplicate! meeting_uuid '{}' already in database".format(record['meeting_uuid']))
             pass
         else:
             raise
+
+
+if __name__ == '__main__':
+    """
+    for local testing. pass in the "body" payload string as the only argument.
+    for this to work you need to have the .env values pre-sourced.
+    alternatively, there is a pycharm plugin that will allow you to configure
+    a .env file to load in a run configuration: https://github.com/Ashald/EnvFile
+    """
+
+    import sys
+    body = sys.argv[-1]
+
+    handler({'dryrun': True, 'body': body}, None)

@@ -38,24 +38,33 @@ def test_gen_token(key, secret, seconds_valid):
     assert payload['exp'] - (now + seconds_valid) in [0, -1]
 
 
-def test_get_meeting_uuid():
+def test_parse_payload():
 
     payloads = [
-        {'type': 'RECORDING_MEETING_COMPLETED', 'content': json.dumps({'uuid': 'abcd-1234'})},
-        {'type': 'blah'},
-        {'status': 'RECORDING_MEETING_COMPLETED', 'uuid': 'abcd-1234'},
-        {'status': 'blerg'}
+        ('', webhook.BadWebhookData, 'bad query field'),
+        ('foo&bar&baz', webhook.BadWebhookData, 'bad query field'),
+        ('type=SOME_TYPE', webhook.BadWebhookData,
+         "payload missing 'content'"),
+        ('type=SOME_TYPE&content=some,not,json,stuff', webhook.BadWebhookData,
+         "Failed to parse payload 'content'"),
+        ('type=SOME_TYPE&content={"no_uuid_here": 1}', webhook.BadWebhookData,
+         "Failed to parse payload 'content'"),
+        ('type=SOME_TYPE&host_id=xyz789&content={"uuid": "1234abcd"}',
+         {'status': 'SOME_TYPE', 'uuid': '1234abcd', 'host_id': 'xyz789'}, None),
+        ('id=1&uuid=abcd1234', webhook.BadWebhookData,
+         "payload missing 'status'"),
+        ('id=1&uuid=abcd1234&status=SOME_STATUS&host_id=xyz789',
+         {'id': '1', 'uuid': 'abcd1234', 'status': 'SOME_STATUS', 'host_id': 'xyz789'}, None)
     ]
 
-    assert webhook.get_meeting_uuid(payloads[0]) == 'abcd-1234'
-
-    with pytest.raises(webhook.IgnoreEventType):
-        webhook.get_meeting_uuid(payloads[1])
-
-    assert webhook.get_meeting_uuid(payloads[2]) == 'abcd-1234'
-
-    with pytest.raises(webhook.IgnoreEventType):
-        webhook.get_meeting_uuid(payloads[3])
+    for payload, expected, msg in payloads:
+        if isinstance(expected, type):
+            with pytest.raises(expected) as exc_info:
+                webhook.parse_payload(payload)
+            if msg is not None:
+                assert exc_info.match(msg)
+        else:
+            assert webhook.parse_payload(payload) == expected
 
 
 def test_get_recording_data(mocker):
@@ -98,89 +107,40 @@ def test_get_recording_data(mocker):
         assert recording_data['foo'] == 'bar'
 
 
-def test_generate_records():
+def test_verify_status():
+
 
     rec_data = [
-        ({}, webhook.ApiResponseParsingFailure()),
-        ({'recording_files': []}, []),
-        ({'recording_files': [{'foo': 'bar'}]}, webhook.ApiResponseParsingFailure()),
-        ({'recording_files': [{'file_type': 'jpg'}]}, []),
-        ({'recording_files': [{'file_type': 'mp4', 'status': 'idk'}]}, []),
-        ({'recording_files': [
-            {'file_type': 'mp4', 'status': 'completed'}]},
-            webhook.ApiResponseParsingFailure()
-        ),
-        ({'recording_files': [
-            {
-                'file_type': 'MP4',
-                'status': 'completed',
-                'download_url': 'http://example.edu/foo.mp4',
-                'play_url': 'http://example.edu/play/foo',
-                'recording_start': '2017-01-01 00:00:00',
-                'recording_end': '2017-01-01 00:00:00'
-            }]},
-            [
-
-                {
-                    'file_type': 'MP4',
-                    'DownloadUrl': 'http://example.edu/foo.mp4',
-                    'play_url': 'http://example.edu/play/foo',
-                    'recording_start': '2017-01-01 00:00:00',
-                    'recording_end': '2017-01-01 00:00:00'
-                }
-            ]
-        ),
+        ({}, False, None),
+        ({'recording_files': []}, False, None),
+        ({'recording_files': [{'id': 1, 'status': 'not completed'}]}, False, None),
+        ({'recording_files': [{'id': 1, 'status': 'completed'}]},
+         webhook.ApiResponseParsingFailure, 'missing a download_url'),
+        ({'recording_files': [{'id': 1, 'status': 'completed', 'download_url': 'http://example.com/video.mp4'}]},
+         True, None)
     ]
 
-    for data, expected in rec_data:
-        if isinstance(expected, Exception):
-            with pytest.raises(expected.__class__):
-                webhook.generate_records(data)
+    for data, expected, msg in rec_data:
+        if isinstance(expected, type) and expected.__base__ == Exception:
+            with pytest.raises(expected) as exc_info:
+                webhook.verify_status(data)
         else:
-            assert webhook.generate_records(data) == expected
-
-
-def test_send_to_dynamodb():
-
-    mock_table = Mock()
-    webhook.send_to_dynamodb({'DownloadUrl': 'http://example.edu/video.mp4'}, mock_table)
-    mock_table.put_item.assert_called_once_with(
-        Item={'DownloadUrl': 'http://example.edu/video.mp4'},
-        ConditionExpression="attribute_not_exists(DownloadUrl)"
-    )
-
-    client_error = ClientError({'Error': {'Code': 'ConditionalCheckFailedException'}}, None)
-    mock_table.put_item.reset()
-    mock_table.put_item.side_effect = client_error
-    webhook.send_to_dynamodb({'DownloadUrl': 'http://example.edu/video.mp4'}, mock_table)
-
-    mock_table.put_item.reset()
-    mock_table.put_item.side_effect = Exception()
-    with pytest.raises(Exception):
-        webhook.send_to_dynamodb({'DownloadUrl': 'http://example.edu/video.mp4'}, mock_table)
+            assert webhook.verify_status(data) == expected
 
 
 def test_handler_happy_trail(mocker):
 
     event = {
-        "type" : "RECORDING_MEETING_COMPLETED",
-        "content": json.dumps({
-            "uuid": "abcd-1234",
-            "host_id": "foobarbaz",
-            "id": 12345
-        })
+        "body" : "id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED"
     }
 
     recording_data = {
         'host_id': '',
         'recording_files': [
             {
-                'file_type': 'MP4',
+                'id': '1234',
                 'status': 'completed',
                 'download_url': 'http://example.edu/foo.mp4',
-                'play_url': 'http://example.edu/play/foo',
-                'recording_start': '2017-01-01 00:00:00',
-                'recording_end': '2017-01-01 00:00:00'
             }
         ]
     }
@@ -195,6 +155,7 @@ def test_handler_happy_trail(mocker):
         'get_recording_data',
         return_value=recording_data
     )
+
     mocker.patch.object(
         webhook,
         'get_host_data',
@@ -202,10 +163,7 @@ def test_handler_happy_trail(mocker):
     )
     mocker.patch.object(webhook, 'send_to_dynamodb')
 
-    # this mocking of dynamo is just precautionary since we're mocking the
-    # send_to_dynamodb function as well
-    with mock_dynamodb():
-        resp = pass_webhook_to_handler(event)
+    resp = webhook.handler(event, None)
 
     mock_get_recording_data.assert_called_once_with("abcd-1234")
     assert resp['statusCode'] == 200
@@ -213,12 +171,7 @@ def test_handler_happy_trail(mocker):
 
 def test_api_lookup_too_many_retries(mocker):
     event = {
-        "type" : "RECORDING_MEETING_COMPLETED",
-        "content": json.dumps({
-            "uuid": "abcd-1234",
-            "host_id": "foobarbaz",
-            "id": 12345
-        })
+        "body" : "id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED"
     }
 
     mock_get_recording_data = mocker.patch.object(webhook, 'get_recording_data')
@@ -230,20 +183,17 @@ def test_api_lookup_too_many_retries(mocker):
             for i in range(webhook.MEETING_LOOKUP_RETRIES + 1)
     ]
 
-    resp = pass_webhook_to_handler(event)
+    resp = webhook.handler(event, None)
+
     assert mock_get_recording_data.call_count == 3
     assert resp['statusCode'] == 400
     assert 'retries exhausted' in resp['body']
 
 
 def test_api_lookup_retries(mocker):
+
     event = {
-        "type" : "RECORDING_MEETING_COMPLETED",
-        "content": json.dumps({
-            "uuid": "abcd-1234",
-            "host_id": "foobarbaz",
-            "id": 12345
-        })
+        "body" : "id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED"
     }
 
     mock_get_recording_data = mocker.patch.object(webhook, 'get_recording_data')
@@ -264,7 +214,7 @@ def test_api_lookup_retries(mocker):
 def pass_webhook_to_handler(event):
     return webhook.handler({'body': urllib.parse.urlencode(event)}, None)
 
-
-def pass_webhook_to_handler(event):
-    return webhook.handler({'body': urllib.parse.urlencode(event)}, None)
+    assert mock_get_recording_data.call_count == 3
+    assert resp['statusCode'] == 204
+    assert resp['body'] == ''
 
