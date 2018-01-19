@@ -264,3 +264,7 @@ def test_api_lookup_retries(mocker):
 def pass_webhook_to_handler(event):
     return webhook.handler({'body': urllib.parse.urlencode(event)}, None)
 
+
+def pass_webhook_to_handler(event):
+    return webhook.handler({'body': urllib.parse.urlencode(event)}, None)
+
