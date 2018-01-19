@@ -103,7 +103,6 @@ def handler(event, context):
     except MeetingLookupFailure as e:
         return resp_400(repr(e))
 
-    
     now = datetime.utcnow().isoformat()
     db_record = {
         'meeting_uuid': payload['uuid'],
