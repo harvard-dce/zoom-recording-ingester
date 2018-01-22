@@ -60,16 +60,22 @@ def send_notifications(date, max_recordings, key, secret,
 
     num_recordings = 0
 
-    meeting_uuids = [m['uuid'] for m in get_meetings(key, secret, date=date)]
+    for meeting in get_meetings(key, secret, date=date):
+        uuid = meeting['uuid']
+        series_id = meeting['id']
 
-    for uuid in meeting_uuids:
+        r = requests.get("https://api.zoom.us/v2/meetings/%s" % series_id,
+                         headers={"Authorization": "Bearer %s" % gen_token(key, secret).decode()})
+        r.raise_for_status()
+        host_id = r.json()['host_id']
+
         if current_format is True:
             template = {
                 "type": "RECORDING_MEETING_COMPLETED",
                 "content":
                     json.dumps({
                         "uuid": uuid,
-                        "host_id": "bar",
+                        "host_id": host_id,
                         "id": 12345
                     })
             }
@@ -77,7 +83,7 @@ def send_notifications(date, max_recordings, key, secret,
             template = {
                 "status": "RECORDING_MEETING_COMPLETED",
                 "uuid": uuid,
-                "host_id": "bar",
+                "host_id": host_id,
                 "id": 12345
             }
 
