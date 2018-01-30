@@ -5,9 +5,10 @@ from os import getenv as env
 from bs4 import BeautifulSoup
 from bs4 import SoupStrainer
 from hashlib import md5
+from botocore.exceptions import ClientError
 
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
-UPLOAD_QUEUE_URL = env('UPLOAD_QUEUE_URL')
+UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
 
 
@@ -211,10 +212,14 @@ def send_sqs_message(record):
         "start_time": record['start_time'],
         "recording_count": record['recording_count']
     }
+    print("Sending SQS message: {}".format(message))
 
-    sqs = boto3.client('sqs')
+    sqs = boto3.resource('sqs')
+    upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
-    sqs.send_message(QueueUrl=UPLOAD_QUEUE_URL, MessageBody=json.dumps(message),
-                     MessageGroupId="uploads", MessageDeduplicationId=message['uuid'])
-
-    print("Sent SQS message: {}".format(message))
+    message_sent = upload_queue.send_message(
+        MessageBody=json.dumps(message),
+        MessageGroupId="uploads",
+        MessageDeduplicationId=message['uuid']
+    )
+    print("Message sent: {}".format(message_sent))
