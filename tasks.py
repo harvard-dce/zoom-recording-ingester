@@ -1,4 +1,5 @@
 
+import json
 from invoke import task, Collection
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
@@ -6,8 +7,6 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists
 
 load_dotenv(join(dirname(__file__), '.env'))
-
-ns = Collection()
 
 
 @task
@@ -111,6 +110,22 @@ def delete(ctx):
 
 
 @task
+def debug_on(ctx):
+    """
+    Enable debug logging in all lambda functions
+    """
+    _set_debug(ctx, 1)
+
+
+@task
+def debug_off(ctx):
+    """
+    Disable debug logging in all lambda functions
+    """
+    _set_debug(ctx, 0)
+
+
+@task
 def test(ctx):
     """
     Execute the pytest tests
@@ -118,6 +133,7 @@ def test(ctx):
     ctx.run('pytest ./tests')
 
 
+ns = Collection()
 ns.add_task(create_code_bucket)
 ns.add_task(test)
 
@@ -134,6 +150,11 @@ update_ns.add_task(update_webhook, 'webhook')
 update_ns.add_task(update_downloader, 'downloader')
 update_ns.add_task(update_uploader, 'uploader')
 ns.add_collection(update_ns)
+
+debug_ns = Collection("debug")
+debug_ns.add_task(debug_on, 'on')
+debug_ns.add_task(debug_off, 'off')
+ns.add_collection(debug_ns)
 
 stack_ns = Collection('stack')
 stack_ns.add_task(create)
@@ -254,3 +275,27 @@ def __update_function(ctx, func):
             )
     print(cmd)
     ctx.run(cmd)
+
+
+def _set_debug(ctx, debug_val):
+    for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
+        func_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
+        cmd = ("aws {} lambda get-function-configuration --output json "
+               "--function-name {}").format(profile_arg(), func_name)
+        res = ctx.run(cmd, hide=1)
+        config = json.loads(res.stdout)
+        func_env = config['Environment']['Variables']
+
+        if func_env.get('DEBUG') is not None \
+                and int(func_env.get('DEBUG')) == debug_val:
+            continue
+
+        func_env['DEBUG'] = debug_val
+        new_vars = ','.join("{}={}".format(k, v) for k, v in func_env.items())
+
+        cmd = ("aws {} lambda update-function-configuration "
+               "--environment 'Variables={{{}}}' "
+               "--function-name {}"
+               ).format(profile_arg(), new_vars, func_name)
+        ctx.run(cmd)
+
