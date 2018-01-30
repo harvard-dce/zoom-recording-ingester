@@ -1,11 +1,41 @@
 import requests
 import boto3
+import json
 from os import getenv as env
 from bs4 import BeautifulSoup
 from bs4 import SoupStrainer
+from hashlib import md5
 
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
+UPLOAD_QUEUE_URL = env('UPLOAD_QUEUE_URL')
 MIN_CHUNK_SIZE = 5242880
+
+
+def resp_204(msg):
+    print("http 204 response: {}".format(msg))
+    return {
+        'statusCode': 204,
+        'headers': {},
+        'body': ""
+    }
+
+
+def resp_400(msg):
+    print("http 400 response: {}".format(msg))
+    return {
+        'statusCode': 400,
+        'headers': {},
+        'body': msg
+    }
+
+
+def resp_404(msg):
+    print("http 404 response: {}".format(msg))
+    return {
+        'statusCode': 404,
+        'header': {},
+        'body': msg
+    }
 
 
 def handler(event, context):
@@ -14,38 +44,82 @@ def handler(event, context):
     DyanmoDB table
     """
     print(str(event))
+    print("---------------------------------")
 
+    # Make sure records in event
+    if 'Records' not in event:
+        return resp_400("No records in event.")
+
+    # Should only be receiving records one at a time
     if len(event['Records']) > 1:
-        print("Should only receive one record at a time.")
-        return
+        return resp_400("DynamoDB stream should be set to BatchSize: 1")
 
-    record = event['Records'][0]
+    # We only care about insert events
+    event_type = event['Records'][0]['eventName']
+    if event_type != "INSERT":
+        return resp_204("No action on " + event_type)
 
-    if record['eventName'] != "INSERT":
-        print("No action on", record['eventName'])
-        return {
-            'statusCode': 204,
-            'headers': {},
-            'body': ""
-        }
+    # Load dictionary of recording data
+    record = json.loads(event['Records'][0]['dynamodb']['NewImage']['recording_data']['S'])
 
-    metadata = {key: list(val.values())[0] for key, val in record['dynamodb']['Keys'].items()}
-    metadata.update({field: list(val.values())[0] for field, val in record['dynamodb']['NewImage'].items()})
+    # Sort files chronologically
+    chronological_files = sorted(record['recording_files'], key=lambda k: k['recording_start'])
 
-    filename = "%s-%s.%s" % (metadata['meeting_series_id'],
-                             metadata['recording_start'],
-                             metadata['file_type'].lower())
+    # Make metadata copy to edit for each file - may not need to do this here if you just
+    # pass the record into a method
+    metadata = record.copy()
+    track_sequence = 1
 
-    video_url = retrieve_url(metadata['play_url'])
+    for i, file in enumerate(chronological_files):
+        print("_____________")
+        prev_file = chronological_files[i - 1]
 
-    if video_url is None:
-        return {
-            'statusCode': 404,
-            'header': {},
-            'body': ""
-        }
+        if i > 0:
+            if file['recording_start'] == prev_file['recording_start']:
+                if file['recording_end'] != prev_file['recording_end']:
+                    return resp_400("Recording end {} and recording end {} do not match for segment {}."
+                                    "Segments should match exactly.".format(file['recording_end'],
+                                                                            prev_file['recording_end'], i))
+            elif file['recording_start'] < prev_file['recording_end']:
+                    return resp_400("Recording start {} before recording end {}. "
+                                    "Segments cannot overlap.".format(file['recording_start'],
+                                                                      prev_file['recording_end']))
+            else:
+                track_sequence += 1
 
-    stream_file_to_s3(video_url, filename, metadata)
+        if file['file_type'].lower() not in ["mp4", "m4a", "chat"]:
+            r = requests.get(file['download_url'], stream=True)
+            if 'Content-Disposition' in r.headers:
+                zoom_name = r.headers['Content-Disposition'].split("=")[-1]
+                print("FILENAME via download:", zoom_name)
+            file_url = file['download_url']
+        else:
+            # extract file url from play page
+            file_url = retrieve_url_from_play_page(file['play_url'])
+
+            # the name that zoom gives to this file
+            zoom_name = zoom_file_name(file_url)
+            print("FILENAME via play:", zoom_name, file['recording_start'])
+
+            # set appropriate metadata for view type and make sure gallery and speaker are the same
+            if 'gallery' in zoom_name.lower():
+                metadata['view'] = "gallery"
+            elif file['file_type'].lower() == "mp4":
+                metadata['view'] = "speaker"
+
+        metadata['track_sequence'] = str(track_sequence)
+        file_type = ".".join(zoom_name.split(".")[1:]).lower()
+        md5_uuid = md5(file['meeting_id'].encode()).hexdigest()
+        file_name = "{}/{}.{}".format(md5_uuid, file['id'], file_type)
+
+        if file_type == "mp4":
+            print("S3 FILENAME", file_name, metadata['view'], metadata['track_sequence'])
+        else:
+            print("S3 FILENAME:", file_name, metadata['track_sequence'])
+
+        stream_file_to_s3(file_url, file_name, metadata)
+
+    send_sqs_message(record)
 
     return {
         'statusCode': 200,
@@ -54,7 +128,11 @@ def handler(event, context):
     }
 
 
-def retrieve_url(play_url):
+def zoom_file_name(file_url):
+    return file_url.split("?")[0].split("/")[-1]
+
+
+def retrieve_url_from_play_page(play_url):
     r = requests.get(play_url)
     r.raise_for_status()
 
@@ -62,20 +140,42 @@ def retrieve_url(play_url):
 
     source = BeautifulSoup(r.content, "html.parser", parse_only=only_source_tags)
 
-    link = source.find("source")['src']
+    source_object = source.find("source")
+
+    if source_object is None:
+        return None
+
+    link = source_object['src']
 
     return link
 
 
 def stream_file_to_s3(download_url, filename, metadata):
 
+    # check if file already exists in s3
+    s3 = boto3.client('s3')
+
+    try:
+        s3.head_object(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename)
+        print("Key {} already in bucket.".format(filename))
+    except ClientError:
+        return
+
+    metadata = {key: str(val) for key, val in metadata.items()}
+
+    print("STREAMING FILE:", download_url)
+    print("STREAMING NAME:", filename)
+    print("STREAMING METADATA:", metadata)
+    print(type(download_url), type(filename), type(metadata))
+
     r = requests.get(download_url, stream=True)
     r.raise_for_status()
 
-    print(r.status_code)
+    print("STREAM STATUS CODE:", r.status_code)
 
-    s3 = boto3.client('s3')
     part_info = {'Parts': []}
+
+    print("ZOOM BUCKET:", ZOOM_VIDEOS_BUCKET)
 
     mpu = s3.create_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                      Metadata=metadata)
@@ -99,3 +199,22 @@ def stream_file_to_s3(download_url, filename, metadata):
         print(e)
         s3.abort_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                   UploadId=mpu['UploadId'])
+
+
+def send_sqs_message(record):
+    print("SQS sending start...")
+    message = {
+        "uuid": record['uuid'],
+        "meeting_number": record['meeting_number'],
+        "host_name": record['host_name'],
+        "topic": record['topic'],
+        "start_time": record['start_time'],
+        "recording_count": record['recording_count']
+    }
+
+    sqs = boto3.client('sqs')
+
+    sqs.send_message(QueueUrl=UPLOAD_QUEUE_URL, MessageBody=json.dumps(message),
+                     MessageGroupId="uploads", MessageDeduplicationId=message['uuid'])
+
+    print("Sent SQS message: {}".format(message))
