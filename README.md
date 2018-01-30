@@ -15,6 +15,17 @@ Python 3 is required.
 1. run `invoke package` to build and upload the lambda function code to s3
 1. run `invoke create` to build the CloudFormation stack
 
+## Opsworks cluster VPC setup
+
+To allow the `zoom-uploader` function to access the Opencast admin node the Lambda
+function must be configured for VPC network access.
+
+1. In the "Network" settings for the uploader lambda function choose the VPC of 
+the target opsworks cluster
+1. In the "Subnets" dropdown that appears choose both the public and private subnets
+1. In the "Security Groups" dropdown choose the "Common" security group
+1. Click "Save" to update the function
+
 ## Stack-related commands
 
 This project uses the `invoke` python library to provide a simple task cli. Run `invoke -l`
