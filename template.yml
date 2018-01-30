@@ -390,3 +390,21 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       InsufficientDataActions:
         - !Ref ZoomIngesterNotificationTopic
+
+  ZoomUploaderErrorsMetricAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "alarms on any uploader function invocation error"
+      AlarmActions:
+        - !Ref ZoomIngesterNotificationTopic
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ZoomUploaderFunction
+      Namespace: AWS/Lambda
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      Statistic: Sum
+
