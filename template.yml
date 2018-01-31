@@ -108,6 +108,12 @@ Resources:
                 Resource: !GetAtt [ZoomVideosBucket, Arn]
               - Effect: "Allow"
                 Action:
+                  - "s3:*"
+                # Permissions to perform actions on objects within the S3 bucket needed in addition
+                # to permissions to perform actions on the S3 bucket.
+                Resource: !Join ['', [!GetAtt [ZoomVideosBucket, Arn], "/*"]]
+              - Effect: "Allow"
+                Action:
                   - "sqs:*"
                 Resource: !GetAtt [ZoomIngesterUploadQueue, Arn]
 
