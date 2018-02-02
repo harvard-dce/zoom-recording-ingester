@@ -252,15 +252,3 @@ def save_to_dynamodb(record):
             raise
 
 
-if __name__ == '__main__':
-    """
-    for local testing. pass in the "body" payload string as the only argument.
-    for this to work you need to have the .env values pre-sourced.
-    alternatively, there is a pycharm plugin that will allow you to configure
-    a .env file to load in a run configuration: https://github.com/Ashald/EnvFile
-    """
-
-    import sys
-    body = sys.argv[-1]
-
-    handler({'dryrun': True, 'body': body}, None)

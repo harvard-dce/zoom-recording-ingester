@@ -39,9 +39,9 @@ def oc_api_request(method, endpoint, **kwargs):
 
 def handler(event, context):
 
-    if 'message' in event:
-        # testing via __main__
-        wf_id = process_upload(event['message'])
+    if 'upload' in event:
+        # allow manual invocation for a specific recording
+        wf_id = process_upload(event['upload'])
         print("Workflow id {} initiated".format(wf_id))
     else:
         # scheduled cloudwatch event
@@ -291,13 +291,3 @@ class Upload:
             if x.metadata['file_type'].lower() == 'mp4'
                and x.metadata.get('view') == view
         ]
-
-
-if __name__ == '__main__':
-    import sys
-    with open(sys.argv[-1], 'rb') as f:
-        event = {
-            'message': json.load(f)
-        }
-
-    handler(event, None)
