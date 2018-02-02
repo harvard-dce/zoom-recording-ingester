@@ -15,6 +15,9 @@ OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'S1'
 
+sqs = boto3.resource('sqs')
+s3 = boto3.resource('s3')
+
 session = requests.Session()
 session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
 session.headers.update({
@@ -46,7 +49,6 @@ def handler(event, context):
         # allow upload count to be overridden
         num_uploads = event.get('num_uploads', 1)
 
-        sqs = boto3.resource('sqs')
         upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
         for i in range(num_uploads):
@@ -74,7 +76,6 @@ class Upload:
 
     def __init__(self, data):
         self.data = data
-        self.s3 = boto3.resource('s3')
 
     @property
     def creator(self):
@@ -156,7 +157,7 @@ class Upload:
     @property
     def s3_files(self):
         if not hasattr(self, '_s3_files'):
-            bucket = self.s3.Bucket(ZOOM_VIDEOS_BUCKET)
+            bucket = s3.Bucket(ZOOM_VIDEOS_BUCKET)
             objs = [
                 x.Object() for x in bucket.objects.filter(Prefix=self.s3_prefix)
             ]
@@ -277,7 +278,7 @@ class Upload:
 
 
     def _generate_presigned_url(self, video):
-        url = self.s3.meta.client.generate_presigned_url(
+        url = s3.meta.client.generate_presigned_url(
             'get_object',
             Params={'Bucket': video.bucket_name, 'Key': video.key}
         )

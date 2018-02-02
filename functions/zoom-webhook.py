@@ -14,6 +14,8 @@ ZOOM_API_SECRET = env('ZOOM_API_SECRET')
 MEETING_LOOKUP_RETRIES = 2
 MEETING_LOOKUP_RETRY_DELAY = 5
 
+dynamo = boto3.resource('dynamodb')
+
 
 class BadWebhookData(Exception):
     pass
@@ -238,7 +240,6 @@ def verify_status(recording_data):
 
 def save_to_dynamodb(record):
 
-    dynamo = boto3.resource('dynamodb')
     table = dynamo.Table(DOWNLOAD_URLS_TABLE)
 
     try:
