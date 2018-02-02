@@ -1,12 +1,12 @@
 import site
-from os.path import dirname
+from os.path import dirname, join
 import pytest
 from importlib import import_module
 from datetime import datetime, timedelta
 
-site.addsitedir(dirname(dirname(__file__)))
+site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
-downloader = import_module('functions.zoom-downloader', 'functions')
+downloader = import_module('zoom-downloader')
 
 EVENT_TEMPLATE = {'Records': [
     {'eventName': 'INSERT',
@@ -19,21 +19,21 @@ EVENT_TEMPLATE = {'Records': [
      }]}
 
 
-def test_empty_event():
-    res = downloader.handler({}, None)
+def test_empty_event(handler):
+    res = handler(downloader, {})
     assert res['statusCode'] == 400
     assert res['body'] == "No records in event."
 
 
-def test_multiple_records():
-    res = downloader.handler({'Records': [1, 2]}, None)
+def test_multiple_records(handler):
+    res = handler(downloader, {'Records': [1, 2]})
     assert res['statusCode'] == 400
     assert res['body'] == "DynamoDB stream should be set to BatchSize: 1"
 
 
-def test_ignored_event_types():
+def test_ignored_event_types(handler):
     for event_type in ['MODIFY', 'REMOVE']:
-        res = downloader.handler({'Records': [{'eventName': event_type}]}, None)
+        res = handler(downloader, {'Records': [{'eventName': event_type}]})
         assert res['statusCode'] == 204
 
 

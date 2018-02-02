@@ -110,6 +110,17 @@ def delete(ctx):
 
 
 @task
+def status(ctx):
+    """
+    Show table of cloudformation stack details
+    """
+    cmd = ("aws {} cloudformation describe-stacks "
+           "--stack-name {} --output table"
+           .format(profile_arg(), getenv('STACK_NAME')))
+    ctx.run(cmd)
+
+
+@task
 def debug_on(ctx):
     """
     Enable debug logging in all lambda functions
@@ -160,6 +171,7 @@ stack_ns = Collection('stack')
 stack_ns.add_task(create)
 stack_ns.add_task(update)
 stack_ns.add_task(delete)
+stack_ns.add_task(status)
 ns.add_collection(stack_ns)
 
 
@@ -242,13 +254,17 @@ def __package_function(ctx, func):
     req_file = join(dirname(__file__), 'functions/{}.txt'.format(func))
     build_path = join(dirname(__file__), 'dist/{}'.format(func))
     zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
-    function_path = join(dirname(__file__), 'functions/{}.py'.format(func))
-    function_dist_path = join(build_path, '{}.py'.format(func))
     ctx.run("pip install -U -r {} -t {}".format(req_file, build_path))
-    try:
-        symlink(function_path, function_dist_path)
-    except FileExistsError:
-        pass
+
+    for module in [func, 'common']:
+        module_path = join(dirname(__file__), 'functions/{}.py'.format(module))
+        module_dist_path = join(build_path, '{}.py'.format(module))
+        try:
+            print("symlinking {} to {}".format(module_path, module_dist_path))
+            symlink(module_path, module_dist_path)
+        except FileExistsError:
+            pass
+
     with ctx.cd(build_path):
         ctx.run("zip -r {} .".format(zip_path))
 

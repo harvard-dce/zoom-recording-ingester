@@ -8,6 +8,10 @@ from urllib.parse import parse_qsl
 from os import getenv as env
 from botocore.exceptions import ClientError
 
+import logging
+from common import setup_logging
+logger = logging.getLogger()
+
 DOWNLOAD_URLS_TABLE = env('DOWNLOAD_URLS_TABLE')
 ZOOM_API_KEY = env('ZOOM_API_KEY')
 ZOOM_API_SECRET = env('ZOOM_API_SECRET')
@@ -38,7 +42,7 @@ class ApiResponseParsingFailure(Exception):
 
 
 def resp_204(msg):
-    print("http 204 response: {}".format(msg))
+    logger.info("http 204 response: {}".format(msg))
     return {
         'statusCode': 204,
         'headers': {},
@@ -47,7 +51,7 @@ def resp_204(msg):
 
 
 def resp_400(msg):
-    print("http 400 response: {}".format(msg))
+    logger.error("http 400 response: {}".format(msg))
     return {
         'statusCode': 400,
         'headers': {},
@@ -62,14 +66,15 @@ def handler(event, context):
     the actual download url so we have to fetch that in a Zoom api call.
     """
 
-    print("EVENT:", event)
+    setup_logging(context)
+    logger.info(event)
 
     if 'body' not in event:
         return resp_400("bad data: no body in event")
 
     try:
         payload = parse_payload(event['body'])
-        print('PAYLOAD: ' + str(payload))
+        logger.info('PAYLOAD: ' + str(payload))
     except BadWebhookData as e:
         return resp_400("bad webhook payload data: {}".format(str(e)))
 
@@ -81,7 +86,7 @@ def handler(event, context):
     lookup_retries = MEETING_LOOKUP_RETRIES
     while True:
         try:
-            print("looking up meeting {}".format(payload['uuid']))
+            logger.info("looking up meeting {}".format(payload['uuid']))
             recording_data = get_recording_data(payload['uuid'])
             break
         except NoRecordingFound as e:
@@ -89,7 +94,7 @@ def handler(event, context):
         except MeetingLookupFailure as e:
             if lookup_retries > 0:
                 lookup_retries -= 1
-                print("retrying. {} retries left".format(lookup_retries))
+                logger.info("retrying. {} retries left".format(lookup_retries))
                 time.sleep(MEETING_LOOKUP_RETRY_DELAY)
             else:
                 return resp_400("Meeting lookup retries exhausted: {}".format(str(e)))
@@ -97,6 +102,7 @@ def handler(event, context):
     try:
         if not verify_status(recording_data):
             return resp_204("No recordings ready to download")
+        logger.info("All recordings ready to download")
     except ApiResponseParsingFailure:
         return resp_400("Failed to parse Zoom API response")
           
@@ -110,13 +116,12 @@ def handler(event, context):
         'meeting_uuid': payload['uuid'],
         'recording_data': json.dumps(recording_data),
         'created': now,
-        'updated': now
+        'updated': now,
+        'webhook_correlation_id': context.aws_request_id
     }
 
-    if 'dryrun' not in event:
-        save_to_dynamodb(db_record)
-    else:
-        print("dryrun: skipping dynamodb put item")
+    save_to_dynamodb(db_record)
+    logger.info("webhook handler complete")
 
     return {
         'statusCode': 200,
@@ -133,7 +138,7 @@ def parse_payload(event_body):
         raise BadWebhookData(str(e))
 
     if 'type' in payload:
-        print("Got old-style payload")
+        logger.info("Got old-style payload")
         payload['status'] = payload['type']
         del payload['type']
         if 'content' in payload:
@@ -150,7 +155,7 @@ def parse_payload(event_body):
     elif 'status' not in payload:
         raise BadWebhookData("payload missing 'status' value")
     else:
-        print("Got new-style payload")
+        logger.info("Got new-style payload")
 
     return payload
 
@@ -170,17 +175,17 @@ def get_recording_data(uuid):
         r = requests.get(meeting_url, headers=headers)
         r.raise_for_status()
         recording_data = r.json()
-        print("Recording lookup response: {}".format(str(recording_data)))
+        logger.debug(recording_data)
 
     except requests.HTTPError as e:
         if e.response.status_code == 404:
             recording_data = e.response.json()
             if 'code' in recording_data and recording_data['code'] == 3301:
-                print("Meeting: {}, response code: '{}', message: '{}'".format(
-                    uuid,
-                    recording_data.get('code', ''),
-                    recording_data.get('message', '')
-                ))
+                logger.error({
+                    'meeting': uuid,
+                    'response code': recording_data.get('code'),
+                    'message': recording_data.get('message')
+                })
 
             raise NoRecordingFound("No recording found for meeting %s" % uuid)
         else:
@@ -196,12 +201,13 @@ def get_host_data(host_id):
     host_data = {}
 
     try:
+        logger.debugg('Looking up host_id "{}"'.format(host_id))
         r = requests.get("https://api.zoom.us/v2/users/%s" % host_id,
                          headers={"Authorization": "Bearer %s" % gen_token().decode()})
         r.raise_for_status()
         response = r.json()
 
-        print("Retrieved host data:", response)
+        logger.debug(response)
 
         host_data['host_name'] = "{} {}".format(response['first_name'], response['last_name'])
         host_data['host_email'] = response['email']
@@ -224,10 +230,10 @@ def verify_status(recording_data):
 
         file_id = file['id']
         status = file['status']
-        print("file '{}' has status {}".format(file_id, status))
+        logger.debug("file '{}' has status {}".format(file_id, status))
 
         if status != 'completed':
-            print("ERROR: Recording status not 'completed'")
+            logger.error("ERROR: Recording status not 'completed'")
             return False
 
         if 'download_url' not in file:
@@ -241,12 +247,13 @@ def verify_status(recording_data):
 def save_to_dynamodb(record):
 
     table = dynamo.Table(DOWNLOAD_URLS_TABLE)
+    logger.debug(record)
 
     try:
         table.put_item(Item=record, ConditionExpression="attribute_not_exists(meeting_uuid)")
     except ClientError as e:
         if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            print("Duplicate! meeting_uuid '{}' already in database".format(record['meeting_uuid']))
+            logger.error("Duplicate! meeting_uuid '{}' already in database".format(record['meeting_uuid']))
             pass
         else:
             raise

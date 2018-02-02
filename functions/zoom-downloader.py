@@ -7,6 +7,10 @@ from bs4 import SoupStrainer
 from hashlib import md5
 from botocore.exceptions import ClientError
 
+import logging
+from common import setup_logging
+logger = logging.getLogger()
+
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
@@ -23,7 +27,7 @@ class FileNameNotFound(Exception):
 
 
 def resp_204(msg):
-    print("http 204 response: {}".format(msg))
+    logger.info("http 204 response: {}".format(msg))
     return {
         'statusCode': 204,
         'headers': {},
@@ -32,7 +36,7 @@ def resp_204(msg):
 
 
 def resp_400(msg):
-    print("http 400 response: {}".format(msg))
+    logger.error("http 400 response: {}".format(msg))
     return {
         'statusCode': 400,
         'headers': {},
@@ -45,7 +49,8 @@ def handler(event, context):
     This function receives an event on each new entry in the download urls
     DyanmoDB table
     """
-    print(str(event))
+    setup_logging(context)
+    logger.info(event)
 
     if 'Records' not in event:
         return resp_400("No records in event.")
@@ -54,12 +59,16 @@ def handler(event, context):
         return resp_400("DynamoDB stream should be set to BatchSize: 1")
 
     event_type = event['Records'][0]['eventName']
+    logger.info("got event type {}".format(event_type))
+
     if event_type != "INSERT":
         return resp_204("No action on " + event_type)
 
     record = json.loads(event['Records'][0]['dynamodb']['NewImage']['recording_data']['S'])
+    logger.debug(record)
 
     chronological_files = sorted(record['recording_files'], key=lambda k: k['recording_start'])
+    logger.info("downloading {} files".format(len(chronological_files)))
 
     metadata = record.copy()
     track_sequence = 1
@@ -72,12 +81,16 @@ def handler(event, context):
         except RecordingSegmentsOverlap:
             return resp_400("Segment start/end times overlap for files:\n{}\n{}".format(prev_file, file))
 
+        logger.debug("file {} is track sequence {}".format(file, track_sequence))
         metadata['track_sequence'] = str(track_sequence)
         prev_file = file
 
         stream_file_to_s3(file, metadata.copy())
 
+    record['downloader_correlation_id'] = context.aws_request_id
     send_sqs_message(record)
+
+    logger.info("downloader handler complete")
 
     return {
         'statusCode': 200,
@@ -102,22 +115,24 @@ def stream_file_to_s3(file, metadata):
             raise
 
     filename = create_filename(file['id'], file['meeting_id'], zoom_name)
+    logger.info("filename: {}".format(filename))
 
     try:
         if key_exists(filename):
-            print("Skip stream to S3. Key {} already in bucket.".format(filename))
+            logger.warning("Skip stream to S3. Key {} already in bucket.".format(filename))
             return
     except Exception as e:
-        print("Received error when searching for s3 bucket key: {}".format(e))
+        logger.error("Received error when searching for s3 bucket key: {}".format(e))
         raise
 
+    logger.info("Beginning upload of {}".format(filename))
     part_info = {'Parts': []}
     mpu = s3.create_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                      Metadata={key: str(val) for key, val in metadata.items()})
 
     try:
-        for i, chunk in enumerate(r.iter_content(chunk_size=MIN_CHUNK_SIZE)):
-            partnumber = i + 1
+        for partnumber, chunk in enumerate(r.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
+            logger.info("uploading part {}".format(partnumber))
             part = s3.upload_part(Body=chunk, Bucket=ZOOM_VIDEOS_BUCKET,
                                   Key=filename, PartNumber=partnumber, UploadId=mpu['UploadId'])
 
@@ -129,15 +144,15 @@ def stream_file_to_s3(file, metadata):
         s3.complete_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                      UploadId=mpu['UploadId'],
                                      MultipartUpload=part_info)
-        print("Completed multipart upload {}.".format(filename))
+        print("Completed multipart upload of {}.".format(filename))
     except Exception as e:
-        print(e)
+        logger.exception("Something went wrong with upload of {}".format(filename))
         s3.abort_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                   UploadId=mpu['UploadId'])
 
 
 def send_sqs_message(record):
-    print("SQS sending start...")
+    logger.debug("SQS sending start...")
     message = {
         "uuid": record['uuid'],
         "meeting_number": record['meeting_number'],
@@ -146,7 +161,7 @@ def send_sqs_message(record):
         "start_time": record['start_time'],
         "recording_count": record['recording_count']
     }
-    print("Sending SQS message: {}".format(message))
+    logger.debug(message)
 
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
@@ -155,7 +170,7 @@ def send_sqs_message(record):
         MessageGroupId="uploads",
         MessageDeduplicationId=message['uuid']
     )
-    print("Message sent: {}".format(message_sent))
+    logger.debug({"Message sent": message_sent})
 
 
 def next_track_sequence(prev_file, file):
@@ -163,30 +178,41 @@ def next_track_sequence(prev_file, file):
     if prev_file is None:
         return False
 
+    logger.debug({'start': file['recording_start'], 'end': file['recording_end']})
+
     if file['recording_start'] == prev_file['recording_start']:
+        logger.debug("start matches")
         if file['recording_end'] == prev_file['recording_end']:
+            logger.debug("end matches")
             return False
 
     if file['recording_start'] >= prev_file['recording_end']:
+        logger.debug("start >= end")
         return True
 
     raise RecordingSegmentsOverlap
 
 
 def retrieve_url_from_play_page(play_url):
+
+    logger.info("requesting {}".format(play_url))
+
     r = requests.get(play_url)
     r.raise_for_status()
 
     only_source_tags = SoupStrainer("source", type="video/mp4")
 
     source = BeautifulSoup(r.content, "html.parser", parse_only=only_source_tags)
+    logger.debug(str(source))
 
     source_object = source.find("source")
 
     if source_object is None:
+        logger.warning("No source element found")
         return None
 
     link = source_object['src']
+    logger.info("God download url {}".format(link))
 
     return link
 
@@ -195,6 +221,8 @@ def get_connection_using_play_url(file):
     file_url = retrieve_url_from_play_page(file['play_url'])
     zoom_name = file_url.split("?")[0].split("/")[-1]
 
+    logger.info("requesting {}".format(file_url))
+
     r = requests.get(file_url, stream=True)
     r.raise_for_status()
 
@@ -202,11 +230,15 @@ def get_connection_using_play_url(file):
 
 
 def get_connection_using_download_url(file):
+
+    logger.info("requesting {}".format(file['download_url']))
+
     r = requests.get(file['download_url'], stream=True)
     r.raise_for_status()
 
     try:
         zoom_name = r.headers['Content-Disposition'].split("=")[-1]
+        logger.info("got filename {}".format(zoom_name))
     except KeyError as e:
         raise FileNameNotFound
 
@@ -223,9 +255,10 @@ def create_filename(uuid, meeting_id, zoom_filename):
 def key_exists(filename):
     try:
         s3.head_object(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename)
+        logger.debug("key {} already in bucket {}".format(filename, ZOOM_VIDEOS_BUCKET))
         return True
     except ClientError as e:
         if e.response['ResponseMetadata']['HTTPStatusCode'] == 404:
-            print("Key {} not yet in bucket.".format(filename))
+            print("Key {} not yet in bucket {}".format(filename, ZOOM_VIDEOS_BUCKET))
             return False
         raise

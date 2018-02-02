@@ -1,3 +1,2 @@
-requests
-boto3
+-r common-requirements.txt
 beautifulsoup4
