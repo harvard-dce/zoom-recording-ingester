@@ -1,24 +1,19 @@
 import site
-from os.path import dirname
-site.addsitedir(dirname(dirname(__file__)))
+from os.path import dirname, join
+site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 import pytest
 import jwt
-import json
 import time
 import requests
 import requests_mock
-from unittest.mock import Mock, patch
 from importlib import import_module
-from botocore.exceptions import ClientError
-from moto import mock_dynamodb
-import urllib
 
-webhook = import_module('functions.zoom-webhook', 'functions')
+webhook = import_module('zoom-webhook')
 
 
-def test_missing_body():
-    res = webhook.handler({}, None)
+def test_missing_body(handler):
+    res = handler(webhook, {})
     assert res['statusCode'] == 400
     assert res['body'] == 'bad data: no body in event'
 
@@ -127,13 +122,10 @@ def test_verify_status():
             assert webhook.verify_status(data) == expected
 
 
-def test_handler_happy_trail(mocker):
+def test_handler_happy_trail(handler, mocker):
 
     event = {
-        "id": 1,
-        "uuid": "abcd-1234",
-        "host_id": "foobarbaz",
-        "status": "RECORDING_MEETING_COMPLETED"
+        'body': 'id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED'
     }
 
     recording_data = {
@@ -165,18 +157,16 @@ def test_handler_happy_trail(mocker):
     )
     mocker.patch.object(webhook, 'save_to_dynamodb')
 
-    resp = pass_webhook_to_handler(event)
+    resp = handler(webhook, event)
 
     mock_get_recording_data.assert_called_once_with("abcd-1234")
     assert resp['statusCode'] == 200
 
 
-def test_api_lookup_too_many_retries(mocker):
+def test_api_lookup_too_many_retries(handler, mocker):
+
     event = {
-        "id": 1,
-        "uuid": "abcd-1234",
-        "host_id": "foobarbaz",
-        "status": "RECORDING_MEETING_COMPLETED"
+        'body': 'id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED'
     }
 
     mock_get_recording_data = mocker.patch.object(webhook, 'get_recording_data')
@@ -188,15 +178,18 @@ def test_api_lookup_too_many_retries(mocker):
             for i in range(webhook.MEETING_LOOKUP_RETRIES + 1)
     ]
 
-    resp = pass_webhook_to_handler(event)
+    resp = handler(webhook, event)
 
     assert mock_get_recording_data.call_count == 3
     assert resp['statusCode'] == 400
     assert 'retries exhausted' in resp['body']
 
 
-def test_api_lookup_retries(mocker):
-    event = {'id': 1, 'uuid': 'abcd-1234', 'host_id': 'foobarbaz', 'status': "RECORDING_MEETING_COMPLETED"}
+def test_api_lookup_retries(handler, mocker):
+
+    event = {
+        'body': 'id=1&uuid=abcd-1234&host_id=foobarbaz&status=RECORDING_MEETING_COMPLETED'
+    }
 
     mock_get_recording_data = mocker.patch.object(webhook, 'get_recording_data')
     mocker.patch.object(webhook, 'MEETING_LOOKUP_RETRY_DELAY', new=0)
@@ -207,13 +200,11 @@ def test_api_lookup_retries(mocker):
         {'recording_files': []}
     ]
 
-    resp = pass_webhook_to_handler(event)
+    resp = handler(webhook, event)
 
     assert mock_get_recording_data.call_count == 3
     assert resp['statusCode'] == 204
     assert resp['body'] == ''
 
 
-def pass_webhook_to_handler(event):
-    return webhook.handler({'body': urllib.parse.urlencode(event)}, None)
 

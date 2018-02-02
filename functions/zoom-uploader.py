@@ -8,6 +8,10 @@ from hashlib import md5
 from os import getenv as env
 import xml.etree.ElementTree as ET
 
+import logging
+from common import setup_logging
+logger = logging.getLogger()
+
 UPLOAD_QUEUE_NAME = env("UPLOAD_QUEUE_NAME")
 OPENCAST_BASE_URL = env("OPENCAST_BASE_URL")
 OPENCAST_API_USER = env("OPENCAST_API_USER")
@@ -29,6 +33,7 @@ session.headers.update({
 
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
+    logger.info({'url': url, 'kwargs': kwargs})
     try:
         resp = session.request(method, url, **kwargs)
     except requests.RequestException as e:
@@ -39,10 +44,13 @@ def oc_api_request(method, endpoint, **kwargs):
 
 def handler(event, context):
 
+    setup_logging(context)
+    logger.info(event)
+
     if 'upload' in event:
         # allow manual invocation for a specific recording
         wf_id = process_upload(event['upload'])
-        print("Workflow id {} initiated".format(wf_id))
+        logger.info("Workflow id {} initiated".format(wf_id))
     else:
         # scheduled cloudwatch event
 
@@ -54,12 +62,14 @@ def handler(event, context):
         for i in range(num_uploads):
             try:
                 message = upload_queue.receive_messages(MaxNumberOfMessages=1)[0]
+                logger.debug({'queue_message': message})
             except IndexError:
                 print("No uploads ready for processing")
                 return
             try:
                 upload_data = json.loads(message.body)
                 wf_id = process_upload(upload_data)
+                logger.info("Workflow id {} initiated".format(wf_id))
                 if wf_id:
                     message.delete()
             except Exception as e:
@@ -126,7 +136,7 @@ class Upload:
                 resp.raise_for_status()
                 self._oc_series_id = resp.text
             except requests.RequestException as e:
-                print("Opencast series id lookup failed: {}".format(str(e)))
+                logger.exception("Opencast series id lookup failed")
                 self._oc_series_id = None
 
         return self._oc_series_id
@@ -158,12 +168,14 @@ class Upload:
     def s3_files(self):
         if not hasattr(self, '_s3_files'):
             bucket = s3.Bucket(ZOOM_VIDEOS_BUCKET)
+            logger.debug("Looking for files in {}".format(ZOOM_VIDEOS_BUCKET))
             objs = [
                 x.Object() for x in bucket.objects.filter(Prefix=self.s3_prefix)
             ]
             self._s3_files = [
                 x for x in objs if 'directory' not in x.content_type
             ]
+            logger.debug({'s3_files': self._s3_files})
         return self._s3_files
 
 
@@ -207,7 +219,19 @@ class Upload:
                 self.description
             ).strip()
 
+        logger.debug({'episode_xml': self._episode_xml})
         return self._episode_xml
+
+
+    @property
+    def workflow_id(self):
+        if not hasattr(self, 'workflow_xml'):
+            logger.warning("No workflow xml yet!")
+            return None
+        if not hasattr(self, '_workflow_id'):
+            root = ET.fromstring(self.workflow_xml)
+            self._workflow_id = root.attrib['id']
+        return self._workflow_id
 
 
     def upload(self):
@@ -219,18 +243,23 @@ class Upload:
 
 
     def create_mediapackage(self):
+        logger.info("Creating mediapackage")
         create_mp_resp = oc_api_request('GET', '/ingest/createMediaPackage')
         self.mediapackage_xml = create_mp_resp.text
+        logger.debug({'mediapackage_xml': self.mediapackage_xml})
 
 
     def add_tracks(self):
 
+        logger.info("Adding tracks")
         speaker_vids = sorted(
             self.speaker_videos,
             key=lambda vid: vid.metadata['track_sequence']
         )
         for video in speaker_vids:
             url = self._generate_presigned_url(video)
+            logger.info("Adding track {}".format(url))
+            logger.debug({"metadata": video.metadata})
             add_track_params = {
                 'mediaPackage': self.mediapackage_xml,
                 'flavor': 'multipart/partsource',
@@ -243,6 +272,7 @@ class Upload:
 
     def add_episode(self):
 
+        logger.info("Adding episode")
         add_episode_params = {
             'mediaPackage': self.mediapackage_xml,
             'flavor': 'dublincore/episode',
@@ -256,6 +286,7 @@ class Upload:
 
 
     def ingest(self):
+        logger.info("Ingesting")
         ingest_params = {
             'mediaPackage': self.mediapackage_xml,
             'workflowDefinitionId': self.workflow_definition_id
@@ -264,17 +295,6 @@ class Upload:
         ingest_resp = oc_api_request('POST', '/ingest/ingest',
                                      data=ingest_params)
         self.workflow_xml = ingest_resp.text
-
-
-    @property
-    def workflow_id(self):
-        if not hasattr(self, 'workflow_xml'):
-            # log warning
-            return None
-        if not hasattr(self, '_workflow_id'):
-            root = ET.fromstring(self.workflow_xml)
-            self._workflow_id = root.attrib['id']
-        return self._workflow_id
 
 
     def _generate_presigned_url(self, video):
