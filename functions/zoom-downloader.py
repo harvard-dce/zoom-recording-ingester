@@ -26,22 +26,8 @@ class FileNameNotFound(Exception):
     pass
 
 
-def resp_204(msg):
-    logger.info("http 204 response: {}".format(msg))
-    return {
-        'statusCode': 204,
-        'headers': {},
-        'body': ""
-    }
-
-
-def resp_400(msg):
-    logger.error("http 400 response: {}".format(msg))
-    return {
-        'statusCode': 400,
-        'headers': {},
-        'body': msg
-    }
+class BadDynamoStreamEvent(Exception):
+    pass
 
 
 def handler(event, context):
@@ -53,16 +39,18 @@ def handler(event, context):
     logger.info(event)
 
     if 'Records' not in event:
-        return resp_400("No records in event.")
+        logger.error("No records in event. {}".format(event))
+        raise BadDynamoStreamEvent
 
     if len(event['Records']) > 1:
-        return resp_400("DynamoDB stream should be set to BatchSize: 1")
+        logger.error("DynamoDB stream should be set to BatchSize: 1")
+        raise BadDynamoStreamEvent
 
     event_type = event['Records'][0]['eventName']
     logger.info("got event type {}".format(event_type))
 
     if event_type != "INSERT":
-        return resp_204("No action on " + event_type)
+        return
 
     record = json.loads(event['Records'][0]['dynamodb']['NewImage']['recording_data']['S'])
     logger.debug(record)
@@ -75,11 +63,8 @@ def handler(event, context):
     prev_file = None
 
     for file in chronological_files:
-        try:
-            if next_track_sequence(prev_file, file):
+        if next_track_sequence(prev_file, file):
                 track_sequence += 1
-        except RecordingSegmentsOverlap:
-            return resp_400("Segment start/end times overlap for files:\n{}\n{}".format(prev_file, file))
 
         logger.debug("file {} is track sequence {}".format(file, track_sequence))
         metadata['track_sequence'] = str(track_sequence)
@@ -92,27 +77,18 @@ def handler(event, context):
 
     logger.info("downloader handler complete")
 
-    return {
-        'statusCode': 200,
-        'header': {},
-        'body': ""
-    }
-
 
 def stream_file_to_s3(file, metadata):
 
     if file['file_type'].lower() in ["mp4", "m4a", "chat"]:
-        r, zoom_name = get_connection_using_play_url(file)
+        stream, zoom_name = get_connection_using_play_url(file)
 
         if 'gallery' in zoom_name.lower():
             metadata['view'] = "gallery"
         elif file['file_type'].lower() == "mp4":
             metadata['view'] = "speaker"
     else:
-        try:
-            r, zoom_name = get_connection_using_download_url(file)
-        except FileNameNotFound:
-            raise
+        stream, zoom_name = get_connection_using_download_url(file)
 
     filename = create_filename(file['id'], file['meeting_id'], zoom_name)
     logger.info("filename: {}".format(filename))
@@ -131,13 +107,13 @@ def stream_file_to_s3(file, metadata):
                                      Metadata={key: str(val) for key, val in metadata.items()})
 
     try:
-        for partnumber, chunk in enumerate(r.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
-            logger.info("uploading part {}".format(partnumber))
+        for part_number, chunk in enumerate(stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
+            logger.info("uploading part {}".format(part_number))
             part = s3.upload_part(Body=chunk, Bucket=ZOOM_VIDEOS_BUCKET,
-                                  Key=filename, PartNumber=partnumber, UploadId=mpu['UploadId'])
+                                  Key=filename, PartNumber=part_number, UploadId=mpu['UploadId'])
 
             part_info['Parts'].append({
-                'PartNumber': partnumber,
+                'PartNumber': part_number,
                 'ETag': part['ETag']
             })
 
@@ -149,6 +125,8 @@ def stream_file_to_s3(file, metadata):
         logger.exception("Something went wrong with upload of {}".format(filename))
         s3.abort_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                   UploadId=mpu['UploadId'])
+
+    stream.close()
 
 
 def send_sqs_message(record):
