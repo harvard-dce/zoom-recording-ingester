@@ -26,6 +26,11 @@ the target opsworks cluster
 1. In the "Security Groups" dropdown choose the "Common" security group
 1. Click "Save" to update the function
 
+## Zoom Webhook Setup
+
+Enter API endpoint at https://developer.zoom.us/me/.
+Enable recording completed push notifications at https://zoom.us/account/setting?tab=recording.
+
 ## Stack-related commands
 
 This project uses the `invoke` python library to provide a simple task cli. Run `invoke -l`
