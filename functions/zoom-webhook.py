@@ -146,7 +146,6 @@ def parse_payload(event_body):
                 content = json.loads(payload['content'])
                 payload['uuid'] = content['uuid']
                 payload['host_id'] = content['host_id']
-                payload['id'] = content['id']
                 del payload['content']
             except Exception as e:
                 raise BadWebhookData("Failed to parse payload 'content' value")
