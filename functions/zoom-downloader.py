@@ -15,7 +15,7 @@ ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
 s3 = boto3.client('s3')
-sqs = boto3.client('sqs')
+sqs = boto3.resource('sqs')
 
 
 class RecordingSegmentsOverlap(Exception):
@@ -58,9 +58,12 @@ def handler(event, context):
     chronological_files = sorted(record['recording_files'], key=lambda k: k['recording_start'])
     logger.info("downloading {} files".format(len(chronological_files)))
 
-    metadata = record.copy()
     track_sequence = 1
     prev_file = None
+    metadata = {'uuid': record['uuid'],
+                'track_sequence': None,
+                'view': None,
+                'file_type': None}
 
     for file in chronological_files:
         if next_track_sequence(prev_file, file):
@@ -70,7 +73,7 @@ def handler(event, context):
         metadata['track_sequence'] = str(track_sequence)
         prev_file = file
 
-        stream_file_to_s3(file, metadata.copy())
+        stream_file_to_s3(file, metadata)
 
     record['downloader_correlation_id'] = context.aws_request_id
     send_sqs_message(record)
@@ -78,7 +81,9 @@ def handler(event, context):
     logger.info("downloader handler complete")
 
 
-def stream_file_to_s3(file, metadata):
+def stream_file_to_s3(file, uuid):
+
+    metadata = {'uuid': uuid}
 
     if file['file_type'].lower() in ["mp4", "m4a", "chat"]:
         stream, zoom_name = get_connection_using_play_url(file)
@@ -90,6 +95,7 @@ def stream_file_to_s3(file, metadata):
     else:
         stream, zoom_name = get_connection_using_download_url(file)
 
+    metadata['file_type'] = zoom_name.split('.')[-1]
     filename = create_filename(file['id'], file['meeting_id'], zoom_name)
     logger.info("filename: {}".format(filename))
 
@@ -103,8 +109,7 @@ def stream_file_to_s3(file, metadata):
 
     logger.info("Beginning upload of {}".format(filename))
     part_info = {'Parts': []}
-    mpu = s3.create_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
-                                     Metadata={key: str(val) for key, val in metadata.items()})
+    mpu = s3.create_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename, Metadata=metadata)
 
     try:
         for part_number, chunk in enumerate(stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
@@ -141,13 +146,18 @@ def send_sqs_message(record):
     }
     logger.debug(message)
 
-    upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
+    try:
+        upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
-    message_sent = upload_queue.send_message(
-        MessageBody=json.dumps(message),
-        MessageGroupId="uploads",
-        MessageDeduplicationId=message['uuid']
-    )
+        message_sent = upload_queue.send_message(
+            MessageBody=json.dumps(message),
+            MessageGroupId="uploads",
+            MessageDeduplicationId=message['uuid']
+        )
+    except Exception as e:
+        logger.error("Error when sending SQS message for meeting uuid {} :{}".format(message['uuid'], e))
+        raise
+
     logger.debug({"Message sent": message_sent})
 
 
