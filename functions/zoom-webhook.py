@@ -200,7 +200,7 @@ def get_host_data(host_id):
     host_data = {}
 
     try:
-        logger.debugg('Looking up host_id "{}"'.format(host_id))
+        logger.debug('Looking up host_id "{}"'.format(host_id))
         r = requests.get("https://api.zoom.us/v2/users/%s" % host_id,
                          headers={"Authorization": "Bearer %s" % gen_token().decode()})
         r.raise_for_status()
