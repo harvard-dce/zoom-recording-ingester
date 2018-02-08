@@ -64,10 +64,11 @@ def handler(event, context):
                 message = upload_queue.receive_messages(MaxNumberOfMessages=1)[0]
                 logger.debug({'queue_message': message})
             except IndexError:
-                print("No uploads ready for processing")
+                logger.warning("No uploads ready for processing")
                 return
             try:
                 upload_data = json.loads(message.body)
+                logger.info(upload_data)
                 wf_id = process_upload(upload_data)
                 logger.info("Workflow id {} initiated".format(wf_id))
                 if wf_id:
@@ -168,7 +169,8 @@ class Upload:
     def s3_files(self):
         if not hasattr(self, '_s3_files'):
             bucket = s3.Bucket(ZOOM_VIDEOS_BUCKET)
-            logger.debug("Looking for files in {}".format(ZOOM_VIDEOS_BUCKET))
+            logger.info("Looking for files in {} with prefix {}"
+                        .format(ZOOM_VIDEOS_BUCKET, self.s3_prefix))
             objs = [
                 x.Object() for x in bucket.objects.filter(Prefix=self.s3_prefix)
             ]
