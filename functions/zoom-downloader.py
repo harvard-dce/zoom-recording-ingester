@@ -60,20 +60,15 @@ def handler(event, context):
 
     track_sequence = 1
     prev_file = None
-    metadata = {'uuid': record['uuid'],
-                'track_sequence': None,
-                'view': None,
-                'file_type': None}
 
     for file in chronological_files:
         if next_track_sequence(prev_file, file):
                 track_sequence += 1
 
         logger.debug("file {} is track sequence {}".format(file, track_sequence))
-        metadata['track_sequence'] = str(track_sequence)
         prev_file = file
 
-        stream_file_to_s3(file, metadata)
+        stream_file_to_s3(file, record['uuid'], track_sequence)
 
     record['downloader_correlation_id'] = context.aws_request_id
     send_sqs_message(record)
@@ -81,9 +76,10 @@ def handler(event, context):
     logger.info("downloader handler complete")
 
 
-def stream_file_to_s3(file, uuid):
+def stream_file_to_s3(file, uuid, track_sequence):
 
-    metadata = {'uuid': uuid}
+    metadata = {'uuid': uuid,
+                'track_sequence': str(track_sequence)}
 
     if file['file_type'].lower() in ["mp4", "m4a", "chat"]:
         stream, zoom_name = get_connection_using_play_url(file)
@@ -127,7 +123,7 @@ def stream_file_to_s3(file, uuid):
                                      MultipartUpload=part_info)
         print("Completed multipart upload of {}.".format(filename))
     except Exception as e:
-        logger.exception("Something went wrong with upload of {}".format(filename))
+        logger.exception("Something went wrong with upload of {}:{}".format(filename, e))
         s3.abort_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                   UploadId=mpu['UploadId'])
 
