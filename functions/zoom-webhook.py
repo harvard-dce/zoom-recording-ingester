@@ -12,13 +12,13 @@ import logging
 from common import setup_logging
 logger = logging.getLogger()
 
-DOWNLOAD_URLS_TABLE = env('DOWNLOAD_URLS_TABLE')
+DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 ZOOM_API_KEY = env('ZOOM_API_KEY')
 ZOOM_API_SECRET = env('ZOOM_API_SECRET')
 MEETING_LOOKUP_RETRIES = 2
 MEETING_LOOKUP_RETRY_DELAY = 5
 
-dynamo = boto3.resource('dynamodb')
+sqs = boto3.resource('sqs')
 
 
 class BadWebhookData(Exception):
@@ -116,15 +116,15 @@ def handler(event, context):
         return resp_400(repr(e))
 
     now = datetime.utcnow().isoformat()
-    db_record = {
+    sqs_record = {
         'meeting_uuid': payload['uuid'],
-        'recording_data': json.dumps(recording_data),
+        'recording_data': recording_data,
         'created': now,
         'updated': now,
         'webhook_correlation_id': context.aws_request_id
     }
 
-    save_to_dynamodb(db_record)
+    send_sqs_message(sqs_record)
     logger.info("webhook handler complete")
 
     return {
@@ -250,18 +250,23 @@ def verify_status(recording_data):
     return True
 
 
-def save_to_dynamodb(record):
+def send_sqs_message(record):
+    logger.debug("SQS sending start...")
 
-    table = dynamo.Table(DOWNLOAD_URLS_TABLE)
-    logger.debug(record)
+    uuid = record['meeting_uuid']
 
     try:
-        table.put_item(Item=record, ConditionExpression="attribute_not_exists(meeting_uuid)")
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ConditionalCheckFailedException":
-            logger.error("Duplicate! meeting_uuid '{}' already in database".format(record['meeting_uuid']))
-            pass
-        else:
-            raise
+        download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
+
+        message_sent = download_queue.send_message(
+            MessageBody=json.dumps(record),
+            MessageGroupId="downloads",
+            MessageDeduplicationId=uuid
+        )
+    except Exception as e:
+        logger.error("Error when sending SQS message for meeting uuid {} :{}".format(uuid, e))
+        raise
+
+    logger.debug({"Message sent": message_sent})
 
 

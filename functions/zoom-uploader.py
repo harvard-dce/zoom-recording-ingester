@@ -48,36 +48,30 @@ def handler(event, context):
     setup_logging(context)
     logger.info(event)
 
-    if 'upload' in event:
-        # allow manual invocation for a specific recording
-        wf_id = process_upload(event['upload'])
-        logger.info("Workflow id {} initiated".format(wf_id))
-    else:
-        # scheduled cloudwatch event
+    # allow upload count to be overridden
+    num_uploads = event['num_uploads']
 
-        # allow upload count to be overridden
-        num_uploads = event.get('num_uploads', 1)
+    upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
+    logger.debug("got queue {}".format(str(upload_queue)))
 
-        upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
-        logger.debug("got queue {}".format(str(upload_queue)))
-
-        for i in range(num_uploads):
-            try:
-                logger.debug("fetching a message...")
-                message = upload_queue.receive_messages(MaxNumberOfMessages=1)[0]
-                logger.debug({'queue_message': message})
-            except IndexError:
-                logger.warning("No uploads ready for processing")
-                return
-            try:
-                upload_data = json.loads(message.body)
-                logger.info(upload_data)
-                wf_id = process_upload(upload_data)
-                logger.info("Workflow id {} initiated".format(wf_id))
-                if wf_id:
-                    message.delete()
-            except Exception as e:
-                raise
+    for i in range(num_uploads):
+        try:
+            logger.debug("fetching a message...")
+            message = upload_queue.receive_messages(MaxNumberOfMessages=1)[0]
+            logger.debug({'queue_message': message})
+        except IndexError:
+            logger.warning("No uploads ready for processing")
+            return
+        try:
+            upload_data = json.loads(message.body)
+            logger.info(upload_data)
+            wf_id = process_upload(upload_data)
+            logger.info("Workflow id {} initiated".format(wf_id))
+            if wf_id:
+                message.delete()
+        except Exception as e:
+            logger.exception(e)
+            raise
 
 
 def process_upload(upload_data):
@@ -95,16 +89,13 @@ class Upload:
     def creator(self):
         return self.data['host_name']
 
-
     @property
     def created(self):
         return self.data['start_time']
 
-
     @property
     def title(self):
         return self.data['topic']
-
 
     @property
     def description(self):
@@ -112,21 +103,17 @@ class Upload:
             self.creator, self.title, self.created
         )
 
-
     @property
     def meeting_uuid(self):
         return self.data['uuid']
-
 
     @property
     def s3_prefix(self):
         return md5(self.meeting_uuid.encode()).hexdigest()
 
-
     @property
     def zoom_series_id(self):
         return self.data['meeting_number']
-
 
     @property
     def opencast_series_id(self):
@@ -149,28 +136,23 @@ class Upload:
 
         return self._oc_series_id
 
-
     @property
     def type_num(self):
         return ZOOM_RECORDING_TYPE_NUM
-
 
     @property
     def publisher(self):
         # TODO: this should be configurable
         return "zoom-ingester@dce.harvard.edu"
 
-
     @property
     def contributor(self):
         # TODO: configurable
         return "Zoom Ingester"
 
-
     @property
     def workflow_definition_id(self):
         return "DCE-zoom-test-wf"
-
 
     @property
     def s3_files(self):
@@ -187,16 +169,13 @@ class Upload:
             logger.debug({'s3_files': self._s3_files})
         return self._s3_files
 
-
     @property
     def speaker_videos(self):
         return self._get_video_files('speaker')
 
-
     @property
     def gallery_videos(self):
         return self._get_video_files('gallery')
-
 
     @property
     def episode_xml(self):
@@ -231,7 +210,6 @@ class Upload:
         logger.debug({'episode_xml': self._episode_xml})
         return self._episode_xml
 
-
     @property
     def workflow_id(self):
         if not hasattr(self, 'workflow_xml'):
@@ -241,7 +219,6 @@ class Upload:
             root = ET.fromstring(self.workflow_xml)
             self._workflow_id = root.attrib['id']
         return self._workflow_id
-
 
     def upload(self):
         if not self.verify_series_mapping():
@@ -253,17 +230,14 @@ class Upload:
         self.ingest()
         return self.workflow_id
 
-
     def verify_series_mapping(self):
         return self.opencast_series_id is not None
-
 
     def create_mediapackage(self):
         logger.info("Creating mediapackage")
         create_mp_resp = oc_api_request('GET', '/ingest/createMediaPackage')
         self.mediapackage_xml = create_mp_resp.text
         logger.debug({'mediapackage_xml': self.mediapackage_xml})
-
 
     def add_tracks(self):
 
@@ -285,7 +259,6 @@ class Upload:
                                             data=add_track_params)
             self.mediapackage_xml = add_track_resp.text
 
-
     def add_episode(self):
 
         logger.info("Adding episode")
@@ -299,8 +272,6 @@ class Upload:
                                           data=add_episode_params)
         self.mediapackage_xml = add_episode_resp.text
 
-
-
     def ingest(self):
         logger.info("Ingesting")
         ingest_params = {
@@ -312,14 +283,12 @@ class Upload:
                                      data=ingest_params)
         self.workflow_xml = ingest_resp.text
 
-
     def _generate_presigned_url(self, video):
         url = s3.meta.client.generate_presigned_url(
             'get_object',
             Params={'Bucket': video.bucket_name, 'Key': video.key}
         )
         return url
-
 
     def _get_video_files(self, view):
         return [
