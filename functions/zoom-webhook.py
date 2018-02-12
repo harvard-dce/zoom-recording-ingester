@@ -90,14 +90,18 @@ def handler(event, context):
             recording_data = get_recording_data(payload['uuid'])
             break
         except NoRecordingFound as e:
-            return resp_204(str(e))
+            logger.error(e)
         except MeetingLookupFailure as e:
-            if lookup_retries > 0:
-                lookup_retries -= 1
-                logger.info("retrying. {} retries left".format(lookup_retries))
-                time.sleep(MEETING_LOOKUP_RETRY_DELAY)
-            else:
-                return resp_400("Meeting lookup retries exhausted: {}".format(str(e)))
+            logger.error(e)
+        except Exception:
+            raise
+
+        if lookup_retries > 0:
+            lookup_retries -= 1
+            logger.info("retrying. {} retries left".format(lookup_retries))
+            time.sleep(MEETING_LOOKUP_RETRY_DELAY)
+        else:
+            return resp_400("Meeting lookup retries exhausted: {}")
 
     try:
         if not verify_status(recording_data):
@@ -108,7 +112,7 @@ def handler(event, context):
           
     try:
         recording_data.update(get_host_data(payload['host_id']))
-    except MeetingLookupFailure as e:
+    except Exception as e:
         return resp_400(repr(e))
 
     now = datetime.utcnow().isoformat()
@@ -146,6 +150,9 @@ def parse_payload(event_body):
                 content = json.loads(payload['content'])
                 payload['uuid'] = content['uuid']
                 payload['host_id'] = content['host_id']
+                if 'id' in payload:
+                    payload['id'] = content['id']
+                    logger.info("Missing meeting series id ('id')")
                 del payload['content']
             except Exception as e:
                 raise BadWebhookData("Failed to parse payload 'content' value")

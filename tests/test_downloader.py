@@ -20,21 +20,18 @@ EVENT_TEMPLATE = {'Records': [
 
 
 def test_empty_event(handler):
-    res = handler(downloader, {})
-    assert res['statusCode'] == 400
-    assert res['body'] == "No records in event."
+    with pytest.raises(downloader.BadDynamoStreamEvent):
+        handler(downloader, {})
 
 
 def test_multiple_records(handler):
-    res = handler(downloader, {'Records': [1, 2]})
-    assert res['statusCode'] == 400
-    assert res['body'] == "DynamoDB stream should be set to BatchSize: 1"
+    with pytest.raises(downloader.BadDynamoStreamEvent):
+        handler(downloader, {'Records': [1, 2]})
 
 
 def test_ignored_event_types(handler):
     for event_type in ['MODIFY', 'REMOVE']:
-        res = handler(downloader, {'Records': [{'eventName': event_type}]})
-        assert res['statusCode'] == 204
+        assert handler(downloader, {'Records': [{'eventName': event_type}]}) is None
 
 
 def test_overlapping_recording_segments():

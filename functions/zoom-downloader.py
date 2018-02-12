@@ -15,7 +15,7 @@ ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
 s3 = boto3.client('s3')
-sqs = boto3.client('sqs')
+sqs = boto3.resource('sqs')
 
 
 class RecordingSegmentsOverlap(Exception):
@@ -26,22 +26,8 @@ class FileNameNotFound(Exception):
     pass
 
 
-def resp_204(msg):
-    logger.info("http 204 response: {}".format(msg))
-    return {
-        'statusCode': 204,
-        'headers': {},
-        'body': ""
-    }
-
-
-def resp_400(msg):
-    logger.error("http 400 response: {}".format(msg))
-    return {
-        'statusCode': 400,
-        'headers': {},
-        'body': msg
-    }
+class BadDynamoStreamEvent(Exception):
+    pass
 
 
 def handler(event, context):
@@ -53,16 +39,18 @@ def handler(event, context):
     logger.info(event)
 
     if 'Records' not in event:
-        return resp_400("No records in event.")
+        logger.error("No records in event. {}".format(event))
+        raise BadDynamoStreamEvent
 
     if len(event['Records']) > 1:
-        return resp_400("DynamoDB stream should be set to BatchSize: 1")
+        logger.error("DynamoDB stream should be set to BatchSize: 1")
+        raise BadDynamoStreamEvent
 
     event_type = event['Records'][0]['eventName']
     logger.info("got event type {}".format(event_type))
 
     if event_type != "INSERT":
-        return resp_204("No action on " + event_type)
+        return
 
     record = json.loads(event['Records'][0]['dynamodb']['NewImage']['recording_data']['S'])
     logger.debug(record)
@@ -70,50 +58,40 @@ def handler(event, context):
     chronological_files = sorted(record['recording_files'], key=lambda k: k['recording_start'])
     logger.info("downloading {} files".format(len(chronological_files)))
 
-    metadata = record.copy()
     track_sequence = 1
     prev_file = None
 
     for file in chronological_files:
-        try:
-            if next_track_sequence(prev_file, file):
+        if next_track_sequence(prev_file, file):
                 track_sequence += 1
-        except RecordingSegmentsOverlap:
-            return resp_400("Segment start/end times overlap for files:\n{}\n{}".format(prev_file, file))
 
         logger.debug("file {} is track sequence {}".format(file, track_sequence))
-        metadata['track_sequence'] = str(track_sequence)
         prev_file = file
 
-        stream_file_to_s3(file, metadata.copy())
+        stream_file_to_s3(file, record['uuid'], track_sequence)
 
     record['downloader_correlation_id'] = context.aws_request_id
     send_sqs_message(record)
 
     logger.info("downloader handler complete")
 
-    return {
-        'statusCode': 200,
-        'header': {},
-        'body': ""
-    }
 
+def stream_file_to_s3(file, uuid, track_sequence):
 
-def stream_file_to_s3(file, metadata):
+    metadata = {'uuid': uuid,
+                'track_sequence': str(track_sequence)}
 
     if file['file_type'].lower() in ["mp4", "m4a", "chat"]:
-        r, zoom_name = get_connection_using_play_url(file)
+        stream, zoom_name = get_connection_using_play_url(file)
 
         if 'gallery' in zoom_name.lower():
             metadata['view'] = "gallery"
         elif file['file_type'].lower() == "mp4":
             metadata['view'] = "speaker"
     else:
-        try:
-            r, zoom_name = get_connection_using_download_url(file)
-        except FileNameNotFound:
-            raise
+        stream, zoom_name = get_connection_using_download_url(file)
 
+    metadata['file_type'] = zoom_name.split('.')[-1]
     filename = create_filename(file['id'], file['meeting_id'], zoom_name)
     logger.info("filename: {}".format(filename))
 
@@ -127,17 +105,16 @@ def stream_file_to_s3(file, metadata):
 
     logger.info("Beginning upload of {}".format(filename))
     part_info = {'Parts': []}
-    mpu = s3.create_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
-                                     Metadata={key: str(val) for key, val in metadata.items()})
+    mpu = s3.create_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename, Metadata=metadata)
 
     try:
-        for partnumber, chunk in enumerate(r.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
-            logger.info("uploading part {}".format(partnumber))
+        for part_number, chunk in enumerate(stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
+            logger.info("uploading part {}".format(part_number))
             part = s3.upload_part(Body=chunk, Bucket=ZOOM_VIDEOS_BUCKET,
-                                  Key=filename, PartNumber=partnumber, UploadId=mpu['UploadId'])
+                                  Key=filename, PartNumber=part_number, UploadId=mpu['UploadId'])
 
             part_info['Parts'].append({
-                'PartNumber': partnumber,
+                'PartNumber': part_number,
                 'ETag': part['ETag']
             })
 
@@ -146,9 +123,11 @@ def stream_file_to_s3(file, metadata):
                                      MultipartUpload=part_info)
         print("Completed multipart upload of {}.".format(filename))
     except Exception as e:
-        logger.exception("Something went wrong with upload of {}".format(filename))
+        logger.exception("Something went wrong with upload of {}:{}".format(filename, e))
         s3.abort_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                   UploadId=mpu['UploadId'])
+
+    stream.close()
 
 
 def send_sqs_message(record):
@@ -163,13 +142,18 @@ def send_sqs_message(record):
     }
     logger.debug(message)
 
-    upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
+    try:
+        upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
-    message_sent = upload_queue.send_message(
-        MessageBody=json.dumps(message),
-        MessageGroupId="uploads",
-        MessageDeduplicationId=message['uuid']
-    )
+        message_sent = upload_queue.send_message(
+            MessageBody=json.dumps(message),
+            MessageGroupId="uploads",
+            MessageDeduplicationId=message['uuid']
+        )
+    except Exception as e:
+        logger.exception("Error when sending SQS message for meeting uuid {} :{}".format(message['uuid'], e))
+        raise
+
     logger.debug({"Message sent": message_sent})
 
 
