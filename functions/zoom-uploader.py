@@ -58,9 +58,11 @@ def handler(event, context):
         num_uploads = event.get('num_uploads', 1)
 
         upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
+        logger.debug("got queue {}".format(str(upload_queue)))
 
         for i in range(num_uploads):
             try:
+                logger.debug("fetching a message...")
                 message = upload_queue.receive_messages(MaxNumberOfMessages=1)[0]
                 logger.debug({'queue_message': message})
             except IndexError:
