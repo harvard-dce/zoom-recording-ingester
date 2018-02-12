@@ -262,6 +262,24 @@ Resources:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomUploaderLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref ZoomUploaderLambdaCode]]
 
+  ZoomUploaderEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: rate(20 minutes)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt [ZoomUploaderFunction, Arn]
+          Id: "UploaderFunction"
+          Input: "{\"num_uploads\": 1}"
+
+  ZoomUploaderEventRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ZoomUploaderFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt [ZoomUploaderEventRule, Arn]
+
   ZoomIngesterNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
