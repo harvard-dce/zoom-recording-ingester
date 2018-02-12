@@ -101,7 +101,7 @@ def handler(event, context):
             logger.info("retrying. {} retries left".format(lookup_retries))
             time.sleep(MEETING_LOOKUP_RETRY_DELAY)
         else:
-            return resp_400("Meeting lookup retries exhausted: {}".format(str(e)))
+            return resp_400("Meeting lookup retries exhausted: {}")
 
     try:
         if not verify_status(recording_data):

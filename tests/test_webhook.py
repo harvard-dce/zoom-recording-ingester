@@ -175,7 +175,7 @@ def test_api_lookup_too_many_retries(handler, mocker):
     # fail > retry times
     mock_get_recording_data.side_effect = [
         webhook.MeetingLookupFailure()
-            for i in range(webhook.MEETING_LOOKUP_RETRIES + 1)
+        for i in range(webhook.MEETING_LOOKUP_RETRIES + 1)
     ]
 
     resp = handler(webhook, event)
