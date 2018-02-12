@@ -31,6 +31,23 @@ the target opsworks cluster
 Enter API endpoint at https://developer.zoom.us/me/.
 Enable recording completed push notifications at https://zoom.us/account/setting?tab=recording.
 
+## Using a default test series in Opencast
+
+The uploader function that performs the Opencast ingest requires there to be a mapping
+from the zoom meeting id to an Opencast series id. This mapping can be created
+manually via the Opencast API UI:
+
+1. go to the Opencast welcome screen: \[hostname\]/welcome.html
+1. click the "Docs" link for the **DCE Other Publications** service
+1. scroll to the bottom to the "POST /series/setreference" method and reveal the testing form
+1. Enter "ZOOM" for the `originHost`, the zoom meeting number for `originCourseId`
+   and the target Opencast series id for `seriesId` and click Submit
+   
+If there is no series id mapped for a particular zoom meeting the uploader function will
+log a message to that effect and return. During testing/development, this can be overridden
+by setting the `DEFAULT_SERIES_ID` in the lambda function's environment. Just set that
+to whatever test series you want to use and all unmapped meetings will be ingested to that series.
+
 ## Stack-related commands
 
 This project uses the `invoke` python library to provide a simple task cli. Run `invoke -l`

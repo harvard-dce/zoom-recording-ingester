@@ -18,6 +18,7 @@ OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'S1'
+DEFAULT_SERIES_ID = env('DEFAULT_SERIES_ID')
 
 sqs = boto3.resource('sqs')
 s3 = boto3.resource('s3')
@@ -140,7 +141,11 @@ class Upload:
                 self._oc_series_id = resp.text
             except requests.RequestException as e:
                 logger.exception("Opencast series id lookup failed")
-                self._oc_series_id = None
+                if DEFAULT_SERIES_ID is not None:
+                    logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
+                    self._oc_series_id = DEFAULT_SERIES_ID
+                else:
+                    self._oc_series_id = None
 
         return self._oc_series_id
 
@@ -239,11 +244,18 @@ class Upload:
 
 
     def upload(self):
+        if not self.verify_series_mapping():
+            logger.info("No series mapping found for zoom series {}".format(self.zoom_series_id))
+            return
         self.create_mediapackage()
         self.add_tracks()
         self.add_episode()
         self.ingest()
         return self.workflow_id
+
+
+    def verify_series_mapping(self):
+        return self.opencast_series_id is not None
 
 
     def create_mediapackage(self):
