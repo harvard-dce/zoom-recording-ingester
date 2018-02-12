@@ -8,31 +8,6 @@ site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 downloader = import_module('zoom-downloader')
 
-EVENT_TEMPLATE = {'Records': [
-    {'eventName': 'INSERT',
-     'dynamodb': {
-         'Keys': {'meeting_uuid': {'S': 'some_uuid'}},
-         'NewImage': {
-             'meeting_uuid': {'S': 'some_uuid'},
-             'recording_data': {'S': 'json_recording_data'}
-         }}
-     }]}
-
-
-def test_empty_event(handler):
-    with pytest.raises(downloader.BadDynamoStreamEvent):
-        handler(downloader, {})
-
-
-def test_multiple_records(handler):
-    with pytest.raises(downloader.BadDynamoStreamEvent):
-        handler(downloader, {'Records': [1, 2]})
-
-
-def test_ignored_event_types(handler):
-    for event_type in ['MODIFY', 'REMOVE']:
-        assert handler(downloader, {'Records': [{'eventName': event_type}]}) is None
-
 
 def test_overlapping_recording_segments():
 

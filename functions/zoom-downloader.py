@@ -27,10 +27,6 @@ class FileNameNotFound(Exception):
     pass
 
 
-class BadDynamoStreamEvent(Exception):
-    pass
-
-
 def handler(event, context):
     """
     This function receives an event on each new entry in the download urls
