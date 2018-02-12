@@ -155,7 +155,7 @@ def test_handler_happy_trail(handler, mocker):
         'get_host_data',
         return_value=host_data
     )
-    mocker.patch.object(webhook, 'save_to_dynamodb')
+    mocker.patch.object(webhook, 'send_sqs_message')
 
     resp = handler(webhook, event)
 
