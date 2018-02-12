@@ -12,6 +12,7 @@ from common import setup_logging
 logger = logging.getLogger()
 
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
+DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
 s3 = boto3.client('s3')
@@ -38,24 +39,22 @@ def handler(event, context):
     setup_logging(context)
     logger.info(event)
 
-    if 'Records' not in event:
-        logger.error("No records in event. {}".format(event))
-        raise BadDynamoStreamEvent
+    download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
+    logger.debug("got queue {}".format(str(download_queue)))
 
-    if len(event['Records']) > 1:
-        logger.error("DynamoDB stream should be set to BatchSize: 1")
-        raise BadDynamoStreamEvent
-
-    event_type = event['Records'][0]['eventName']
-    logger.info("got event type {}".format(event_type))
-
-    if event_type != "INSERT":
+    try:
+        logger.debug("fetching a message...")
+        message = download_queue.receive_messages(MaxNumberOfMessages=1)[0]
+        logger.debug({'queue_message': message})
+    except IndexError:
+        logger.warning("No uploads ready for processing")
         return
 
-    record = json.loads(event['Records'][0]['dynamodb']['NewImage']['recording_data']['S'])
-    logger.debug(record)
+    download_data = json.loads(message.body)
+    logger.info(download_data)
+    recording_data = download_data['recording_data']
 
-    chronological_files = sorted(record['recording_files'], key=lambda k: k['recording_start'])
+    chronological_files = sorted(recording_data['recording_files'], key=lambda k: k['recording_start'])
     logger.info("downloading {} files".format(len(chronological_files)))
 
     track_sequence = 1
@@ -68,10 +67,10 @@ def handler(event, context):
         logger.debug("file {} is track sequence {}".format(file, track_sequence))
         prev_file = file
 
-        stream_file_to_s3(file, record['uuid'], track_sequence)
+        stream_file_to_s3(file, recording_data['uuid'], track_sequence)
 
-    record['downloader_correlation_id'] = context.aws_request_id
-    send_sqs_message(record)
+    download_data['downloader_correlation_id'] = context.aws_request_id
+    send_sqs_message(recording_data)
 
     logger.info("downloader handler complete")
 

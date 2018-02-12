@@ -47,25 +47,17 @@ Resources:
       ContentBasedDeduplication: true
       VisibilityTimeout: 300
 
-  ZoomIngesterRecordingsTable:
-    Type: AWS::DynamoDB::Table
+  ZoomIngesterDownloaderQueue:
+    Type: AWS::SQS::Queue
     Properties:
-      TableName: !Sub "${AWS::StackName}-recordings"
-      KeySchema:
-        - AttributeName: meeting_uuid
-          KeyType: HASH
-      AttributeDefinitions:
-        - AttributeName: meeting_uuid
-          AttributeType: S
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
-      StreamSpecification:
-        StreamViewType: NEW_IMAGE
+      QueueName: !Sub "${AWS::StackName}-downloads.fifo"
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600 # 14 days
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 300
 
   ZoomIngesterRole:
     Type: AWS::IAM::Role
-    DependsOn: ZoomIngesterRecordingsTable
     Properties:
       RoleName: !Sub "${AWS::StackName}-role"
       AssumeRolePolicyDocument:
@@ -93,17 +85,6 @@ Resources:
                 Resource: "*"
               - Effect: "Allow"
                 Action:
-                  - "dynamodb:*"
-                Resource: !GetAtt [ZoomIngesterRecordingsTable, Arn]
-              - Effect: "Allow"
-                Action:
-                  - "dynamodb:DescribeStream"
-                  - "dynamodb:GetRecords"
-                  - "dynamodb:GetShardIterator"
-                  - "dynamodb:ListStreams"
-                Resource: !Join ['', [!GetAtt [ZoomIngesterRecordingsTable, Arn], "/stream/*"]]
-              - Effect: "Allow"
-                Action:
                   - "s3:*"
                 Resource: !GetAtt [ZoomVideosBucket, Arn]
               - Effect: "Allow"
@@ -116,16 +97,18 @@ Resources:
                 Action:
                   - "sqs:*"
                 Resource: !GetAtt [ZoomIngesterUploadQueue, Arn]
+              - Effect: "Allow"
+                Action:
+                  - "sqs:*"
+                Resource: !GetAtt [ZoomIngesterDownloaderQueue, Arn]
 
   ZoomIngesterApi:
     Type: AWS::ApiGateway::RestApi
-    DependsOn: ZoomIngesterRecordingsTable
     Properties:
       Name: !Ref AWS::StackName
 
   ZoomIngesterResource:
     Type: AWS::ApiGateway::Resource
-    DependsOn: ZoomIngesterApi
     Properties:
       RestApiId: !Ref ZoomIngesterApi
       ParentId: !GetAtt [ZoomIngesterApi, RootResourceId]
@@ -133,9 +116,6 @@ Resources:
 
   ZoomIngesterWebhook:
     Type: AWS::ApiGateway::Method
-    DependsOn:
-      - ZoomIngesterApi
-      - ZoomIngesterWebhookFunction
     Properties:
       RestApiId:
         Ref: ZoomIngesterApi
@@ -166,7 +146,7 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-zoom-webhook-function"
       Environment:
         Variables:
-          DOWNLOAD_URLS_TABLE: !Ref ZoomIngesterRecordingsTable
+          DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
           DEBUG: 0
@@ -177,8 +157,6 @@ Resources:
   ZoomIngesterDeploy:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - ZoomIngesterApi
-      - ZoomIngesterResource
       - ZoomIngesterWebhook
     Properties:
       RestApiId: !Ref ZoomIngesterApi
@@ -208,9 +186,6 @@ Resources:
 
   ZoomDownloaderFunction:
     Type: AWS::Lambda::Function
-    DependsOn:
-      - ZoomIngesterRecordingsTable
-      - ZoomIngesterUploadQueue
     Properties:
       Handler: zoom-downloader.handler
       Runtime: python3.6
@@ -223,23 +198,29 @@ Resources:
           ZOOM_VIDEOS_BUCKET: !Ref ZoomVideosBucket
           ZOOM_LOGIN_USER: !Ref ZoomLoginUser
           ZOOM_LOGIN_PASSWORD: !Ref ZoomLoginPassword
+          DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
           DEBUG: 0
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
 
-  ZoomDownloaderEventMapping:
-    Type: AWS::Lambda::EventSourceMapping
-    DependsOn:
-      - ZoomIngesterRecordingsTable
-      - ZoomDownloaderFunction
+  ZoomDownloaderEventRule:
+    Type: AWS::Events::Rule
     Properties:
-      Enabled: true
-      BatchSize: 1
-      FunctionName: !GetAtt [ZoomDownloaderFunction, Arn]
-      StartingPosition: TRIM_HORIZON
-      EventSourceArn: !GetAtt [ZoomIngesterRecordingsTable, StreamArn]
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt [ZoomDownloaderFunction, Arn]
+          Id: "DownloaderFunction"
+
+  ZoomDownloaderEventRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ZoomDownloaderFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt [ZoomDownloaderEventRule, Arn]
 
   ZoomUploaderFunction:
     Type: AWS::Lambda::Function
