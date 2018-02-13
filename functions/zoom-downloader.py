@@ -68,6 +68,7 @@ def handler(event, context):
     download_data['downloader_correlation_id'] = context.aws_request_id
     send_sqs_message(recording_data)
 
+    message.delete()
     logger.info("downloader handler complete")
 
 
