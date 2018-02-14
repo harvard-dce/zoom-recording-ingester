@@ -65,7 +65,7 @@ def handler(event, context):
 
         stream_file_to_s3(file, recording_data['uuid'], track_sequence)
 
-    download_data['downloader_correlation_id'] = context.aws_request_id
+    recording_data['downloader_correlation_id'] = context.aws_request_id
     send_sqs_message(recording_data)
 
     message.delete()
