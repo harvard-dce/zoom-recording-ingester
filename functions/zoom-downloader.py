@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from bs4 import SoupStrainer
 from hashlib import md5
 from botocore.exceptions import ClientError
+from operator import itemgetter
 
 import logging
 from common import setup_logging
@@ -50,7 +51,7 @@ def handler(event, context):
     logger.info(download_data)
     recording_data = download_data['recording_data']
 
-    chronological_files = sorted(recording_data['recording_files'], key=lambda k: k['recording_start'])
+    chronological_files = sorted(recording_data['recording_files'], key=itemgetter('recording_start'))
     logger.info("downloading {} files".format(len(chronological_files)))
 
     track_sequence = 1
