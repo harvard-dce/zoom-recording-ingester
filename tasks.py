@@ -1,5 +1,6 @@
 
 import json
+from datetime import datetime
 from invoke import task, Collection
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
@@ -97,6 +98,28 @@ def update(ctx):
 
 
 @task
+def refresh_all(ctx):
+    refresh_webhook(ctx)
+    refresh_downloader(ctx)
+    refresh_uploader(ctx)
+
+
+@task
+def refresh_webhook(ctx):
+    __refresh_function(ctx, 'zoom-webhook')
+
+
+@task
+def refresh_downloader(ctx):
+    __refresh_function(ctx, 'zoom-downloader')
+
+
+@task
+def refresh_uploader(ctx):
+    __refresh_function(ctx, 'zoom-uploader')
+
+
+@task
 def delete(ctx):
     """
     Delete the Cloudformation stack identified by $STACK_NAME
@@ -161,6 +184,13 @@ update_ns.add_task(update_webhook, 'webhook')
 update_ns.add_task(update_downloader, 'downloader')
 update_ns.add_task(update_uploader, 'uploader')
 ns.add_collection(update_ns)
+
+refresh_ns = Collection('refresh')
+refresh_ns.add_task(refresh_all, 'all')
+refresh_ns.add_task(refresh_webhook, 'webhook')
+refresh_ns.add_task(refresh_downloader, 'downloader')
+refresh_ns.add_task(refresh_uploader, 'uploader')
+ns.add_collection(refresh_ns)
 
 debug_ns = Collection("debug")
 debug_ns.add_task(debug_on, 'on')
@@ -291,6 +321,16 @@ def __update_function(ctx, func):
             )
     print(cmd)
     ctx.run(cmd)
+
+
+def __refresh_function(ctx, func):
+    lambda_function_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
+    now = datetime.utcnow().isoformat()
+    cmd = ("aws {} lambda update-function-configuration "
+           "--function-name {} --description '{}'"
+           ).format(profile_arg(), lambda_function_name, now)
+    ctx.run(cmd, echo=True)
+
 
 
 def _set_debug(ctx, debug_val):
