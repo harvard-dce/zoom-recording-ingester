@@ -24,6 +24,16 @@ Parameters:
     Type: String
   OpencastApiPassword:
     Type: String
+  DefaultOpencastSeriesId:
+    Type: String
+    Default: "${AWS::NoValue}"
+  VpcSecurityGroupId:
+    Type: String
+  VpcSubnetId:
+    Type: String
+
+Conditions:
+  UploadFunctionVpcConfig: !Not [!Equals ["", !Ref VpcSubnetId]]
 
 Resources:
 
@@ -238,10 +248,20 @@ Resources:
           OPENCAST_BASE_URL: !Ref OpencastBaseUrl
           OPENCAST_API_USER: !Ref OpencastApiUser
           OPENCAST_API_PASSWORD: !Ref OpencastApiPassword
+          DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
           DEBUG: 0
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomUploaderLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref ZoomUploaderLambdaCode]]
+      VpcConfig:
+        !If
+          - UploadFunctionVpcConfig
+          -
+            SecurityGroupIds:
+              - !Ref VpcSecurityGroupId
+            SubnetIds:
+              - !Ref VpcSubnetId
+          - !Ref AWS::NoValue
 
   ZoomUploaderEventRule:
     Type: AWS::Events::Rule

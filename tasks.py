@@ -229,6 +229,37 @@ def stack_tags():
     return ""
 
 
+def vpc_components(ctx):
+
+    vpc_id = getenv("VPC_ID", False)
+    if vpc_id is None:
+        confirm = ("No $VPC_ID defined. "
+                   "Uploader will not be able to communicate with "
+                   "the opencast admin. Do you wish to proceed? [y/N] ")
+        if not input(confirm).lower().strip().startswith('y'):
+            print("aborting")
+            raise Exit(0)
+        return ("", "")
+
+    cmd = ("aws {} ec2 describe-subnets --filters "
+           "'Name=vpc-id,Values={}' "
+           "'Name=tag:aws:cloudformation:logical-id,Values=PrivateSubnet'") \
+        .format(profile_arg(), vpc_id)
+
+    res = ctx.run(cmd, hide=1)
+    subnet_data = json.loads(res.stdout)
+    subnet_id = subnet_data['Subnets'][0]['SubnetId']
+
+    cmd = ("aws {} ec2 describe-security-groups --filters "
+           "'Name=vpc-id,Values={}' "
+           "'Name=tag:aws:cloudformation:logical-id,Values=OpsworksLayerSecurityGroupCommon'") \
+        .format(profile_arg(), vpc_id)
+    res = ctx.run(cmd, hide=1)
+    sg_data = json.loads(res.stdout)
+    sg_id = sg_data['SecurityGroups'][0]['GroupId']
+
+    return subnet_id, sg_id
+
 def __create_or_update(ctx, op):
 
     template_path = join(dirname(__file__), 'template.yml')
@@ -242,6 +273,8 @@ def __create_or_update(ctx, op):
             raise Exit(1)
         func_code = '/'.join([getenv("LAMBDA_CODE_BUCKET"), func + '.zip'])
         lambda_objects[func] = func_code
+
+    subnet_id, sg_id = vpc_components(ctx)
 
     cmd = ("aws {} cloudformation {}-stack {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
@@ -258,6 +291,9 @@ def __create_or_update(ctx, op):
            "ParameterKey=OpencastBaseUrl,ParameterValue='{}' "
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
+           "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
+           "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
+           "ParameterKey=VpcSubnetId,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -274,7 +310,10 @@ def __create_or_update(ctx, op):
                 getenv("ZOOM_LOGIN_PASSWORD"),
                 getenv("OPENCAST_BASE_URL"),
                 getenv("OPENCAST_API_USER"),
-                getenv("OPENCAST_API_PASSWORD")
+                getenv("OPENCAST_API_PASSWORD"),
+                getenv("DEFAULT_SERIES_ID", False),
+                sg_id,
+                subnet_id
                 )
     print(cmd)
     ctx.run(cmd)
@@ -319,7 +358,6 @@ def __update_function(ctx, func):
                 getenv('LAMBDA_CODE_BUCKET'),
                 func
             )
-    print(cmd)
     ctx.run(cmd)
 
 
