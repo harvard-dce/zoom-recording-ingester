@@ -136,7 +136,8 @@ def send_sqs_message(record):
         "host_name": record['host_name'],
         "topic": record['topic'],
         "start_time": record['start_time'],
-        "recording_count": record['recording_count']
+        "recording_count": record['recording_count'],
+        "correlation_id": record['downloader_correlation_id']
     }
     logger.debug(message)
 
