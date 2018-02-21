@@ -16,8 +16,9 @@ ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
-s3 = boto3.client('s3')
+
 sqs = boto3.resource('sqs')
+s3 = boto3.client('s3')
 
 
 class RecordingSegmentsOverlap(Exception):
@@ -42,7 +43,9 @@ def handler(event, context):
 
     try:
         logger.debug("fetching a message...")
-        message = download_queue.receive_messages(MaxNumberOfMessages=1)[0]
+        messages = download_queue.receive_messages(MaxNumberOfMessages=1)
+        logger.debug("Messages received from download queue: {}".format(messages))
+        message = messages[0]
         logger.debug({'queue_message': message})
     except IndexError:
         logger.warning("No uploads ready for processing")
@@ -75,7 +78,6 @@ def handler(event, context):
 
 
 def stream_file_to_s3(file, uuid, track_sequence):
-
     metadata = {'uuid': uuid,
                 'track_sequence': str(track_sequence)}
 
@@ -202,6 +204,9 @@ def retrieve_url_from_play_page(play_url):
 
 def get_connection_using_play_url(file):
     file_url = retrieve_url_from_play_page(file['play_url'])
+    if file_url is None:
+        raise FileNameNotFound("Cannot get file name from {}".format(file['play_url']))
+
     zoom_name = file_url.split("?")[0].split("/")[-1]
 
     logger.info("requesting {}".format(file_url))

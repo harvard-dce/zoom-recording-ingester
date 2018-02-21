@@ -15,9 +15,7 @@ DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 ZOOM_API_KEY = env('ZOOM_API_KEY')
 ZOOM_API_SECRET = env('ZOOM_API_SECRET')
 MEETING_LOOKUP_RETRIES = 2
-MEETING_LOOKUP_RETRY_DELAY = 5
-
-sqs = boto3.resource('sqs')
+MEETING_LOOKUP_RETRY_DELAY = 60
 
 
 class BadWebhookData(Exception):
@@ -93,12 +91,14 @@ def handler(event, context):
             logger.error(e)
         except MeetingLookupFailure as e:
             logger.error(e)
-        except Exception:
+        except Exception as e:
+            print("Exception:", e)
             raise
 
         if lookup_retries > 0:
             lookup_retries -= 1
-            logger.info("retrying. {} retries left".format(lookup_retries))
+            logger.info("waiting {} seconds to retry. {} retries left"
+                        .format(MEETING_LOOKUP_RETRY_DELAY, lookup_retries))
             time.sleep(MEETING_LOOKUP_RETRY_DELAY)
         else:
             return resp_400("Meeting lookup retries exhausted: {}")
@@ -251,7 +251,10 @@ def verify_status(recording_data):
 
 
 def send_sqs_message(record):
+
     logger.debug("SQS sending start...")
+
+    sqs = boto3.resource('sqs')
 
     uuid = record['meeting_uuid']
 

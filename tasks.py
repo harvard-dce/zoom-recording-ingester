@@ -223,7 +223,7 @@ def profile_arg():
 
 
 def stack_tags():
-    tags = getenv("STACK_TAGS")
+    tags = getenv("STACK_TAGS", False)
     if tags is not None:
         return "--tags {}".format(tags)
     return ""
@@ -269,7 +269,7 @@ def __create_or_update(ctx, op):
         zip_path = join(dirname(__file__), 'functions', func + '.zip')
         if not exists(zip_path):
             print("No zip found for {}!".format(func))
-            print("Did you run the package-* commands?")
+            print("Did you run the package* commands?")
             raise Exit(1)
         func_code = '/'.join([getenv("LAMBDA_CODE_BUCKET"), func + '.zip'])
         lambda_objects[func] = func_code
@@ -368,7 +368,6 @@ def __refresh_function(ctx, func):
            "--function-name {} --description '{}'"
            ).format(profile_arg(), lambda_function_name, now)
     ctx.run(cmd, echo=True)
-
 
 
 def _set_debug(ctx, debug_val):
