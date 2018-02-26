@@ -275,6 +275,7 @@ def __create_or_update(ctx, op):
         lambda_objects[func] = func_code
 
     subnet_id, sg_id = vpc_components(ctx)
+    loggly_token = getenv("LOGGLY_TOKEN", False) or ""
 
     cmd = ("aws {} cloudformation {}-stack {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
@@ -294,6 +295,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
+           "ParameterKey=LogglyToken,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -313,7 +315,8 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", False),
                 sg_id,
-                subnet_id
+                subnet_id,
+                loggly_token
                 )
     print(cmd)
     ctx.run(cmd)

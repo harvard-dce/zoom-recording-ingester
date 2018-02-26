@@ -1,6 +1,6 @@
-import requests
 import boto3
 import json
+import requests
 from os import getenv as env
 from bs4 import BeautifulSoup
 from bs4 import SoupStrainer
@@ -28,12 +28,13 @@ class FileNameNotFound(Exception):
     pass
 
 
+@setup_logging
 def handler(event, context):
     """
     This function receives an event on each new entry in the download urls
     DyanmoDB table
     """
-    setup_logging(context)
+    logger.debug("downloader invoked!")
     logger.info(event)
 
     download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)

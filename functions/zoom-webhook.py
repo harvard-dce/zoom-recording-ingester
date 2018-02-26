@@ -1,12 +1,11 @@
-import requests
 import boto3
 import jwt
 import time
 import json
+import requests
 from datetime import datetime
 from urllib.parse import parse_qsl
 from os import getenv as env
-from botocore.exceptions import ClientError
 
 import logging
 from common import setup_logging
@@ -59,6 +58,7 @@ def resp_400(msg):
     }
 
 
+@setup_logging
 def handler(event, context):
     """
     This function accepts the incoming POST relay from the API Gateway endpoint that
@@ -66,7 +66,7 @@ def handler(event, context):
     the actual download url so we have to fetch that in a Zoom api call.
     """
 
-    setup_logging(context)
+    logger.debug("webhook invoked!")
     logger.info(event)
 
     if 'body' not in event:
@@ -268,5 +268,4 @@ def send_sqs_message(record):
         raise
 
     logger.debug({"Message sent": message_sent})
-
 
