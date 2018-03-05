@@ -7,6 +7,8 @@ from urllib.parse import urljoin
 from hashlib import md5
 from os import getenv as env
 import xml.etree.ElementTree as ET
+from datetime import datetime
+from pytz import timezone
 
 import logging
 from common import setup_logging
@@ -95,13 +97,20 @@ class Upload:
         return self.data['start_time']
 
     @property
+    def created_local(self, tz='US/Eastern'):
+        zone = timezone(tz)
+        utc = datetime.strptime(self.created, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone('UTC'))
+        local = datetime.strftime(utc.astimezone(zone), '%B %-d, %Y at %H:%M:%S %Z')
+        return local
+
+    @property
     def title(self):
         return self.data['topic']
 
     @property
     def description(self):
         return "Zoom Session Recording by {} for {} on {}".format(
-            self.creator, self.title, self.created
+            self.creator, self.title, self.created_local
         )
 
     @property

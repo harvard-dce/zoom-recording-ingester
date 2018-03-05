@@ -55,12 +55,36 @@ Resources:
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
       ContentBasedDeduplication: true
+      VisibilityTimeout: 2401
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt [ZoomIngesterUploadDeadLetterQueue, Arn]
+        maxReceiveCount: 10
+
+  ZoomIngesterUploadDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-uploads-deadletter.fifo"
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600 # 14 days
+      ContentBasedDeduplication: true
       VisibilityTimeout: 300
 
   ZoomIngesterDownloaderQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${AWS::StackName}-downloads.fifo"
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600 # 14 days
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 601
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, Arn]
+        maxReceiveCount: 10
+
+  ZoomIngesterDownloaderDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-downloads-deadletter.fifo"
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
       ContentBasedDeduplication: true

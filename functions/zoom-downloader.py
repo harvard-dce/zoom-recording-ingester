@@ -42,7 +42,9 @@ def handler(event, context):
 
     try:
         logger.debug("fetching a message...")
-        message = download_queue.receive_messages(MaxNumberOfMessages=1)[0]
+        messages = download_queue.receive_messages(MaxNumberOfMessages=1)
+        logger.debug("Messages received from download queue: {}".format(messages))
+        message = messages[0]
         logger.debug({'queue_message': message})
     except IndexError:
         logger.warning("No uploads ready for processing")
@@ -75,7 +77,6 @@ def handler(event, context):
 
 
 def stream_file_to_s3(file, uuid, track_sequence):
-
     metadata = {'uuid': uuid,
                 'track_sequence': str(track_sequence)}
 
@@ -136,7 +137,8 @@ def send_sqs_message(record):
         "host_name": record['host_name'],
         "topic": record['topic'],
         "start_time": record['start_time'],
-        "recording_count": record['recording_count']
+        "recording_count": record['recording_count'],
+        "correlation_id": record['downloader_correlation_id']
     }
     logger.debug(message)
 
@@ -194,13 +196,16 @@ def retrieve_url_from_play_page(play_url):
         return None
 
     link = source_object['src']
-    logger.info("God download url {}".format(link))
+    logger.info("Got download url {}".format(link))
 
     return link
 
 
 def get_connection_using_play_url(file):
     file_url = retrieve_url_from_play_page(file['play_url'])
+    if file_url is None:
+        raise FileNameNotFound("Cannot get file name from {}".format(file['play_url']))
+
     zoom_name = file_url.split("?")[0].split("/")[-1]
 
     logger.info("requesting {}".format(file_url))
