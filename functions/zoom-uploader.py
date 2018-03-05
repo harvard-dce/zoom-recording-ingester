@@ -128,7 +128,7 @@ class Upload:
                 resp.raise_for_status()
                 self._oc_series_id = resp.text
             except requests.RequestException as e:
-                logger.exception("Opencast series id lookup failed")
+                logger.warning("Opencast series id lookup failed")
                 if DEFAULT_SERIES_ID is not None:
                     logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
                     self._oc_series_id = DEFAULT_SERIES_ID
