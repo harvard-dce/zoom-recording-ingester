@@ -197,7 +197,7 @@ def retrieve_url_from_play_page(play_url):
         return None
 
     link = source_object['src']
-    logger.info("God download url {}".format(link))
+    logger.info("Got download url {}".format(link))
 
     return link
 
