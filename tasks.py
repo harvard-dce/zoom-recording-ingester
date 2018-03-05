@@ -223,7 +223,7 @@ def profile_arg():
 
 
 def stack_tags():
-    tags = getenv("STACK_TAGS", False)
+    tags = getenv("STACK_TAGS")
     if tags is not None:
         return "--tags {}".format(tags)
     return ""

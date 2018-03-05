@@ -100,7 +100,7 @@ class Upload:
     def created_local(self, tz='US/Eastern'):
         zone = timezone(tz)
         utc = datetime.strptime(self.created, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone('UTC'))
-        local = datetime.strftime(utc.astimezone(zone), '%Y-%m-%d %H:%M:%S %Z')
+        local = datetime.strftime(utc.astimezone(zone), '%B %-d, %Y at %H:%M:%S %Z')
         return local
 
     @property

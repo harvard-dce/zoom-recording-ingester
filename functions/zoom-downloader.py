@@ -16,9 +16,8 @@ ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
-
-sqs = boto3.resource('sqs')
 s3 = boto3.client('s3')
+sqs = boto3.resource('sqs')
 
 
 class RecordingSegmentsOverlap(Exception):
