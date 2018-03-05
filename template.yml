@@ -31,8 +31,6 @@ Parameters:
     Type: String
   VpcSubnetId:
     Type: String
-  LogglyToken:
-    Type: String
 
 Conditions:
   UploadFunctionVpcConfig: !Not [!Equals ["", !Ref VpcSubnetId]]
@@ -162,8 +160,6 @@ Resources:
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
           DEBUG: 0
-          LOGGLY_TOKEN: !Ref LogglyToken
-          LOGGLY_TAGS: !Join [" ", [!Sub "${AWS::StackName}", "zoom-webhook"]]
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref WebhookLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref WebhookLambdaCode]]
@@ -215,8 +211,6 @@ Resources:
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
           DEBUG: 0
-          LOGGLY_TOKEN: !Ref LogglyToken
-          LOGGLY_TAGS: !Join [" ", [!Sub "${AWS::StackName}", "zoom-downloader"]]
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
@@ -256,8 +250,6 @@ Resources:
           OPENCAST_API_PASSWORD: !Ref OpencastApiPassword
           DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
           DEBUG: 0
-          LOGGLY_TOKEN: !Ref LogglyToken
-          LOGGLY_TAGS: !Join [" ", [!Sub "${AWS::StackName}", "zoom-uploader"]]
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomUploaderLambdaCode]]
         S3Key: !Select [1, !Split ["/", !Ref ZoomUploaderLambdaCode]]
