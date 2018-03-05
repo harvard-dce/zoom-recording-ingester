@@ -28,6 +28,9 @@ def setup_logging(handler_func):
             loggly_handler.level = logging.getLevelName(LOG_LEVEL)
             logger.addHandler(loggly_handler)
             logger.debug("Logging to loggly!")
+
+            # set the urllib level to same as boto
+            logging.getLogger('urllib3').setLevel(logging.getLevelName(BOTO_LOG_LEVEL))
         else:
             loggly_handler = None
 
