@@ -74,7 +74,7 @@ def handler(event, context):
 
     try:
         payload = parse_payload(event['body'])
-        logger.info('PAYLOAD: ' + str(payload))
+        logger.info({'payload': payload})
     except BadWebhookData as e:
         return resp_400("bad webhook payload data: {}".format(str(e)))
 
