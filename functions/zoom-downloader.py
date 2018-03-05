@@ -42,10 +42,12 @@ def handler(event, context):
 
     try:
         logger.debug("fetching a message...")
-        messages = download_queue.receive_messages(MaxNumberOfMessages=1)
+        messages = download_queue.receive_messages(MaxNumberOfMessages=1,
+                                                   VisibilityTimeout=700)
         logger.debug("Messages received from download queue: {}".format(messages))
         message = messages[0]
         logger.debug({'queue_message': message})
+
     except IndexError:
         logger.warning("No uploads ready for processing")
         return

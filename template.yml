@@ -55,7 +55,6 @@ Resources:
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
       ContentBasedDeduplication: true
-      VisibilityTimeout: 2401
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt [ZoomIngesterUploadDeadLetterQueue, Arn]
         maxReceiveCount: 10
@@ -67,7 +66,6 @@ Resources:
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
       ContentBasedDeduplication: true
-      VisibilityTimeout: 300
 
   ZoomIngesterDownloaderQueue:
     Type: AWS::SQS::Queue
@@ -76,7 +74,6 @@ Resources:
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
       ContentBasedDeduplication: true
-      VisibilityTimeout: 601
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, Arn]
         maxReceiveCount: 10
@@ -88,7 +85,6 @@ Resources:
       FifoQueue: true
       MessageRetentionPeriod: 1209600 # 14 days
       ContentBasedDeduplication: true
-      VisibilityTimeout: 300
 
   ZoomIngesterRole:
     Type: AWS::IAM::Role

@@ -60,8 +60,10 @@ def handler(event, context):
     for i in range(num_uploads):
         try:
             logger.debug("fetching a message...")
-            message = upload_queue.receive_messages(MaxNumberOfMessages=1)[0]
+            message = upload_queue.receive_messages(MaxNumberOfMessages=1,
+                                                    VisibilityTimeout=2500)[0]
             logger.debug({'queue_message': message})
+
         except IndexError:
             logger.warning("No uploads ready for processing")
             return
