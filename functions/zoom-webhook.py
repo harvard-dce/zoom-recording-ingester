@@ -91,9 +91,6 @@ def handler(event, context):
             logger.error(e)
         except MeetingLookupFailure as e:
             logger.error(e)
-        except Exception as e:
-            print("Exception:", e)
-            raise
 
         if lookup_retries > 0:
             lookup_retries -= 1
