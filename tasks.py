@@ -127,7 +127,7 @@ def delete(ctx):
     cmd = ("aws {} cloudformation delete-stack "
            "--stack-name {}").format(profile_arg(), getenv("STACK_NAME"))
     if input('are you sure? [y/N] ').lower().strip().startswith('y'):
-        ctx.run(cmd)
+        ctx.run(cmd, echo=True)
     else:
         print("not deleting stack")
 

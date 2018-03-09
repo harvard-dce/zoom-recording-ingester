@@ -1,0 +1,8 @@
+{
+  // unique id of meeting session
+  "uuid": "DvKcwNXKQfGR9ggog0fzJg==",
+  // user id of the event host
+  "host_id": "Z05XQQycSaO2Y2EzepwGtQ",
+  // webook function's aws_request_id
+  "correlation_id": "a09afbff-1a70-475e-98bb-f19e511ada6c"
+}

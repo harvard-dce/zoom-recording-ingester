@@ -55,25 +55,26 @@ def handler(event, context):
     num_uploads = event['num_uploads']
 
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
-    logger.debug("got queue {}".format(str(upload_queue)))
 
     for i in range(num_uploads):
         try:
-            logger.debug("fetching a message...")
-            message = upload_queue.receive_messages(MaxNumberOfMessages=1,
-                                                    VisibilityTimeout=2500)[0]
-            logger.debug({'queue_message': message})
+            messages = upload_queue.receive_messages(
+                MaxNumberOfMessages=1,
+                VisibilityTimeout=2500
+            )
+            upload_message = messages[0]
+            logger.debug({'queue_message': upload_message})
 
         except IndexError:
             logger.warning("No uploads ready for processing")
             return
         try:
-            upload_data = json.loads(message.body)
+            upload_data = json.loads(upload_message.body)
             logger.info(upload_data)
             wf_id = process_upload(upload_data)
             logger.info("Workflow id {} initiated".format(wf_id))
             if wf_id:
-                message.delete()
+                upload_message.delete()
         except Exception as e:
             logger.exception(e)
             raise
