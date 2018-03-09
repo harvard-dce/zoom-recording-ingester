@@ -72,6 +72,7 @@ Resources:
     Properties:
       QueueName: !Sub "${AWS::StackName}-downloads.fifo"
       FifoQueue: true
+      DelaySeconds: 300
       MessageRetentionPeriod: 1209600 # 14 days
       ContentBasedDeduplication: true
       RedrivePolicy:
@@ -230,6 +231,8 @@ Resources:
           ZOOM_LOGIN_PASSWORD: !Ref ZoomLoginPassword
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
+          ZOOM_API_KEY: !Ref ZoomApiKey
+          ZOOM_API_SECRET: !Ref ZoomApiSecret
           DEBUG: 0
       Code:
         S3Bucket: !Select [0, !Split ["/", !Ref ZoomDownloaderLambdaCode]]

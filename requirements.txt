@@ -9,6 +9,7 @@ tox
 boto3
 requests
 requests-mock
+freezegun
 
 -r functions/common-requirements.txt
 -r functions/zoom-webhook.txt

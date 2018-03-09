@@ -1,21 +1,27 @@
 import boto3
 import json
+import time
 import requests
 from os import getenv as env
 from bs4 import BeautifulSoup
 from bs4 import SoupStrainer
 from hashlib import md5
+from urllib.parse import urljoin
 from botocore.exceptions import ClientError
 from operator import itemgetter
+from common import setup_logging, gen_token
 
 import logging
-from common import setup_logging
 logger = logging.getLogger()
 
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
+MEETING_LOOKUP_RETRIES = 2
+MEETING_LOOKUP_RETRY_DELAY = 60
+ZOOM_API_BASE_URL = 'https://api.zoom.us/v2/'
+
 s3 = boto3.client('s3')
 sqs = boto3.resource('sqs')
 
@@ -25,6 +31,22 @@ class RecordingSegmentsOverlap(Exception):
 
 
 class FileNameNotFound(Exception):
+    pass
+
+
+class HostLookupFailure(Exception):
+    pass
+
+
+class ApiLookupFailure(Exception):
+    """
+    Only raise this on retry-able failures, e.g. connection/timeout errors
+    or cases where recording status is not really complete
+    """
+    pass
+
+
+class ApiResponseParsingFailure(Exception):
     pass
 
 
@@ -38,23 +60,46 @@ def handler(event, context):
     logger.info(event)
 
     download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
-    logger.debug("got queue {}".format(str(download_queue)))
 
     try:
-        logger.debug("fetching a message...")
-        messages = download_queue.receive_messages(MaxNumberOfMessages=1,
-                                                   VisibilityTimeout=700)
-        logger.debug("Messages received from download queue: {}".format(messages))
-        message = messages[0]
-        logger.debug({'queue_message': message})
+        messages = download_queue.receive_messages(
+            MaxNumberOfMessages=1,
+            VisibilityTimeout=700
+        )
+        download_message = messages[0]
+        logger.debug({'queue message': download_message})
 
     except IndexError:
-        logger.warning("No uploads ready for processing")
+        logger.info("No download queue messages available")
         return
 
-    download_data = json.loads(message.body)
-    logger.info(download_data)
-    recording_data = download_data['recording_data']
+    meeting_data = json.loads(download_message.body)
+    logger.info(meeting_data)
+
+    try:
+        # get name/email of host
+        host_data = get_host_data(meeting_data['host_id'])
+        logger.info({'host_data': host_data})
+
+        # get data about recording files
+        recording_data = get_recording_data(meeting_data['uuid'])
+        logger.info(recording_data)
+
+    except ApiLookupFailure as e:
+        logger.error(e)
+
+        # this type of exception should only get raised on retry-able failures
+        # unset the visibility timeout on this message to make sure it can
+        # get picked up again on the next scheduled execution
+        download_message.change_visibility(VisibilityTimeout=0)
+        return
+
+    except Exception as e:
+        logger.exception("Something went horribly wrong "
+                         "trying to fetch the host or recording data"
+                         )
+        # TODO: move download_message to the DLQ and return without raising
+        raise
 
     chronological_files = sorted(recording_data['recording_files'], key=itemgetter('recording_start'))
     logger.info("downloading {} files".format(len(chronological_files)))
@@ -71,11 +116,97 @@ def handler(event, context):
 
         stream_file_to_s3(file, recording_data['uuid'], track_sequence)
 
-    recording_data['downloader_correlation_id'] = context.aws_request_id
-    send_sqs_message(recording_data)
+    upload_message = {
+        "uuid": meeting_data['uuid'],
+        "meeting_number": recording_data['meeting_number'],
+        "host_name": host_data['host_name'],
+        "topic": recording_data['topic'],
+        "start_time": recording_data['start_time'],
+        "recording_count": recording_data['recording_count'],
+        "correlation_id": meeting_data['correlation_id']
+    }
+    send_sqs_message(upload_message)
 
-    message.delete()
+    download_message.delete()
     logger.info("downloader handler complete")
+
+
+def get_host_data(host_id):
+
+    endpoint_url = urljoin(ZOOM_API_BASE_URL, 'users/{}'.format(host_id))
+    host_data = get_api_data(endpoint_url)
+    return {
+        'host_name': "{} {}".format(host_data['first_name'], host_data['last_name']),
+        'host_email': host_data['email']
+    }
+
+
+def get_recording_data(uuid):
+    endpoint_url = urljoin(ZOOM_API_BASE_URL, 'meetings/{}/recordings'.format(uuid))
+    return get_api_data(endpoint_url, validate_callback=verify_recording_status)
+
+
+def get_api_data(endpoint_url, validate_callback=None):
+
+    lookup_retries = 0
+    while True:
+        try:
+            resp_data = api_request(endpoint_url)
+
+            if validate_callback is None or validate_callback(resp_data):
+                return resp_data
+
+        except requests.ConnectTimeout as e:
+            logger.error(e)
+
+        if lookup_retries < MEETING_LOOKUP_RETRIES:
+            lookup_retries += 1
+            logger.info("waiting {} seconds to retry. this is retry {} of {}"
+                        .format(MEETING_LOOKUP_RETRY_DELAY,
+                                lookup_retries,
+                                MEETING_LOOKUP_RETRIES
+                                )
+                        )
+            time.sleep(MEETING_LOOKUP_RETRY_DELAY)
+        else:
+            raise ApiLookupFailure("No more retries for you!")
+
+
+def api_request(endpoint_url):
+
+    logger.debug("getting response from {}".format(endpoint_url))
+    token = gen_token(seconds_valid=600)
+    headers = {"Authorization": "Bearer %s" % token.decode()}
+    r = requests.get(endpoint_url, headers=headers)
+    r.raise_for_status()
+    resp_data = r.json()
+    logger.debug(resp_data)
+    return resp_data
+
+
+def verify_recording_status(recording_data):
+
+    if 'recording_files' not in recording_data \
+            or not len(recording_data['recording_files']):
+        return False
+
+    for file in recording_data['recording_files']:
+
+        file_id = file['id']
+        status = file['status']
+        logger.debug("file '{}' has status {}".format(file_id, status))
+
+        if status != 'completed':
+            logger.warning("ERROR: Recording status not 'completed'")
+            return False
+
+        if 'download_url' not in file:
+            raise ApiResponseParsingFailure(
+                "ERROR: file '{}' is missing a download_url".format(file_id)
+            )
+
+    logger.info("All recordings ready to download")
+    return True
 
 
 def stream_file_to_s3(file, uuid, track_sequence):
@@ -131,17 +262,8 @@ def stream_file_to_s3(file, uuid, track_sequence):
     stream.close()
 
 
-def send_sqs_message(record):
+def send_sqs_message(message):
     logger.debug("SQS sending start...")
-    message = {
-        "uuid": record['uuid'],
-        "meeting_number": record['meeting_number'],
-        "host_name": record['host_name'],
-        "topic": record['topic'],
-        "start_time": record['start_time'],
-        "recording_count": record['recording_count'],
-        "correlation_id": record['downloader_correlation_id']
-    }
     logger.debug(message)
 
     try:
@@ -149,7 +271,7 @@ def send_sqs_message(record):
 
         message_sent = upload_queue.send_message(
             MessageBody=json.dumps(message),
-            MessageGroupId="uploads",
+            MessageGroupId=message['uuid'],
             MessageDeduplicationId=message['uuid']
         )
     except Exception as e:
