@@ -1,6 +1,9 @@
 
 import json
+import boto3
+import jmespath
 from datetime import datetime
+from urllib.parse import urlencode
 from invoke import task, Collection
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
@@ -9,6 +12,10 @@ from os.path import join, dirname, exists
 
 load_dotenv(join(dirname(__file__), '.env'))
 
+AWS_PROFILE = env('AWS_PROFILE')
+
+if AWS_PROFILE is not None:
+    boto3.setup_default_session(profile_name=AWS_PROFILE)
 
 @task
 def create_code_bucket(ctx):
@@ -80,6 +87,32 @@ def update_uploader(ctx):
     package_uploader(ctx)
     __update_function(ctx, 'zoom-uploader')
 
+
+@task
+def exec_webhook(ctx, uuid, host_id, status=None):
+
+    if status is None:
+        status = 'RECORDING_MEETING_COMPLETED'
+
+    stack_name = getenv('STACK_NAME')
+    apig = boto3.client('apigateway')
+
+    apis = apig.get_rest_apis()
+    api_id = jmespath.search("items[?name=='{}'].id | [0]".format(stack_name), apis)
+
+    api_resources = apig.get_resources(restApiId=api_id)
+    resource_id = jmespath.search("items[?pathPart=='new_recording'].id | [0]", api_resources)
+
+    content = json.dumps({'uuid': uuid, 'host_id': host_id})
+    event_body = "type={}&{}".format(status, urlencode({'content': content}))
+
+    resp = apig.test_invoke_method(
+        restApiId=api_id,
+        resourceId=resource_id,
+        httpMethod='POST',
+        body=event_body
+    )
+    print(resp)
 
 @task
 def create(ctx):
@@ -185,6 +218,10 @@ update_ns.add_task(update_downloader, 'downloader')
 update_ns.add_task(update_uploader, 'uploader')
 ns.add_collection(update_ns)
 
+exec_ns = Collection('exec')
+exec_ns.add_task(exec_webhook, 'webhook')
+ns.add_collection(exec_ns)
+
 refresh_ns = Collection('refresh')
 refresh_ns.add_task(refresh_all, 'all')
 refresh_ns.add_task(refresh_webhook, 'webhook')
@@ -216,9 +253,8 @@ def getenv(var, required=True):
 
 
 def profile_arg():
-    profile = getenv("AWS_PROFILE", False)
-    if profile is not None:
-        return "--profile {}".format(profile)
+    if AWS_PROFILE is not None:
+        return "--profile {}".format(AWS_PROFILE)
     return ""
 
 
