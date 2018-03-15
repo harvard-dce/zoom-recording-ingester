@@ -1,4 +1,3 @@
-
 import jwt
 import time
 import logging
@@ -10,6 +9,7 @@ ZOOM_API_KEY = env('ZOOM_API_KEY')
 ZOOM_API_SECRET = env('ZOOM_API_SECRET')
 LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
 BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'
+
 
 def setup_logging(handler_func):
 

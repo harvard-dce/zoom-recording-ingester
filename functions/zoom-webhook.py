@@ -19,7 +19,7 @@ def resp_204(msg):
     return {
         'statusCode': 204,
         'headers': {},
-        'body': "" # 204 = no content
+        'body': ""  # 204 = no content
     }
 
 
@@ -94,7 +94,7 @@ def parse_payload(event_body):
                 payload['host_id'] = content['host_id']
                 del payload['content']
             except Exception as e:
-                raise BadWebhookData("Failed to parse payload 'content' value")
+                raise BadWebhookData("Failed to parse payload 'content' value. {}".format(e))
         else:
             raise BadWebhookData("payload missing 'content' value")
     elif 'status' not in payload:
@@ -103,7 +103,6 @@ def parse_payload(event_body):
         logger.info("Got new-style payload")
 
     return payload
-
 
 
 def send_sqs_message(message):

@@ -1,4 +1,3 @@
-
 import json
 import boto3
 import requests
@@ -66,7 +65,7 @@ def handler(event, context):
             logger.debug({'queue_message': upload_message})
 
         except IndexError:
-            logger.warning("No uploads ready for processing")
+            logger.warning("No upload queue messages available")
             return
         try:
             upload_data = json.loads(upload_message.body)
