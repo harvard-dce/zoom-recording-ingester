@@ -17,24 +17,17 @@ logger = logging.getLogger()
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 UPLOAD_QUEUE_NAME = env('UPLOAD_QUEUE_NAME')
+DEADLETTER_QUEUE_NAME = env('DEADLETTER_QUEUE_NAME')
 MIN_CHUNK_SIZE = 5242880
 MEETING_LOOKUP_RETRIES = 2
 MEETING_LOOKUP_RETRY_DELAY = 60
 ZOOM_API_BASE_URL = 'https://api.zoom.us/v2/'
 
-s3 = boto3.client('s3')
 sqs = boto3.resource('sqs')
+s3 = boto3.client('s3')
 
 
-class RecordingSegmentsOverlap(Exception):
-    pass
-
-
-class FileNameNotFound(Exception):
-    pass
-
-
-class HostLookupFailure(Exception):
+class PermanentDownloadError(Exception):
     pass
 
 
@@ -68,7 +61,6 @@ def handler(event, context):
         )
         download_message = messages[0]
         logger.debug({'queue message': download_message})
-
     except IndexError:
         logger.info("No download queue messages available")
         return
@@ -84,22 +76,24 @@ def handler(event, context):
         # get data about recording files
         recording_data = get_recording_data(meeting_data['uuid'])
         logger.info(recording_data)
-
     except ApiLookupFailure as e:
+        # Retry-able error
         logger.error(e)
-
-        # this type of exception should only get raised on retry-able failures
-        # unset the visibility timeout on this message to make sure it can
-        # get picked up again on the next scheduled execution
-        download_message.change_visibility(VisibilityTimeout=0)
         return
-
     except Exception as e:
         logger.exception("Something went horribly wrong "
-                         "trying to fetch the host or recording data"
-                         )
-        # TODO: move download_message to the DLQ and return without raising
+                         "trying to fetch the host or recording data:"
+                         " {}".format(e))
+        send_to_sqs(meeting_data, DEADLETTER_QUEUE_NAME, error=e)
+        download_message.delete()
+        logger.info("Deleted message from source queue.")
         raise
+
+    # experiment to save some unnecessary work
+    if recording_data['duration'] < 2:
+        logger.info("Duration under 2 minutes. Skipping.")
+        download_message.delete()
+        return
 
     chronological_files = sorted(recording_data['recording_files'], key=itemgetter('recording_start'))
     logger.info("downloading {} files".format(len(chronological_files)))
@@ -107,25 +101,32 @@ def handler(event, context):
     track_sequence = 1
     prev_file = None
 
-    for file in chronological_files:
-        if next_track_sequence(prev_file, file):
-                track_sequence += 1
+    try:
+        for file in chronological_files:
+            if next_track_sequence(prev_file, file):
+                    track_sequence += 1
 
-        logger.debug("file {} is track sequence {}".format(file, track_sequence))
-        prev_file = file
+            logger.debug("file {} is track sequence {}".format(file, track_sequence))
+            prev_file = file
 
-        stream_file_to_s3(file, recording_data['uuid'], track_sequence)
+            stream_file_to_s3(file, recording_data['uuid'], track_sequence)
 
-    upload_message = {
-        "uuid": meeting_data['uuid'],
-        "meeting_number": recording_data['meeting_number'],
-        "host_name": host_data['host_name'],
-        "topic": recording_data['topic'],
-        "start_time": recording_data['start_time'],
-        "recording_count": recording_data['recording_count'],
-        "correlation_id": meeting_data['correlation_id']
-    }
-    send_sqs_message(upload_message)
+        upload_message = {
+            "uuid": meeting_data['uuid'],
+            "meeting_number": recording_data['meeting_number'],
+            "host_name": host_data['host_name'],
+            "topic": recording_data['topic'],
+            "start_time": recording_data['start_time'],
+            "recording_count": recording_data['recording_count'],
+            "correlation_id": meeting_data['correlation_id']
+        }
+
+        send_to_sqs(upload_message, UPLOAD_QUEUE_NAME)
+    except PermanentDownloadError as e:
+        logger.error(e)
+        send_to_sqs(meeting_data, DEADLETTER_QUEUE_NAME, error=e)
+        download_message.delete()
+        raise
 
     download_message.delete()
     logger.info("downloader handler complete")
@@ -209,19 +210,40 @@ def verify_recording_status(recording_data):
     return True
 
 
+def next_track_sequence(prev_file, file):
+
+    if prev_file is None:
+        return False
+
+    logger.debug({'start': file['recording_start'], 'end': file['recording_end']})
+
+    if file['recording_start'] == prev_file['recording_start']:
+        logger.debug("start matches")
+        if file['recording_end'] == prev_file['recording_end']:
+            logger.debug("end matches")
+            return False
+
+    if file['recording_start'] >= prev_file['recording_end']:
+        logger.debug("start >= end")
+        return True
+
+    raise PermanentDownloadError("Recording segments overlap.")
+
+
 def stream_file_to_s3(file, uuid, track_sequence):
+
     metadata = {'uuid': uuid,
                 'track_sequence': str(track_sequence)}
 
     if file['file_type'].lower() in ["mp4", "m4a", "chat"]:
-        stream, zoom_name = get_connection_using_play_url(file)
+        stream, zoom_name = get_connection_using_play_url(file['play_url'])
 
         if 'gallery' in zoom_name.lower():
             metadata['view'] = "gallery"
         elif file['file_type'].lower() == "mp4":
             metadata['view'] = "speaker"
     else:
-        stream, zoom_name = get_connection_using_download_url(file)
+        stream, zoom_name = get_connection_using_download_url(file['download_url'])
 
     metadata['file_type'] = zoom_name.split('.')[-1]
     filename = create_filename(file['id'], file['meeting_id'], zoom_name)
@@ -232,7 +254,7 @@ def stream_file_to_s3(file, uuid, track_sequence):
             logger.warning("Skip stream to S3. Key {} already in bucket.".format(filename))
             return
     except Exception as e:
-        logger.error("Received error when searching for s3 bucket key: {}".format(e))
+        logger.exception("Received error when searching for s3 bucket key: {}".format(e))
         raise
 
     logger.info("Beginning upload of {}".format(filename))
@@ -262,45 +284,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
     stream.close()
 
 
-def send_sqs_message(message):
-    logger.debug("SQS sending start...")
-    logger.debug(message)
-
-    try:
-        upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
-
-        message_sent = upload_queue.send_message(
-            MessageBody=json.dumps(message),
-            MessageGroupId=message['uuid'],
-            MessageDeduplicationId=message['uuid']
-        )
-    except Exception as e:
-        logger.exception("Error when sending SQS message for meeting uuid {} :{}".format(message['uuid'], e))
-        raise
-
-    logger.debug({"Message sent": message_sent})
-
-
-def next_track_sequence(prev_file, file):
-
-    if prev_file is None:
-        return False
-
-    logger.debug({'start': file['recording_start'], 'end': file['recording_end']})
-
-    if file['recording_start'] == prev_file['recording_start']:
-        logger.debug("start matches")
-        if file['recording_end'] == prev_file['recording_end']:
-            logger.debug("end matches")
-            return False
-
-    if file['recording_start'] >= prev_file['recording_end']:
-        logger.debug("start >= end")
-        return True
-
-    raise RecordingSegmentsOverlap
-
-
 def retrieve_url_from_play_page(play_url):
 
     logger.info("requesting {}".format(play_url))
@@ -316,8 +299,12 @@ def retrieve_url_from_play_page(play_url):
     source_object = source.find("source")
 
     if source_object is None:
-        logger.warning("No source element found")
-        return None
+        password_form = BeautifulSoup(r.content, "html.parser",
+                                      parse_only=SoupStrainer(id="password_form"))
+        if password_form is not None:
+            raise PermanentDownloadError("Password protected play url: {}".format(play_url))
+        else:
+            raise PermanentDownloadError("No source element found on page: {}".format(play_url))
 
     link = source_object['src']
     logger.info("Got download url {}".format(link))
@@ -325,10 +312,8 @@ def retrieve_url_from_play_page(play_url):
     return link
 
 
-def get_connection_using_play_url(file):
-    file_url = retrieve_url_from_play_page(file['play_url'])
-    if file_url is None:
-        raise FileNameNotFound("Cannot get file name from {}".format(file['play_url']))
+def get_connection_using_play_url(play_url):
+    file_url = retrieve_url_from_play_page(play_url)
 
     zoom_name = file_url.split("?")[0].split("/")[-1]
 
@@ -340,18 +325,18 @@ def get_connection_using_play_url(file):
     return r, zoom_name
 
 
-def get_connection_using_download_url(file):
+def get_connection_using_download_url(download_url):
 
-    logger.info("requesting {}".format(file['download_url']))
+    logger.info("requesting {}".format(download_url))
 
-    r = requests.get(file['download_url'], stream=True)
+    r = requests.get(download_url, stream=True)
     r.raise_for_status()
 
     try:
         zoom_name = r.headers['Content-Disposition'].split("=")[-1]
         logger.info("got filename {}".format(zoom_name))
-    except KeyError as e:
-        raise FileNameNotFound
+    except KeyError:
+        raise PermanentDownloadError("File name not in headers: {}".format(download_url))
 
     return r, zoom_name
 
@@ -373,3 +358,25 @@ def key_exists(filename):
             print("Key {} not yet in bucket {}".format(filename, ZOOM_VIDEOS_BUCKET))
             return False
         raise
+
+
+def send_to_sqs(message, queue_name, error=None):
+    logger.debug("Sending SQS message to {}...".format(queue_name))
+    logger.debug(message)
+
+    try:
+        upload_queue = sqs.get_queue_by_name(QueueName=queue_name)
+
+        message_sent = upload_queue.send_message(
+            MessageBody=json.dumps(message),
+            MessageGroupId=message['uuid'],
+            MessageDeduplicationId=message['uuid']
+        )
+    except Exception as e:
+        logger.exception("Error when sending SQS message for meeting uuid {} to queue {}:{}"
+                         .format(message['uuid'], queue_name, e))
+        raise
+
+    logger.debug({"Queue" : queue_name,
+                  "Message sent": message_sent,
+                  "Error": error})

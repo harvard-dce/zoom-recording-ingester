@@ -26,9 +26,9 @@ def test_overlapping_recording_segments():
         ({'recording_start': two_minutes_ago, 'recording_end': one_minute_ago},
          {'recording_start': one_minute_ago, 'recording_end': now}, True),
         ({'recording_start': two_minutes_ago, 'recording_end': now},
-         {'recording_start': one_minute_ago, 'recording_end': now}, downloader.RecordingSegmentsOverlap),
+         {'recording_start': one_minute_ago, 'recording_end': now}, downloader.PermanentDownloadError),
         ({'recording_start': two_minutes_ago, 'recording_end': one_minute_ago},
-         {'recording_start': two_minutes_ago, 'recording_end': now}, downloader.RecordingSegmentsOverlap)
+         {'recording_start': two_minutes_ago, 'recording_end': now}, downloader.PermanentDownloadError)
     ]
 
     for prev_file, file, expected in tracks:
@@ -37,6 +37,7 @@ def test_overlapping_recording_segments():
                 downloader.next_track_sequence(prev_file, file)
         else:
             assert downloader.next_track_sequence(prev_file, file) == expected
+
 
 def test_recording_data_request(mocker):
 
@@ -87,7 +88,6 @@ def test_get_api_data_timeout_retries(mocker):
         requests.ConnectTimeout()
         for i in range(downloader.MEETING_LOOKUP_RETRIES + 1)
     ]
-
 
     with pytest.raises(downloader.ApiLookupFailure) as exc_info:
         downloader.get_api_data('https://api.example.com/v2/abcd-1234')

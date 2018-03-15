@@ -57,7 +57,7 @@ Resources:
       ContentBasedDeduplication: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt [ZoomIngesterUploadDeadLetterQueue, Arn]
-        maxReceiveCount: 10
+        maxReceiveCount: 2
 
   ZoomIngesterUploadDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -77,7 +77,7 @@ Resources:
       ContentBasedDeduplication: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, Arn]
-        maxReceiveCount: 10
+        maxReceiveCount: 2
 
   ZoomIngesterDownloaderDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -132,6 +132,10 @@ Resources:
                 Action:
                   - "sqs:*"
                 Resource: !GetAtt [ZoomIngesterDownloaderQueue, Arn]
+              - Effect: "Allow"
+                Action:
+                  - "sqs:*"
+                Resource: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, Arn]
 
   ZoomIngesterApi:
     Type: AWS::ApiGateway::RestApi
@@ -231,6 +235,7 @@ Resources:
           ZOOM_LOGIN_PASSWORD: !Ref ZoomLoginPassword
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
+          DEADLETTER_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, QueueName]
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
           DEBUG: 0

@@ -66,7 +66,12 @@ def send_notifications(date, max_recordings, key, secret,
 
         r = requests.get("https://api.zoom.us/v2/meetings/%s" % series_id,
                          headers={"Authorization": "Bearer %s" % gen_token(key, secret).decode()})
+
+        if r.status_code == 404:
+            continue
+
         r.raise_for_status()
+
         host_id = r.json()['host_id']
 
         if current_format is True:
