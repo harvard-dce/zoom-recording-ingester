@@ -1,7 +1,7 @@
-
 import json
 import boto3
 import jmespath
+import time
 from datetime import datetime
 from urllib.parse import urlencode
 from invoke import task, Collection
@@ -16,6 +16,7 @@ AWS_PROFILE = env('AWS_PROFILE')
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
+
 
 @task
 def create_code_bucket(ctx):
@@ -200,6 +201,22 @@ def test(ctx):
     ctx.run('pytest ./tests')
 
 
+@task
+def retry_uploads(ctx, limit=1):
+    """
+        Move SQS messages DLQ to source. Use --limit flag to set max messages to move. Default 1.
+    """
+    _move_messages("uploads", limit=limit)
+
+
+@task
+def retry_downloads(ctx, limit=1):
+    """
+        Move SQS messages DLQ to source. Use --limit flag to set max messages to move. Default 1.
+    """
+    _move_messages("downloads", limit=limit)
+
+
 ns = Collection()
 ns.add_task(create_code_bucket)
 ns.add_task(test)
@@ -229,7 +246,7 @@ refresh_ns.add_task(refresh_downloader, 'downloader')
 refresh_ns.add_task(refresh_uploader, 'uploader')
 ns.add_collection(refresh_ns)
 
-debug_ns = Collection("debug")
+debug_ns = Collection('debug')
 debug_ns.add_task(debug_on, 'on')
 debug_ns.add_task(debug_off, 'off')
 ns.add_collection(debug_ns)
@@ -241,6 +258,10 @@ stack_ns.add_task(delete)
 stack_ns.add_task(status)
 ns.add_collection(stack_ns)
 
+retry_ns = Collection('retry')
+retry_ns.add_task(retry_uploads, 'uploads')
+retry_ns.add_task(retry_downloads, 'downloads')
+ns.add_collection(retry_ns)
 
 ###############################################################################
 
@@ -275,7 +296,7 @@ def vpc_components(ctx):
         if not input(confirm).lower().strip().startswith('y'):
             print("aborting")
             raise Exit(0)
-        return ("", "")
+        return "", ""
 
     cmd = ("aws {} ec2 describe-subnets --filters "
            "'Name=vpc-id,Values={}' "
@@ -295,6 +316,7 @@ def vpc_components(ctx):
     sg_id = sg_data['SecurityGroups'][0]['GroupId']
 
     return subnet_id, sg_id
+
 
 def __create_or_update(ctx, op):
 
@@ -428,3 +450,76 @@ def _set_debug(ctx, debug_val):
                ).format(profile_arg(), new_vars, func_name)
         ctx.run(cmd)
 
+
+def _move_messages(queue_type, limit):
+    if queue_type == "uploads":
+        source_name = "zoom-ingester-uploads.fifo"
+        dl_name = "zoom-ingester-uploads-deadletter.fifo"
+    elif queue_type == "downloads":
+        source_name = "zoom-ingester-downloads.fifo"
+        dl_name = "zoom-ingester-downloads-deadletter.fifo"
+    else:
+        print("Invalid queue type: {}".format(queue_type))
+        return
+
+    # using the low-level client in order to access the deduplication id in the received message
+    # (which is not an attribute of the sqs.resource message object)
+    sqs = boto3.client('sqs')
+
+    deadletter_queue = sqs.get_queue_url(QueueName=dl_name)['QueueUrl']
+    source_queue = sqs.get_queue_url(QueueName=source_name)['QueueUrl']
+    total_messages_moved = 0
+
+    while total_messages_moved < limit:
+        remaining = limit - total_messages_moved
+        response = sqs.receive_message(
+            QueueUrl=deadletter_queue,
+            AttributeNames=['MessageDeduplicationId'],
+            MaxNumberOfMessages=10 if remaining > 10 else remaining,
+            VisibilityTimeout=10,
+            WaitTimeSeconds=10)
+
+        if 'Messages' not in response:
+            print("No more messages found!")
+            return
+
+        messages = response['Messages']
+        received_count = len(messages)
+
+        entries = []
+        for i, message in enumerate(messages):
+            deduplication_id = message['Attributes']['MessageDeduplicationId']
+            entries.append({
+                'Id': str(i),
+                'MessageBody': message['Body'],
+                'MessageDeduplicationId': deduplication_id,
+                'MessageGroupId': deduplication_id,
+                'DelaySeconds': 0
+            })
+
+        send_resp = sqs.send_message_batch(QueueUrl=source_queue, Entries=entries)
+        moved_count = len(send_resp['Successful'])
+        if moved_count < received_count:
+            print("One or more messages failed to be sent back to the source queue."
+                  "Received {} messages and successfully sent {} messages."
+                  .format(received_count, moved_count))
+
+        entries = []
+        for message_moved in send_resp['Successful']:
+            moved_id = message_moved['Id']
+            entries.append({
+                'Id': moved_id,
+                'ReceiptHandle': messages[int(moved_id)]['ReceiptHandle']
+            })
+
+        del_resp = sqs.delete_message_batch(QueueUrl=deadletter_queue, Entries=entries)
+        deleted_count = len(del_resp['Successful'])
+        if deleted_count < received_count:
+            print("One or more messages failed to be deleted from the deadletter queue."
+                  "Received {} messages and successfully deleted {} messages."
+                  .format(moved_count, deleted_count))
+
+        total_messages_moved += moved_count
+        time.sleep(1)
+
+    print("Moved {} message(s)".format(total_messages_moved))
