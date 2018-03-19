@@ -452,15 +452,8 @@ def _set_debug(ctx, debug_val):
 
 
 def _move_messages(queue_type, limit):
-    if queue_type == "uploads":
-        source_name = "zoom-ingester-uploads.fifo"
-        dl_name = "zoom-ingester-uploads-deadletter.fifo"
-    elif queue_type == "downloads":
-        source_name = "zoom-ingester-downloads.fifo"
-        dl_name = "zoom-ingester-downloads-deadletter.fifo"
-    else:
-        print("Invalid queue type: {}".format(queue_type))
-        return
+    source_name = "{}-{}.fifo".format(env('STACK_NAME'), queue_type)
+    dl_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
 
     # using the low-level client in order to access the deduplication id in the received message
     # (which is not an attribute of the sqs.resource message object)
