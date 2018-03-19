@@ -40,6 +40,7 @@ def package_all(ctx):
     package_webhook(ctx)
     package_downloader(ctx)
     package_uploader(ctx)
+    package_log_notifications(ctx)
 
 
 @task
@@ -61,6 +62,12 @@ def package_uploader(ctx):
 
 
 @task
+def package_log_notifications(ctx):
+    __package_function(ctx, 'zoom-log-notifications')
+    __function_to_s3(ctx, 'zoom-log-notifications')
+
+
+@task
 def update_all(ctx):
     """
     Package, upload and register new code for all lambda functions
@@ -68,6 +75,7 @@ def update_all(ctx):
     update_webhook(ctx)
     update_downloader(ctx)
     update_uploader(ctx)
+    update_log_notifications(ctx)
 
 
 @task
@@ -113,6 +121,13 @@ def exec_webhook(ctx, uuid, host_id, status=None):
         body=event_body
     )
     print(resp)
+
+
+@task
+def update_log_notifications(ctx):
+    package_log_notifications(ctx)
+    __update_function(ctx, 'zoom-log-notifications')
+
 
 @task
 def create(ctx):
@@ -209,6 +224,7 @@ package_ns.add_task(package_all, 'all')
 package_ns.add_task(package_webhook, 'webhook')
 package_ns.add_task(package_downloader, 'downloader')
 package_ns.add_task(package_uploader, 'uploader')
+package_ns.add_task(package_log_notifications, 'log-notifications')
 ns.add_collection(package_ns)
 
 update_ns = Collection('update')
@@ -216,6 +232,7 @@ update_ns.add_task(update_all, 'all')
 update_ns.add_task(update_webhook, 'webhook')
 update_ns.add_task(update_downloader, 'downloader')
 update_ns.add_task(update_uploader, 'uploader')
+update_ns.add_task(update_log_notifications, 'log-notifications')
 ns.add_collection(update_ns)
 
 exec_ns = Collection('exec')
@@ -316,9 +333,7 @@ def __create_or_update(ctx, op):
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
            "--template-body file://{} "
            "--parameters "
-           "ParameterKey=WebhookLambdaCode,ParameterValue={} "
-           "ParameterKey=ZoomDownloaderLambdaCode,ParameterValue={} "
-           "ParameterKey=ZoomUploaderLambdaCode,ParameterValue={} "
+           "ParameterKey=LambdaCodeBucket,ParameterValue={} "
            "ParameterKey=NotificationEmail,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
@@ -336,9 +351,7 @@ def __create_or_update(ctx, op):
                 stack_tags(),
                 getenv("STACK_NAME"),
                 template_path,
-                lambda_objects['zoom-webhook'],
-                lambda_objects['zoom-downloader'],
-                lambda_objects['zoom-uploader'],
+                getenv('LAMBDA_CODE_BUCKET'),
                 getenv("NOTIFICATION_EMAIL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
@@ -359,7 +372,9 @@ def __package_function(ctx, func):
     req_file = join(dirname(__file__), 'functions/{}.txt'.format(func))
     build_path = join(dirname(__file__), 'dist/{}'.format(func))
     zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
-    ctx.run("pip install -U -r {} -t {}".format(req_file, build_path))
+
+    if exists(req_file):
+        ctx.run("pip install -U -r {} -t {}".format(req_file, build_path))
 
     for module in [func, 'common']:
         module_path = join(dirname(__file__), 'functions/{}.py'.format(module))
@@ -384,7 +399,6 @@ def __function_to_s3(ctx, func):
 
 
 def __update_function(ctx, func):
-    zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
     lambda_function_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
     cmd = ("aws {} lambda update-function-code "
            "--function-name {} --publish --s3-bucket {} --s3-key {}.zip"
