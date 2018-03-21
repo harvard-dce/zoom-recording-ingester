@@ -25,12 +25,19 @@ def setup_logging(handler_func):
 
         logger = logging.getLogger()
 
+        logger.debug("{} invoked!".format(context.function_name))
+        logger.debug({
+            'event': event,
+            'context': context.__dict__
+        })
+
         try:
             retval = handler_func(event, context)
         except Exception as e:
             logger.exception("handler failed!")
             raise
 
+        logger.debug("{} complete!".format(context.function_name))
         return retval
 
     wrapped_func.__name__ = handler_func.__name__

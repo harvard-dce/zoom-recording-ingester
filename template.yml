@@ -2,11 +2,7 @@ AWSTemplateFormatVersion : '2010-09-09'
 Description: Zoom to Opencast video ingester
 
 Parameters:
-  WebhookLambdaCode:
-    Type: String
-  ZoomDownloaderLambdaCode:
-    Type: String
-  ZoomUploaderLambdaCode:
+  LambdaCodeBucket:
     Type: String
   NotificationEmail:
     Type: String
@@ -136,6 +132,10 @@ Resources:
                 Action:
                   - "sqs:*"
                 Resource: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, Arn]
+              - Effect: "Allow"
+                Action:
+                  - "sns:*"
+                Resource: !Ref ZoomIngesterNotificationTopic
 
   ZoomIngesterApi:
     Type: AWS::ApiGateway::RestApi
@@ -186,8 +186,14 @@ Resources:
           ZOOM_API_SECRET: !Ref ZoomApiSecret
           DEBUG: 0
       Code:
-        S3Bucket: !Select [0, !Split ["/", !Ref WebhookLambdaCode]]
-        S3Key: !Select [1, !Split ["/", !Ref WebhookLambdaCode]]
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: zoom-webhook.zip
+
+  ZoomIngesterWebhookLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      RetentionInDays: 60
 
   ZoomIngesterDeploy:
     Type: AWS::ApiGateway::Deployment
@@ -240,8 +246,8 @@ Resources:
           ZOOM_API_SECRET: !Ref ZoomApiSecret
           DEBUG: 0
       Code:
-        S3Bucket: !Select [0, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
-        S3Key: !Select [1, !Split ["/", !Ref ZoomDownloaderLambdaCode]]
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: zoom-downloader.zip
 
   ZoomDownloaderEventRule:
     Type: AWS::Events::Rule
@@ -279,8 +285,8 @@ Resources:
           DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
           DEBUG: 0
       Code:
-        S3Bucket: !Select [0, !Split ["/", !Ref ZoomUploaderLambdaCode]]
-        S3Key: !Select [1, !Split ["/", !Ref ZoomUploaderLambdaCode]]
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: zoom-uploader.zip
       VpcConfig:
         !If
           - UploadFunctionVpcConfig
@@ -460,4 +466,49 @@ Resources:
       EvaluationPeriods: 1
       Threshold: 1
       Statistic: Sum
+
+  ZoomLogNotificationsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: zoom-log-notifications.handler
+      Runtime: python3.6
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt [ZoomIngesterRole, Arn]
+      FunctionName: !Sub "${AWS::StackName}-zoom-log-notifications-function"
+      Environment:
+        Variables:
+          DEBUG: 0
+          STACK_NAME: !Ref AWS::StackName
+          SNS_TOPIC_ARN: !Ref ZoomIngesterNotificationTopic
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: zoom-log-notifications.zip
+
+  ZoomNewLogGroupEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - "aws.logs"
+        detail-type:
+          - "AWS API Call via CloudTrail"
+        detail:
+          eventSource:
+            - "logs.amazonaws.com"
+          eventName:
+            - "CreateLogGroup"
+      State: ENABLED
+      Targets:
+        -
+          Arn: !GetAtt [ZoomLogNotificationsFunction, Arn]
+          Id: "LogNotificationFunction"
+
+  ZoomNewLogGroupEventRulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ZoomLogNotificationsFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt [ZoomNewLogGroupEventRule, Arn]
 
