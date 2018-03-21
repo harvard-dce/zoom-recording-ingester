@@ -65,16 +65,16 @@ def handler(event, context):
         logger.info("No download queue messages available")
         return
 
-    meeting_data = json.loads(download_message.body)
-    logger.info(meeting_data)
+    message_body = json.loads(download_message.body)
+    logger.info(message_body)
 
     try:
         # get name/email of host
-        host_data = get_host_data(meeting_data['host_id'])
+        host_data = get_host_data(message_body['host_id'])
         logger.info({'host_data': host_data})
 
         # get data about recording files
-        recording_data = get_recording_data(meeting_data['uuid'])
+        recording_data = get_recording_data(message_body['uuid'])
         logger.info(recording_data)
     except ApiLookupFailure as e:
         # Retry-able error
@@ -84,9 +84,9 @@ def handler(event, context):
         logger.exception("Something went horribly wrong "
                          "trying to fetch the host or recording data:"
                          " {}".format(e))
-        send_to_sqs(meeting_data, DEADLETTER_QUEUE_NAME, error=e)
+        send_to_sqs(message_body, DEADLETTER_QUEUE_NAME, error=e)
         download_message.delete()
-        logger.info("Deleted message from source queue.")
+        logger.info("Moved message to DLS and deleted message from source queue.")
         raise
 
     # experiment to save some unnecessary work
@@ -112,19 +112,19 @@ def handler(event, context):
             stream_file_to_s3(file, recording_data['uuid'], track_sequence)
 
         upload_message = {
-            "uuid": meeting_data['uuid'],
+            "uuid": message_body['uuid'],
             "meeting_number": recording_data['meeting_number'],
             "host_name": host_data['host_name'],
             "topic": recording_data['topic'],
             "start_time": recording_data['start_time'],
             "recording_count": recording_data['recording_count'],
-            "correlation_id": meeting_data['correlation_id']
+            "correlation_id": message_body['correlation_id']
         }
 
         send_to_sqs(upload_message, UPLOAD_QUEUE_NAME)
     except PermanentDownloadError as e:
         logger.error(e)
-        send_to_sqs(meeting_data, DEADLETTER_QUEUE_NAME, error=e)
+        send_to_sqs(message_body, DEADLETTER_QUEUE_NAME, error=e)
         download_message.delete()
         raise
 
@@ -364,19 +364,29 @@ def send_to_sqs(message, queue_name, error=None):
     logger.debug("Sending SQS message to {}...".format(queue_name))
     logger.debug(message)
 
-    try:
-        upload_queue = sqs.get_queue_by_name(QueueName=queue_name)
+    if error is None:
+        message_attributes = {}
+    else:
+        message_attributes = {
+            'Error': {
+                'StringValue': str(error),
+                'DataType': 'String'
+            }}
 
-        message_sent = upload_queue.send_message(
+    try:
+        queue = sqs.get_queue_by_name(QueueName=queue_name)
+
+        message_sent = queue.send_message(
             MessageBody=json.dumps(message),
             MessageGroupId=message['uuid'],
-            MessageDeduplicationId=message['uuid']
+            MessageDeduplicationId=message['uuid'],
+            MessageAttributes=message_attributes
         )
     except Exception as e:
         logger.exception("Error when sending SQS message for meeting uuid {} to queue {}:{}"
                          .format(message['uuid'], queue_name, e))
         raise
 
-    logger.debug({"Queue" : queue_name,
+    logger.debug({"Queue": queue_name,
                   "Message sent": message_sent,
                   "Error": error})
