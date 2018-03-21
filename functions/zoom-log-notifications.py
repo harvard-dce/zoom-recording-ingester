@@ -23,17 +23,12 @@ sns = boto3.client('sns')
 @setup_logging
 def handler(event, context):
 
-    logger.info(context.__dict__)
-    logger.info(event)
-
     # we were triggered by a CreateLogGroup event from cloudtrail
     if 'source' in event and event['source'] == 'aws.logs':
-
         create_log_subscription(event, context)
 
     # we were triggered by the log group subscription
     elif 'awslogs' in event:
-
         events2sns(event, context)
 
 

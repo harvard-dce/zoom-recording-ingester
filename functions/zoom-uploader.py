@@ -47,9 +47,6 @@ def oc_api_request(method, endpoint, **kwargs):
 @setup_logging
 def handler(event, context):
 
-    logger.debug("uploader invoked!")
-    logger.info(event)
-
     # allow upload count to be overridden
     num_uploads = event['num_uploads']
 

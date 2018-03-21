@@ -41,9 +41,6 @@ def handler(event, context):
     to the downloader function via a queue.
     """
 
-    logger.debug("webhook invoked!")
-    logger.info(event)
-
     if 'body' not in event:
         return resp_400("bad data: no body in event")
 
@@ -65,8 +62,6 @@ def handler(event, context):
     }
 
     send_sqs_message(sqs_message)
-
-    logger.info("webhook handler complete")
 
     return {
         'statusCode': 200,

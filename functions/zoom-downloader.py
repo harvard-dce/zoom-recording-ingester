@@ -49,8 +49,6 @@ def handler(event, context):
     This function receives an event on each new entry in the download urls
     DyanmoDB table
     """
-    logger.debug("downloader invoked!")
-    logger.info(event)
 
     download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
 
@@ -129,7 +127,6 @@ def handler(event, context):
         raise
 
     download_message.delete()
-    logger.info("downloader handler complete")
 
 
 def get_host_data(host_id):
