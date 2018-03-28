@@ -189,12 +189,6 @@ Resources:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: zoom-webhook.zip
 
-  ZoomIngesterWebhookLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
-      RetentionInDays: 60
-
   ZoomIngesterDeploy:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
@@ -512,3 +506,52 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt [ZoomNewLogGroupEventRule, Arn]
 
+  RecordingCompletedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      FilterPattern: "{ $.message.payload.status = \"RECORDING_MEETING_COMPLETED\" }"
+      MetricTransformations:
+      - MetricValue: '1'
+        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricName: "MeetingRecordingCompleted"
+
+  MeetingStartedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      FilterPattern: "{ $.message.payload.status = \"STARTED\" }"
+      MetricTransformations:
+      - MetricValue: '1'
+        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricName: "MeetingStarted"
+
+  MeetingEndedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      FilterPattern: "{ $.message.payload.status = \"ENDED\" }"
+      MetricTransformations:
+      - MetricValue: '1'
+        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricName: "MeetingEnded"
+
+  RecordingDurationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-downloader-function"
+      FilterPattern: "{$.message.duration > 0}"
+      MetricTransformations:
+      - MetricValue: "$.message.duration"
+        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricName: "RecordingDuration"
+
+  SkippedForDurationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-downloader-function"
+      FilterPattern: "Skipping"
+      MetricTransformations:
+      - MetricValue: "1"
+        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricName: "SkippedForDuration"
