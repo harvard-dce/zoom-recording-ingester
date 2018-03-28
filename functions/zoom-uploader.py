@@ -8,6 +8,7 @@ from os import getenv as env
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pytz import timezone
+import random
 
 import logging
 from common import setup_logging
@@ -20,6 +21,7 @@ OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'S1'
 DEFAULT_SERIES_ID = env('DEFAULT_SERIES_ID')
+REDUCE_UPLOADS_RATIO = 0.1  # for testing only
 
 sqs = boto3.resource('sqs')
 s3 = boto3.resource('s3')
@@ -64,16 +66,20 @@ def handler(event, context):
         except IndexError:
             logger.warning("No upload queue messages available")
             return
-        try:
-            upload_data = json.loads(upload_message.body)
-            logger.info(upload_data)
-            wf_id = process_upload(upload_data)
-            logger.info("Workflow id {} initiated".format(wf_id))
-            if wf_id:
-                upload_message.delete()
-        except Exception as e:
-            logger.exception(e)
-            raise
+        if random.random() < REDUCE_UPLOADS_RATIO:
+            try:
+                upload_data = json.loads(upload_message.body)
+                logger.info(upload_data)
+                wf_id = process_upload(upload_data)
+                logger.info("Workflow id {} initiated".format(wf_id))
+                if wf_id:
+                    upload_message.delete()
+            except Exception as e:
+                logger.exception(e)
+                raise
+        else:
+            logger.info("Skipped. Randomly skipping 90% of uploads.")
+            upload_message.delete()
 
 
 def process_upload(upload_data):
