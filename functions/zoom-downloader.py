@@ -140,7 +140,9 @@ def get_host_data(host_id):
 
 
 def get_recording_data(uuid):
-    endpoint_url = urljoin(ZOOM_API_BASE_URL, 'meetings/{}/recordings'.format(uuid))
+    # Must use string concatenation rather than urljoin because uuids may contain
+    # url unsafe characters like forward slash
+    endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(uuid)
     return get_api_data(endpoint_url, validate_callback=verify_recording_status)
 
 
@@ -171,8 +173,6 @@ def get_api_data(endpoint_url, validate_callback=None):
 
 
 def api_request(endpoint_url):
-
-    logger.debug("getting response from {}".format(endpoint_url))
     token = gen_token(seconds_valid=600)
     headers = {"Authorization": "Bearer %s" % token.decode()}
     r = requests.get(endpoint_url, headers=headers)
@@ -260,7 +260,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
     try:
         for part_number, chunk in enumerate(stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
-            logger.info("uploading part {}".format(part_number))
             part = s3.upload_part(Body=chunk, Bucket=ZOOM_VIDEOS_BUCKET,
                                   Key=filename, PartNumber=part_number, UploadId=mpu['UploadId'])
 
@@ -282,8 +281,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
 
 def retrieve_url_from_play_page(play_url):
-
-    logger.info("requesting {}".format(play_url))
 
     r = requests.get(play_url)
     r.raise_for_status()
@@ -365,7 +362,7 @@ def send_to_sqs(message, queue_name, error=None):
         message_attributes = {}
     else:
         message_attributes = {
-            'Error': {
+            'FailedReason': {
                 'StringValue': str(error),
                 'DataType': 'String'
             }}
@@ -386,4 +383,4 @@ def send_to_sqs(message, queue_name, error=None):
 
     logger.debug({"Queue": queue_name,
                   "Message sent": message_sent,
-                  "Error": error})
+                  "FailedReason": error})
