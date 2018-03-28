@@ -232,6 +232,22 @@ def retry_downloads(ctx, limit=1):
     _move_messages("downloads", limit=limit)
 
 
+@task
+def view_uploads(ctx, limit=10):
+    """
+        View Uploader DLQ. Use --limit flag. Default 10 messages.
+    """
+    _view_messages("uploads", limit=limit)
+
+
+@task
+def view_downloads(ctx, limit=10):
+    """
+        View Downloader DLQ. Use --limit flag. Default 10 messages.
+    """
+    _view_messages("downloads", limit=limit)
+
+
 ns = Collection()
 ns.add_task(create_code_bucket)
 ns.add_task(test)
@@ -275,10 +291,12 @@ stack_ns.add_task(delete)
 stack_ns.add_task(status)
 ns.add_collection(stack_ns)
 
-retry_ns = Collection('retry')
-retry_ns.add_task(retry_uploads, 'uploads')
-retry_ns.add_task(retry_downloads, 'downloads')
-ns.add_collection(retry_ns)
+dlq_ns = Collection('dlq')
+dlq_ns.add_task(retry_uploads, 'retry-uploads')
+dlq_ns.add_task(retry_downloads, 'retry-downloads')
+dlq_ns.add_task(view_uploads, 'view-uploads')
+dlq_ns.add_task(view_downloads, 'view-downloads')
+ns.add_collection(dlq_ns)
 
 ###############################################################################
 
@@ -479,6 +497,7 @@ def _move_messages(queue_type, limit):
 
     while total_messages_moved < limit:
         remaining = limit - total_messages_moved
+
         response = sqs.receive_message(
             QueueUrl=deadletter_queue,
             AttributeNames=['MessageDeduplicationId'],
@@ -486,8 +505,11 @@ def _move_messages(queue_type, limit):
             VisibilityTimeout=10,
             WaitTimeSeconds=10)
 
-        if 'Messages' not in response:
-            print("No more messages found!")
+        if 'Messages' not in response :
+            if total_messages_moved == 0:
+                print("No messages found!")
+            else:
+                print("Moved {} message(s)".format(total_messages_moved))
             return
 
         messages = response['Messages']
@@ -529,4 +551,38 @@ def _move_messages(queue_type, limit):
         total_messages_moved += moved_count
         time.sleep(1)
 
-    print("Moved {} message(s)".format(total_messages_moved))
+
+def _view_messages(queue_type, limit):
+    queue_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
+
+    sqs = boto3.client('sqs')
+    queue_url = sqs.get_queue_url(QueueName=queue_name)['QueueUrl']
+    total_messages_received = 0
+
+    print("\nFetching messages from {}...\n".format(queue_name))
+
+    while total_messages_received < limit:
+        remaining = limit - total_messages_received
+
+        response = sqs.receive_message(
+            QueueUrl=queue_url,
+            AttributeNames=['MessageDeduplicationId'],
+            MessageAttributeNames=['FailedReason'],
+            MaxNumberOfMessages=10,
+            VisibilityTimeout=remaining+10,
+            WaitTimeSeconds=10)
+
+        if 'Messages' not in response :
+            if total_messages_received == 0:
+                print("No messages found!")
+            else:
+                print("Found {} message(s)".format(total_messages_received))
+            return
+
+        total_messages_received += len(response['Messages'])
+
+        for message in response['Messages']:
+            print("Attributes: {}\nBody: {}".format(message['Attributes'], message['Body']))
+            if 'MessageAttributes' in message and 'FailedReason' in message['MessageAttributes']:
+                print("{}: {}".format('ReportedError', message['MessageAttributes']['FailedReason']['StringValue']))
+            print()
