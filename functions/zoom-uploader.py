@@ -40,7 +40,7 @@ def oc_api_request(method, endpoint, **kwargs):
     logger.info({'url': url, 'kwargs': kwargs})
     try:
         resp = session.request(method, url, **kwargs)
-    except requests.RequestException as e:
+    except requests.RequestException:
         raise
     resp.raise_for_status()
     return resp

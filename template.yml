@@ -555,3 +555,13 @@ Resources:
       - MetricValue: "1"
         MetricNamespace: "ZoomIngesterLogMetrics"
         MetricName: "SkippedForDuration"
+
+  WorkflowInitiatedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-uploader-function"
+      FilterPattern: "Workflow"
+      MetricTransformations:
+      - MetricValue: "1"
+        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricName: "WorkflowsInitiated"

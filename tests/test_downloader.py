@@ -72,7 +72,7 @@ def test_verify_recording_status():
 
     for data, expected, msg in rec_data:
         if isinstance(expected, type) and expected.__base__ == Exception:
-            with pytest.raises(expected) as exc_info:
+            with pytest.raises(expected):
                 downloader.verify_recording_status(data)
         else:
             assert downloader.verify_recording_status(data) == expected
@@ -142,3 +142,38 @@ def test_get_host_data(mocker):
     mock_get_api_data.called_once_with('https://api.example.com/v2/tm1234')
 
 
+def test_get_recording_data(mocker):
+    """
+    Test get_recording_data to make sure forward slashes survive url and endpoint url is correct.
+    """
+
+    mock_get_api_data = mocker.patch.object(downloader, 'get_api_data')
+    calls = [('tCh9CNwpQ4xfRJmPpyWQ==', 'https://api.zoom.us/v2/meetings/tCh9CNwpQ4xfRJmPpyWQ==/recordings'),
+             ('/Ch9CNwpQ4xfRJmPpyWQ9/', 'https://api.zoom.us/v2/meetings//Ch9CNwpQ4xfRJmPpyWQ9//recordings')]
+
+    for call in calls:
+
+        def side_effect(*args, **kwargs):
+            assert (args[0] == call[1])
+
+        mock_get_api_data.side_effect = side_effect
+        downloader.get_recording_data(call[0])
+
+
+def test_retrieve_url_from_play_page(mocker):
+
+    with requests_mock.mock() as req_mock:
+        req_mock.get(requests_mock.ANY, status_code=200,
+                     content='<source src="https://ssrweb.zoom.us/cmr/replay" type="video/mp4" />'.encode('utf-8'))
+        resp = downloader.retrieve_url_from_play_page("https://www.example.com")
+        assert (resp == "https://ssrweb.zoom.us/cmr/replay")
+
+        rec_data = [('no videos here', 'No source element found'),
+                    ('<div id=password_form> </div>', 'Password protected')]
+
+        for content, message in rec_data:
+            with pytest.raises(downloader.PermanentDownloadError) as excinfo:
+                req_mock.get(requests_mock.ANY, status_code=200,
+                             content=content.encode('utf-8'))
+                downloader.retrieve_url_from_play_page("https://www.example.com")
+            assert(message in str(excinfo.value))

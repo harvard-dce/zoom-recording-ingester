@@ -109,9 +109,19 @@ def handler(event, context):
 
             stream_file_to_s3(file, recording_data['uuid'], track_sequence)
 
+        if 'meeting_number' in recording_data:
+            meeting_number = recording_data['meeting_number']
+        elif 'id' in recording_data:
+            meeting_number = recording_data['id']
+        else:
+            raise PermanentDownloadError("Missing meeting number in API response")
+
+        if not (8 < len(str(meeting_number)) < 12):
+            raise PermanentDownloadError("Invalid meeting number: {}".format(meeting_number))
+
         upload_message = {
             "uuid": message_body['uuid'],
-            "meeting_number": recording_data['meeting_number'],
+            "meeting_number": meeting_number,
             "host_name": host_data['host_name'],
             "topic": recording_data['topic'],
             "start_time": recording_data['start_time'],
@@ -295,10 +305,10 @@ def retrieve_url_from_play_page(play_url):
     if source_object is None:
         password_form = BeautifulSoup(r.content, "html.parser",
                                       parse_only=SoupStrainer(id="password_form"))
-        if password_form is not None:
-            raise PermanentDownloadError("Password protected play url: {}".format(play_url))
-        else:
+        if len(password_form) == 0:
             raise PermanentDownloadError("No source element found on page: {}".format(play_url))
+        else:
+            raise PermanentDownloadError("Password protected play url: {}".format(play_url))
 
     link = source_object['src']
     logger.info("Got download url {}".format(link))

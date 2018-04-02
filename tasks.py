@@ -213,7 +213,7 @@ def test(ctx):
     """
     Execute the pytest tests
     """
-    ctx.run('pytest ./tests')
+    ctx.run('py.test --cov-report term-missing --cov=functions tests')
 
 
 @task
