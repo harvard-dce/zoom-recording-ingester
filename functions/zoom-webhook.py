@@ -3,6 +3,7 @@ import json
 from urllib.parse import parse_qsl
 from os import getenv as env
 from common import setup_logging
+from datetime import datetime
 
 import logging
 logger = logging.getLogger()
@@ -55,10 +56,13 @@ def handler(event, context):
             "Handling not implement for status '{}'".format(payload['status'])
         )
 
+    now = datetime.strftime(datetime.today(), '%Y-%m-%dT%H:%M:%SZ')
+
     sqs_message = {
         'uuid': payload["uuid"],
         'host_id': payload["host_id"],
-        'correlation_id': context.aws_request_id
+        'correlation_id': context.aws_request_id,
+        'received_time': now
     }
 
     send_sqs_message(sqs_message)
