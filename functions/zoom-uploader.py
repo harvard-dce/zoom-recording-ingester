@@ -20,8 +20,9 @@ OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'S1'
-DEFAULT_SERIES_ID = env('DEFAULT_SERIES_ID')
-REDUCE_UPLOADS_RATIO = 0.1  # for testing only
+DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
+CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
+LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
 sqs = boto3.resource('sqs')
 s3 = boto3.resource('s3')
@@ -66,20 +67,16 @@ def handler(event, context):
         except IndexError:
             logger.warning("No upload queue messages available")
             return
-        if random.random() < REDUCE_UPLOADS_RATIO:
-            try:
-                upload_data = json.loads(upload_message.body)
-                logger.info(upload_data)
-                wf_id = process_upload(upload_data)
-                logger.info("Workflow id {} initiated".format(wf_id))
-                if wf_id:
-                    upload_message.delete()
-            except Exception as e:
-                logger.exception(e)
-                raise
-        else:
-            logger.info("Skipped. Randomly skipping 90% of uploads.")
-            upload_message.delete()
+        try:
+            upload_data = json.loads(upload_message.body)
+            logger.info(upload_data)
+            wf_id = process_upload(upload_data)
+            logger.info("Workflow id {} initiated".format(wf_id))
+            if wf_id:
+                upload_message.delete()
+        except Exception as e:
+            logger.exception(e)
+            raise
 
 
 def process_upload(upload_data):
@@ -102,10 +99,10 @@ class Upload:
         return self.data['start_time']
 
     @property
-    def created_local(self, tz='US/Eastern'):
+    def created_local(self, tz=LOCAL_TIME_ZONE):
         zone = timezone(tz)
         utc = datetime.strptime(self.created, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone('UTC'))
-        local = datetime.strftime(utc.astimezone(zone), '%B %-d, %Y at %H:%M:%S %Z')
+        local = datetime.strftime(utc.astimezone(zone), '%Y-%m-%dT%H:%M:%SZ')
         return local
 
     @property
@@ -114,8 +111,11 @@ class Upload:
 
     @property
     def description(self):
+        formatted_time = datetime.strftime(
+                            datetime.strptime(self.created_local, '%Y-%m-%dT%H:%M:%SZ'),
+                            '%B %-d, %Y at %H:%M:%S %Z')
         return "Zoom Session Recording by {} for {} on {}".format(
-            self.creator, self.title, self.created_local
+            self.creator, self.title, formatted_time
         )
 
     @property
@@ -130,26 +130,57 @@ class Upload:
     def zoom_series_id(self):
         return self.data['meeting_number']
 
+    def series_id_from_schedule(self):
+
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
+
+        r = table.get_item(
+            Key={"zoom_series_id": str(self.zoom_series_id)}
+        )
+
+        if 'Item' not in r:
+            return None
+        else:
+            schedule = r['Item']
+            logger.info(schedule)
+
+        zoom_time = datetime.strptime(self.created_local, '%Y-%m-%dT%H:%M:%SZ')
+        weekdays = ['M', 'T', 'W', 'R', 'F']
+        if zoom_time.weekday() > 4:
+            logger.debug("Meeting occurred on a weekend.")
+            return None
+        elif weekdays[zoom_time.weekday()] not in schedule['Days']:
+            logger.debug("No opencast recording scheduled for this day of the week.")
+            return None
+
+        scheduled_time = datetime.strptime(schedule['Time'], '%H:%M')
+        scheduled_time = zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
+        timedelta = abs(zoom_time - scheduled_time).total_seconds()
+
+        minutes = 20
+        if timedelta < (minutes * 60):
+            return schedule['opencast_series_id']
+        else:
+            logger.debug("Meeting started more than 15 minutes before or after opencast scheduled start time.")
+            return None
+
     @property
     def opencast_series_id(self):
-        if not hasattr(self, '_oc_series_id'):
-            params = {
-                'originHost': 'ZOOM',
-                'originCourseId': self.zoom_series_id
-            }
-            try:
-                resp = oc_api_request('GET', '/otherpubs/series/getreference', params=params)
-                resp.raise_for_status()
-                self._oc_series_id = resp.text
-            except requests.RequestException as e:
-                logger.warning("Opencast series id lookup failed")
-                if DEFAULT_SERIES_ID is not None:
-                    logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
-                    self._oc_series_id = DEFAULT_SERIES_ID
-                else:
-                    self._oc_series_id = None
+
+        series_id = self.series_id_from_schedule()
+
+        if series_id is not None:
+            logger.info("Matched with opencast series {}!".format(series_id))
+            self._oc_series_id = series_id
+        elif DEFAULT_SERIES_ID is not None:
+            logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
+            self._oc_series_id = DEFAULT_SERIES_ID
+        else:
+            self._oc_series_id = None
 
         return self._oc_series_id
+
 
     @property
     def type_num(self):
@@ -257,11 +288,21 @@ class Upload:
     def add_tracks(self):
 
         logger.info("Adding tracks")
-        speaker_vids = sorted(
-            self.speaker_videos,
-            key=lambda vid: vid.metadata['track_sequence']
-        )
-        for video in speaker_vids:
+
+        def sorted_videos(vids):
+            return sorted(
+                    vids,
+                    key=lambda vid: vid.metadata['track_sequence']
+                   )
+
+        if self.speaker_videos is not None:
+            videos = sorted_videos(self.speaker_videos)
+        elif self.gallery_videos is not None:
+            videos = sorted_videos(self.gallery_videos)
+        else:
+            raise Exception("No mp4 files available for upload.")
+
+        for video in videos:
             url = self._generate_presigned_url(video)
             logger.info("Adding track {}".format(url))
             logger.debug({"metadata": video.metadata})
@@ -306,8 +347,12 @@ class Upload:
         return url
 
     def _get_video_files(self, view):
-        return [
+        files = [
             x for x in self.s3_files
             if x.metadata['file_type'].lower() == 'mp4'
                and x.metadata.get('view') == view
         ]
+        if len(files) == 0:
+            return None
+        return files
+
