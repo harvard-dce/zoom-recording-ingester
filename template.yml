@@ -23,6 +23,9 @@ Parameters:
   DefaultOpencastSeriesId:
     Type: String
     Default: "${AWS::NoValue}"
+  LocalTimeZone:
+    Type: String
+    Default: 'US/Eastern'
   VpcSecurityGroupId:
     Type: String
   VpcSubnetId:
@@ -136,6 +139,10 @@ Resources:
                 Action:
                   - "sns:*"
                 Resource: !Ref ZoomIngesterNotificationTopic
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:GetItem"
+                Resource: !GetAtt [ClassScheduleDynamoTable, Arn]
 
   ZoomIngesterApi:
     Type: AWS::ApiGateway::RestApi
@@ -277,6 +284,8 @@ Resources:
           OPENCAST_API_USER: !Ref OpencastApiUser
           OPENCAST_API_PASSWORD: !Ref OpencastApiPassword
           DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
+          CLASS_SCHEDULE_TABLE: !Ref ClassScheduleDynamoTable
+          LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
       Code:
         S3Bucket: !Ref LambdaCodeBucket
@@ -565,3 +574,19 @@ Resources:
       - MetricValue: "1"
         MetricNamespace: "ZoomIngesterLogMetrics"
         MetricName: "WorkflowsInitiated"
+
+  ClassScheduleDynamoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-schedule"
+      KeySchema:
+        - AttributeName: zoom_series_id
+          KeyType: HASH
+      AttributeDefinitions:
+        - AttributeName: zoom_series_id
+          AttributeType: S
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+
