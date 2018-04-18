@@ -254,15 +254,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
     metadata['file_type'] = zoom_name.split('.')[-1]
     filename = create_filename(file['id'], file['meeting_id'], zoom_name)
-    logger.info("filename: {}".format(filename))
-
-    try:
-        if key_exists(filename):
-            logger.warning("Skip stream to S3. Key {} already in bucket.".format(filename))
-            return
-    except Exception as e:
-        logger.exception("Received error when searching for s3 bucket key: {}".format(e))
-        raise
 
     logger.info("Beginning upload of {}".format(filename))
     part_info = {'Parts': []}
