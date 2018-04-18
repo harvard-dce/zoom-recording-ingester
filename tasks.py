@@ -99,6 +99,9 @@ def update_uploader(ctx):
 
 @task
 def exec_webhook(ctx, uuid, host_id, status=None):
+    """
+    Positional arguments: uuid, host_id
+    """
 
     if status is None:
         status = 'RECORDING_MEETING_COMPLETED'
@@ -217,33 +220,33 @@ def test(ctx):
 
 
 @task
-def retry_uploads(ctx, limit=1):
+def retry_uploads(ctx, limit=1, uuid=None):
     """
-        Move SQS messages DLQ to source. Use --limit flag to set max messages to move. Default 1.
+        Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    _move_messages("uploads", limit=limit)
+    _move_messages("uploads", limit=limit, uuid=uuid)
 
 
 @task
-def retry_downloads(ctx, limit=1):
+def retry_downloads(ctx, limit=1, uuid=None):
     """
-        Move SQS messages DLQ to source. Use --limit flag to set max messages to move. Default 1.
+        Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    _move_messages("downloads", limit=limit)
+    _move_messages("downloads", limit=limit, uuid=uuid)
 
 
 @task
-def view_uploads(ctx, limit=10):
+def view_uploads(ctx, limit=20, uuid=None):
     """
-        View Uploader DLQ. Use --limit flag. Default 10 messages.
+        View Uploader DLQ. Optional: --limit (default 20).
     """
-    _view_messages("uploads", limit=limit)
+    _view_messages("uploads", limit=limit, uuid=uuid)
 
 
 @task
-def view_downloads(ctx, limit=10):
+def view_downloads(ctx, limit=20):
     """
-        View Downloader DLQ. Use --limit flag. Default 10 messages.
+        View Downloader DLQ. Optional: --limit (default 20).
     """
     _view_messages("downloads", limit=limit)
 
@@ -383,6 +386,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
            "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
+           "ParameterKey=LocalTimeZone,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
            ).format(
@@ -401,6 +405,7 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", False),
+                getenv("LOCAL_TIMEZONE"),
                 sg_id,
                 subnet_id
                 )
@@ -483,7 +488,7 @@ def _set_debug(ctx, debug_val):
         ctx.run(cmd)
 
 
-def _move_messages(queue_type, limit):
+def _move_messages(queue_type, limit, uuid=None):
     source_name = "{}-{}.fifo".format(env('STACK_NAME'), queue_type)
     dl_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
 
@@ -505,7 +510,7 @@ def _move_messages(queue_type, limit):
             VisibilityTimeout=10,
             WaitTimeSeconds=10)
 
-        if 'Messages' not in response :
+        if 'Messages' not in response or len(response['Messages']) == 0:
             if total_messages_moved == 0:
                 print("No messages found!")
             else:
@@ -513,18 +518,23 @@ def _move_messages(queue_type, limit):
             return
 
         messages = response['Messages']
-        received_count = len(messages)
+        received_count = 0
 
         entries = []
         for i, message in enumerate(messages):
             deduplication_id = message['Attributes']['MessageDeduplicationId']
-            entries.append({
-                'Id': str(i),
-                'MessageBody': message['Body'],
-                'MessageDeduplicationId': deduplication_id,
-                'MessageGroupId': deduplication_id,
-                'DelaySeconds': 0
-            })
+            if uuid is None or uuid == json.loads(message['Body'])['uuid']:
+                received_count += 1
+                entries.append({
+                    'Id': str(i),
+                    'MessageBody': message['Body'],
+                    'MessageDeduplicationId': deduplication_id,
+                    'MessageGroupId': deduplication_id,
+                    'DelaySeconds': 0
+                })
+
+        if received_count == 0:
+            continue
 
         send_resp = sqs.send_message_batch(QueueUrl=source_queue, Entries=entries)
         moved_count = len(send_resp['Successful'])
