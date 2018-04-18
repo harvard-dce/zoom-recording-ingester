@@ -15,6 +15,15 @@ def test_missing_body(handler):
     assert res['body'] == 'bad data: no body in event'
 
 
+def test_started_event(handler):
+    event = {
+        'body': 'type=STARTED&content=%7B%22uuid%22%3A%20%22abcd-1234%22%2C%20%22host_id%22%3A%201%7D'
+    }
+
+    res = handler(webhook, event)
+    assert res['statusCode'] == 204
+
+
 def test_parse_payload():
 
     payloads = [
@@ -44,7 +53,7 @@ def test_parse_payload():
             assert webhook.parse_payload(payload) == expected
 
 
-
+@freeze_time("2018-04-10T01:13:52Z")
 def test_handler_happy_trail(handler, mocker):
 
     event = {
@@ -57,7 +66,8 @@ def test_handler_happy_trail(handler, mocker):
     expected = {
         'uuid': 'abcd-1234',
         'correlation_id': '12345-abcde',
-        'host_id': 1
+        'host_id': 1,
+        'received_time': '2018-04-10T01:13:52Z'
     }
 
     mock_sqs_send.assert_called_once_with(expected)
