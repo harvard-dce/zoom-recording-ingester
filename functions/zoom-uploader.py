@@ -8,7 +8,7 @@ from os import getenv as env
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pytz import timezone
-import random
+from xml.sax.saxutils import escape
 
 import logging
 from common import setup_logging
@@ -243,14 +243,14 @@ class Upload:
 </dublincore>
 """ \
             .format(
-                self.creator,
+                escap(self.creator),
                 self.type_num,
                 self.opencast_series_id,
-                self.publisher,
-                self.title,
-                self.contributor,
+                escape(self.publisher),
+                escape(self.title),
+                escape(self.contributor),
                 self.created,
-                self.description
+                escape(self.description)
             ).strip()
 
         logger.debug({'episode_xml': self._episode_xml})
