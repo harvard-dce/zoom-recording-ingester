@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 from botocore.exceptions import ClientError
 from operator import itemgetter
 from common import setup_logging, gen_token
+import subprocess
 
 import logging
 logger = logging.getLogger()
@@ -123,9 +124,11 @@ def handler(event, context):
             "uuid": message_body['uuid'],
             "meeting_number": meeting_number,
             "host_name": host_data['host_name'],
+            "host_id": message_body['host_id'],
             "topic": recording_data['topic'],
             "start_time": recording_data['start_time'],
             "recording_count": recording_data['recording_count'],
+            "webhook_received_time": message_body['received_time'],
             "correlation_id": message_body['correlation_id']
         }
 
@@ -278,6 +281,11 @@ def stream_file_to_s3(file, uuid, track_sequence):
         s3.abort_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename,
                                   UploadId=mpu['UploadId'])
 
+    if file['file_type'].lower() == "mp4":
+        if not is_valid_mp4(filename):
+            stream.close()
+            raise Exception("MP4 failed to transfer.")
+
     stream.close()
 
 
@@ -385,3 +393,18 @@ def send_to_sqs(message, queue_name, error=None):
     logger.debug({"Queue": queue_name,
                   "Message sent": message_sent,
                   "FailedReason": error})
+
+
+def is_valid_mp4(filename):
+    url = s3.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': ZOOM_VIDEOS_BUCKET, 'Key': filename}
+    )
+
+    command = ['/var/task/ffprobe', '-of', 'json', url]
+    if subprocess.call(command) == 1:
+        logger.warning("Corrupt MP4, need to retry download from zoom to S3. {}".format(url))
+        return False
+    else:
+        logger.debug("Successfully verified mp4 {}".format(url))
+        return True
