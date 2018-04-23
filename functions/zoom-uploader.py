@@ -96,14 +96,12 @@ class Upload:
 
     @property
     def created(self):
-        return self.data['start_time']
+        utc = datetime.strptime(self.data['start_time'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone('UTC'))
+        return utc
 
     @property
     def created_local(self, tz=LOCAL_TIME_ZONE):
-        zone = timezone(tz)
-        utc = datetime.strptime(self.created, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone('UTC'))
-        local = datetime.strftime(utc.astimezone(zone), '%Y-%m-%dT%H:%M:%SZ')
-        return local
+        return self.created.astimezone(timezone(tz))
 
     @property
     def title(self):
@@ -111,9 +109,7 @@ class Upload:
 
     @property
     def description(self):
-        formatted_time = datetime.strftime(
-                            datetime.strptime(self.created_local, '%Y-%m-%dT%H:%M:%SZ'),
-                            '%B %-d, %Y at %H:%M:%S %Z')
+        formatted_time = datetime.strftime(self.created_local, '%B %-d, %Y at %H:%M:%S %Z')
         return "Zoom Session Recording by {} for {} on {}".format(
             self.creator, self.title, formatted_time
         )
@@ -145,7 +141,7 @@ class Upload:
             schedule = r['Item']
             logger.info(schedule)
 
-        zoom_time = datetime.strptime(self.created_local, '%Y-%m-%dT%H:%M:%SZ')
+        zoom_time = self.created_local
         weekdays = ['M', 'T', 'W', 'R', 'F']
         if zoom_time.weekday() > 4:
             logger.debug("Meeting occurred on a weekend.")
@@ -155,14 +151,16 @@ class Upload:
             return None
 
         scheduled_time = datetime.strptime(schedule['Time'], '%H:%M')
-        scheduled_time = zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
-        timedelta = abs(zoom_time - scheduled_time).total_seconds()
+        timedelta = abs(zoom_time -
+                        zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
+                        ).total_seconds()
 
-        minutes = 20
-        if timedelta < (minutes * 60):
+        threshold_minutes = 20
+        if timedelta < (threshold_minutes * 60):
             return schedule['opencast_series_id']
         else:
-            logger.debug("Meeting started more than 15 minutes before or after opencast scheduled start time.")
+            logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
+                         .format(threshold_minutes))
             return None
 
     @property
@@ -243,13 +241,13 @@ class Upload:
 </dublincore>
 """ \
             .format(
-                escap(self.creator),
+                escape(self.creator),
                 self.type_num,
                 self.opencast_series_id,
                 escape(self.publisher),
                 escape(self.title),
                 escape(self.contributor),
-                self.created,
+                datetime.strftime(self.created_local, '%Y-%m-%dT%H:%M:%SZ'),
                 escape(self.description)
             ).strip()
 

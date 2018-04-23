@@ -5,6 +5,10 @@ site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 import pytest
 from importlib import import_module
 from freezegun import freeze_time
+from pytz import timezone
+from datetime import datetime
+import os
+LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
 
 webhook = import_module('zoom-webhook')
 
@@ -53,7 +57,7 @@ def test_parse_payload():
             assert webhook.parse_payload(payload) == expected
 
 
-@freeze_time("2018-04-10T01:13:52Z")
+@freeze_time("2018-01-20T03:44:00Z")
 def test_handler_happy_trail(handler, mocker):
 
     event = {
@@ -67,7 +71,10 @@ def test_handler_happy_trail(handler, mocker):
         'uuid': 'abcd-1234',
         'correlation_id': '12345-abcde',
         'host_id': 1,
-        'received_time': '2018-04-10T01:13:52Z'
+        'received_time':
+            datetime.strftime(
+                datetime(2018, 1, 20, 3, 44, 00, 000000).astimezone(timezone(LOCAL_TIME_ZONE)),
+                '%Y-%m-%dT%H:%M:%SZ')
     }
 
     mock_sqs_send.assert_called_once_with(expected)

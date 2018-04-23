@@ -236,11 +236,11 @@ def retry_downloads(ctx, limit=1, uuid=None):
 
 
 @task
-def view_uploads(ctx, limit=20, uuid=None):
+def view_uploads(ctx, limit=20):
     """
         View Uploader DLQ. Optional: --limit (default 20).
     """
-    _view_messages("uploads", limit=limit, uuid=uuid)
+    _view_messages("uploads", limit=limit)
 
 
 @task
