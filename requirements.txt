@@ -4,6 +4,7 @@ awscli
 pytest
 pytest-env
 pytest-mock
+pytest-cov
 moto
 tox
 boto3

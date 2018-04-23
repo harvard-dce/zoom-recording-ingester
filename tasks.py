@@ -99,6 +99,9 @@ def update_uploader(ctx):
 
 @task
 def exec_webhook(ctx, uuid, host_id, status=None):
+    """
+    Positional arguments: uuid, host_id
+    """
 
     if status is None:
         status = 'RECORDING_MEETING_COMPLETED'
@@ -213,23 +216,39 @@ def test(ctx):
     """
     Execute the pytest tests
     """
-    ctx.run('pytest ./tests')
+    ctx.run('py.test --cov-report term-missing --cov=functions tests')
 
 
 @task
-def retry_uploads(ctx, limit=1):
+def retry_uploads(ctx, limit=1, uuid=None):
     """
-        Move SQS messages DLQ to source. Use --limit flag to set max messages to move. Default 1.
+        Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    _move_messages("uploads", limit=limit)
+    _move_messages("uploads", limit=limit, uuid=uuid)
 
 
 @task
-def retry_downloads(ctx, limit=1):
+def retry_downloads(ctx, limit=1, uuid=None):
     """
-        Move SQS messages DLQ to source. Use --limit flag to set max messages to move. Default 1.
+        Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    _move_messages("downloads", limit=limit)
+    _move_messages("downloads", limit=limit, uuid=uuid)
+
+
+@task
+def view_uploads(ctx, limit=20):
+    """
+        View Uploader DLQ. Optional: --limit (default 20).
+    """
+    _view_messages("uploads", limit=limit)
+
+
+@task
+def view_downloads(ctx, limit=20):
+    """
+        View Downloader DLQ. Optional: --limit (default 20).
+    """
+    _view_messages("downloads", limit=limit)
 
 
 ns = Collection()
@@ -275,10 +294,12 @@ stack_ns.add_task(delete)
 stack_ns.add_task(status)
 ns.add_collection(stack_ns)
 
-retry_ns = Collection('retry')
-retry_ns.add_task(retry_uploads, 'uploads')
-retry_ns.add_task(retry_downloads, 'downloads')
-ns.add_collection(retry_ns)
+dlq_ns = Collection('dlq')
+dlq_ns.add_task(retry_uploads, 'retry-uploads')
+dlq_ns.add_task(retry_downloads, 'retry-downloads')
+dlq_ns.add_task(view_uploads, 'view-uploads')
+dlq_ns.add_task(view_downloads, 'view-downloads')
+ns.add_collection(dlq_ns)
 
 ###############################################################################
 
@@ -365,6 +386,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
            "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
+           "ParameterKey=LocalTimeZone,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
            ).format(
@@ -383,6 +405,7 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", False),
+                getenv("LOCAL_TIMEZONE"),
                 sg_id,
                 subnet_id
                 )
@@ -465,7 +488,7 @@ def _set_debug(ctx, debug_val):
         ctx.run(cmd)
 
 
-def _move_messages(queue_type, limit):
+def _move_messages(queue_type, limit, uuid=None):
     source_name = "{}-{}.fifo".format(env('STACK_NAME'), queue_type)
     dl_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
 
@@ -479,6 +502,7 @@ def _move_messages(queue_type, limit):
 
     while total_messages_moved < limit:
         remaining = limit - total_messages_moved
+
         response = sqs.receive_message(
             QueueUrl=deadletter_queue,
             AttributeNames=['MessageDeduplicationId'],
@@ -486,23 +510,31 @@ def _move_messages(queue_type, limit):
             VisibilityTimeout=10,
             WaitTimeSeconds=10)
 
-        if 'Messages' not in response:
-            print("No more messages found!")
+        if 'Messages' not in response or len(response['Messages']) == 0:
+            if total_messages_moved == 0:
+                print("No messages found!")
+            else:
+                print("Moved {} message(s)".format(total_messages_moved))
             return
 
         messages = response['Messages']
-        received_count = len(messages)
+        received_count = 0
 
         entries = []
         for i, message in enumerate(messages):
             deduplication_id = message['Attributes']['MessageDeduplicationId']
-            entries.append({
-                'Id': str(i),
-                'MessageBody': message['Body'],
-                'MessageDeduplicationId': deduplication_id,
-                'MessageGroupId': deduplication_id,
-                'DelaySeconds': 0
-            })
+            if uuid is None or uuid == json.loads(message['Body'])['uuid']:
+                received_count += 1
+                entries.append({
+                    'Id': str(i),
+                    'MessageBody': message['Body'],
+                    'MessageDeduplicationId': deduplication_id,
+                    'MessageGroupId': deduplication_id,
+                    'DelaySeconds': 0
+                })
+
+        if received_count == 0:
+            continue
 
         send_resp = sqs.send_message_batch(QueueUrl=source_queue, Entries=entries)
         moved_count = len(send_resp['Successful'])
@@ -529,4 +561,38 @@ def _move_messages(queue_type, limit):
         total_messages_moved += moved_count
         time.sleep(1)
 
-    print("Moved {} message(s)".format(total_messages_moved))
+
+def _view_messages(queue_type, limit):
+    queue_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
+
+    sqs = boto3.client('sqs')
+    queue_url = sqs.get_queue_url(QueueName=queue_name)['QueueUrl']
+    total_messages_received = 0
+
+    print("\nFetching messages from {}...\n".format(queue_name))
+
+    while total_messages_received < limit:
+        remaining = limit - total_messages_received
+
+        response = sqs.receive_message(
+            QueueUrl=queue_url,
+            AttributeNames=['MessageDeduplicationId'],
+            MessageAttributeNames=['FailedReason'],
+            MaxNumberOfMessages=10,
+            VisibilityTimeout=remaining+10,
+            WaitTimeSeconds=10)
+
+        if 'Messages' not in response :
+            if total_messages_received == 0:
+                print("No messages found!")
+            else:
+                print("Found {} message(s)".format(total_messages_received))
+            return
+
+        total_messages_received += len(response['Messages'])
+
+        for message in response['Messages']:
+            print("Attributes: {}\nBody: {}".format(message['Attributes'], message['Body']))
+            if 'MessageAttributes' in message and 'FailedReason' in message['MessageAttributes']:
+                print("{}: {}".format('ReportedError', message['MessageAttributes']['FailedReason']['StringValue']))
+            print()

@@ -3,11 +3,14 @@ import json
 from urllib.parse import parse_qsl
 from os import getenv as env
 from common import setup_logging
+from datetime import datetime
+from pytz import timezone
 
 import logging
 logger = logging.getLogger()
 
 DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
+LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
 
 class BadWebhookData(Exception):
@@ -55,10 +58,13 @@ def handler(event, context):
             "Handling not implement for status '{}'".format(payload['status'])
         )
 
+    now = datetime.strftime(datetime.today().astimezone(timezone(LOCAL_TIME_ZONE)), '%Y-%m-%dT%H:%M:%SZ')
+
     sqs_message = {
         'uuid': payload["uuid"],
         'host_id': payload["host_id"],
-        'correlation_id': context.aws_request_id
+        'correlation_id': context.aws_request_id,
+        'received_time': now
     }
 
     send_sqs_message(sqs_message)

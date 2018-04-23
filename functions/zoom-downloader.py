@@ -109,9 +109,19 @@ def handler(event, context):
 
             stream_file_to_s3(file, recording_data['uuid'], track_sequence)
 
+        if 'meeting_number' in recording_data:
+            meeting_number = recording_data['meeting_number']
+        elif 'id' in recording_data:
+            meeting_number = recording_data['id']
+        else:
+            raise PermanentDownloadError("Missing meeting number in API response")
+
+        if not (8 < len(str(meeting_number)) < 12):
+            raise PermanentDownloadError("Invalid meeting number: {}".format(meeting_number))
+
         upload_message = {
             "uuid": message_body['uuid'],
-            "meeting_number": recording_data['meeting_number'],
+            "meeting_number": meeting_number,
             "host_name": host_data['host_name'],
             "topic": recording_data['topic'],
             "start_time": recording_data['start_time'],
@@ -140,7 +150,9 @@ def get_host_data(host_id):
 
 
 def get_recording_data(uuid):
-    endpoint_url = urljoin(ZOOM_API_BASE_URL, 'meetings/{}/recordings'.format(uuid))
+    # Must use string concatenation rather than urljoin because uuids may contain
+    # url unsafe characters like forward slash
+    endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(uuid)
     return get_api_data(endpoint_url, validate_callback=verify_recording_status)
 
 
@@ -171,8 +183,6 @@ def get_api_data(endpoint_url, validate_callback=None):
 
 
 def api_request(endpoint_url):
-
-    logger.debug("getting response from {}".format(endpoint_url))
     token = gen_token(seconds_valid=600)
     headers = {"Authorization": "Bearer %s" % token.decode()}
     r = requests.get(endpoint_url, headers=headers)
@@ -244,15 +254,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
     metadata['file_type'] = zoom_name.split('.')[-1]
     filename = create_filename(file['id'], file['meeting_id'], zoom_name)
-    logger.info("filename: {}".format(filename))
-
-    try:
-        if key_exists(filename):
-            logger.warning("Skip stream to S3. Key {} already in bucket.".format(filename))
-            return
-    except Exception as e:
-        logger.exception("Received error when searching for s3 bucket key: {}".format(e))
-        raise
 
     logger.info("Beginning upload of {}".format(filename))
     part_info = {'Parts': []}
@@ -260,7 +261,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
     try:
         for part_number, chunk in enumerate(stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
-            logger.info("uploading part {}".format(part_number))
             part = s3.upload_part(Body=chunk, Bucket=ZOOM_VIDEOS_BUCKET,
                                   Key=filename, PartNumber=part_number, UploadId=mpu['UploadId'])
 
@@ -283,8 +283,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
 def retrieve_url_from_play_page(play_url):
 
-    logger.info("requesting {}".format(play_url))
-
     r = requests.get(play_url)
     r.raise_for_status()
 
@@ -298,10 +296,10 @@ def retrieve_url_from_play_page(play_url):
     if source_object is None:
         password_form = BeautifulSoup(r.content, "html.parser",
                                       parse_only=SoupStrainer(id="password_form"))
-        if password_form is not None:
-            raise PermanentDownloadError("Password protected play url: {}".format(play_url))
-        else:
+        if len(password_form) == 0:
             raise PermanentDownloadError("No source element found on page: {}".format(play_url))
+        else:
+            raise PermanentDownloadError("Password protected play url: {}".format(play_url))
 
     link = source_object['src']
     logger.info("Got download url {}".format(link))
@@ -365,7 +363,7 @@ def send_to_sqs(message, queue_name, error=None):
         message_attributes = {}
     else:
         message_attributes = {
-            'Error': {
+            'FailedReason': {
                 'StringValue': str(error),
                 'DataType': 'String'
             }}
@@ -386,4 +384,4 @@ def send_to_sqs(message, queue_name, error=None):
 
     logger.debug({"Queue": queue_name,
                   "Message sent": message_sent,
-                  "Error": error})
+                  "FailedReason": error})
