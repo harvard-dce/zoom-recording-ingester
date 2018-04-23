@@ -514,10 +514,28 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt [ZoomNewLogGroupEventRule, Arn]
 
+  ZoomWebhookLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      RetentionInDays: 14
+
+  ZoomDownloaderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-downloader-function"
+      RetentionInDays: 14
+
+  ZoomUploaderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-uploader-function"
+      RetentionInDays: 14
+
   RecordingCompletedMetricFilter:
     Type: AWS::Logs::MetricFilter
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      LogGroupName: !Ref ZoomWebhookLogGroup
       FilterPattern: "{ $.message.payload.status = \"RECORDING_MEETING_COMPLETED\" }"
       MetricTransformations:
       - MetricValue: '1'
@@ -527,7 +545,7 @@ Resources:
   MeetingStartedMetricFilter:
     Type: AWS::Logs::MetricFilter
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      LogGroupName: !Ref ZoomWebhookLogGroup
       FilterPattern: "{ $.message.payload.status = \"STARTED\" }"
       MetricTransformations:
       - MetricValue: '1'
@@ -537,7 +555,7 @@ Resources:
   MeetingEndedMetricFilter:
     Type: AWS::Logs::MetricFilter
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
+      LogGroupName: !Ref ZoomWebhookLogGroup
       FilterPattern: "{ $.message.payload.status = \"ENDED\" }"
       MetricTransformations:
       - MetricValue: '1'
@@ -547,7 +565,7 @@ Resources:
   RecordingDurationMetricFilter:
     Type: AWS::Logs::MetricFilter
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-downloader-function"
+      LogGroupName: !Ref ZoomDownloaderLogGroup
       FilterPattern: "{$.message.duration > 0}"
       MetricTransformations:
       - MetricValue: "$.message.duration"
@@ -557,7 +575,7 @@ Resources:
   SkippedForDurationMetricFilter:
     Type: AWS::Logs::MetricFilter
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-downloader-function"
+      LogGroupName: !Ref ZoomDownloaderLogGroup
       FilterPattern: "Skipping"
       MetricTransformations:
       - MetricValue: "1"
@@ -567,7 +585,7 @@ Resources:
   WorkflowInitiatedMetricFilter:
     Type: AWS::Logs::MetricFilter
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-uploader-function"
+      LogGroupName: !Ref ZoomUploaderLogGroup
       FilterPattern: "Workflow"
       MetricTransformations:
       - MetricValue: "1"
