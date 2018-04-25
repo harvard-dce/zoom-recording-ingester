@@ -405,7 +405,7 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", False),
-                getenv("LOCAL_TIMEZONE"),
+                getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id
                 )
