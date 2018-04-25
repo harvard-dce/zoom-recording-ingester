@@ -518,19 +518,19 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
-      RetentionInDays: 14
+      RetentionInDays: 60
 
   ZoomDownloaderLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-downloader-function"
-      RetentionInDays: 14
+      RetentionInDays: 60
 
   ZoomUploaderLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-uploader-function"
-      RetentionInDays: 14
+      RetentionInDays: 60
 
   RecordingCompletedMetricFilter:
     Type: AWS::Logs::MetricFilter
