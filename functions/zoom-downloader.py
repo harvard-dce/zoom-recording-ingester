@@ -7,7 +7,6 @@ from bs4 import BeautifulSoup
 from bs4 import SoupStrainer
 from hashlib import md5
 from urllib.parse import urljoin
-from botocore.exceptions import ClientError
 from operator import itemgetter
 from common import setup_logging, gen_token
 import subprocess
@@ -344,23 +343,11 @@ def get_connection_using_download_url(download_url):
     return r, zoom_name
 
 
-def create_filename(uuid, meeting_id, zoom_filename):
+def create_filename(file_id, meeting_id, zoom_filename):
     file_type = ".".join(zoom_filename.split(".")[1:]).lower()
-    md5_uuid = md5(meeting_id.encode()).hexdigest()
-    filename = "{}/{}.{}".format(md5_uuid, uuid, file_type)
+    md5_meeting_id = md5(meeting_id.encode()).hexdigest()
+    filename = "{}/{}.{}".format(md5_meeting_id, file_id, file_type)
     return filename
-
-
-def key_exists(filename):
-    try:
-        s3.head_object(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename)
-        logger.debug("key {} already in bucket {}".format(filename, ZOOM_VIDEOS_BUCKET))
-        return True
-    except ClientError as e:
-        if e.response['ResponseMetadata']['HTTPStatusCode'] == 404:
-            print("Key {} not yet in bucket {}".format(filename, ZOOM_VIDEOS_BUCKET))
-            return False
-        raise
 
 
 def send_to_sqs(message, queue_name, error=None):
