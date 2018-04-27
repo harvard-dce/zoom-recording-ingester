@@ -624,6 +624,9 @@ def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
             semester = "03"
         else:
             semester = "01"
+    elif semester not in ["01", "02", "03"]:
+        print("Semester must be '01' for fall. '02' for winter, or '03' for summer.")
+        return
 
     csv_file = open(csv_name, "r")
     json_file = open(json_name, "w")
@@ -632,9 +635,8 @@ def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
 
     reader = csv.DictReader(csv_file, fieldnames)
 
-    json_file.write('{')
+    data = {}
 
-    first = True
     for row in reader:
         del row[None]
 
@@ -651,8 +653,9 @@ def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
             zoom_series_id = row['Links'].split('/')[-1]
 
         opencast_series_id = year + semester + row["CRN"].strip()
-        opencast_subject = row["Subject"].strip() + (" -S" if semester == "03" else " -E") + row[
-            "Course Number"].strip()
+        opencast_subject = row["Subject"].strip()\
+                           + (" S-" if semester == "03" else " E-") \
+                           + row["Course Number"].strip()
 
         course['opencast_series_id'] = opencast_series_id
         course['opencast_subject'] = opencast_subject
@@ -660,14 +663,9 @@ def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
         course['Days'] = [x.strip() for x in course['Day'].split("/")]
         del course['Day']
 
-        if not first:
-            json_file.write(',\n')
-        first = False
+        data[zoom_series_id] = course
 
-        json_file.write("\"%s\":" % (zoom_series_id))
-        json.dump(course, json_file)
-
-    json_file.write("}")
+    json.dump(data, json_file)
 
     csv_file.close()
     json_file.close()
