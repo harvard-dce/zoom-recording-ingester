@@ -631,14 +631,12 @@ def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
     csv_file = open(csv_name, "r")
     json_file = open(json_name, "w")
 
-    fieldnames = tuple(csv_file.readline().split(',')[:-1])
-
-    reader = csv.DictReader(csv_file, fieldnames)
+    reader = csv.DictReader(csv_file)
 
     data = {}
 
     for row in reader:
-        del row[None]
+        del row[""]
 
         # filter out empty fields for dynamo
         course = {}
@@ -665,7 +663,7 @@ def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
 
         data[zoom_series_id] = course
 
-    json.dump(data, json_file)
+    json.dump(data, json_file, indent=2)
 
     csv_file.close()
     json_file.close()
