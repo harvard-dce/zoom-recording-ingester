@@ -539,7 +539,7 @@ Resources:
       FilterPattern: "{ $.message.payload.status = \"RECORDING_MEETING_COMPLETED\" }"
       MetricTransformations:
       - MetricValue: '1'
-        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "MeetingRecordingCompleted"
 
   MeetingStartedMetricFilter:
@@ -549,7 +549,7 @@ Resources:
       FilterPattern: "{ $.message.payload.status = \"STARTED\" }"
       MetricTransformations:
       - MetricValue: '1'
-        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "MeetingStarted"
 
   MeetingEndedMetricFilter:
@@ -559,7 +559,7 @@ Resources:
       FilterPattern: "{ $.message.payload.status = \"ENDED\" }"
       MetricTransformations:
       - MetricValue: '1'
-        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "MeetingEnded"
 
   RecordingDurationMetricFilter:
@@ -569,7 +569,7 @@ Resources:
       FilterPattern: "{$.message.duration > 0}"
       MetricTransformations:
       - MetricValue: "$.message.duration"
-        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "RecordingDuration"
 
   SkippedForDurationMetricFilter:
@@ -579,7 +579,7 @@ Resources:
       FilterPattern: "Skipping"
       MetricTransformations:
       - MetricValue: "1"
-        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "SkippedForDuration"
 
   WorkflowInitiatedMetricFilter:
@@ -589,7 +589,7 @@ Resources:
       FilterPattern: "Workflow"
       MetricTransformations:
       - MetricValue: "1"
-        MetricNamespace: "ZoomIngesterLogMetrics"
+        MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "WorkflowsInitiated"
 
   ClassScheduleDynamoTable:
@@ -605,5 +605,3 @@ Resources:
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
-
-
