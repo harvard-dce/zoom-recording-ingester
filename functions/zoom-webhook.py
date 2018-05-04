@@ -98,10 +98,20 @@ def parse_payload(event_body):
                 raise BadWebhookData("Failed to parse payload 'content' value. {}".format(e))
         else:
             raise BadWebhookData("payload missing 'content' value")
-    elif 'status' not in payload:
-        raise BadWebhookData("payload missing 'status' value")
+    elif 'status' in payload:
+        return payload
     else:
-        logger.info("Got new-style payload")
+        try:
+            payload = json.loads(event_body)
+            if payload['event'] == 'recording_completed':
+                payload['status'] = 'RECORDING_MEETING_COMPLETED'
+                payload['uuid'] = payload['payload']['meeting']['uuid']
+                payload['host_id'] = payload['payload']['meeting']['host_id']
+            else:
+                payload['status'] = payload['event']
+                return payload
+        except Exception as e:
+            raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
     return payload
 
