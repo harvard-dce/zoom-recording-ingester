@@ -2,6 +2,7 @@ import json
 import boto3
 import jmespath
 import time
+import csv
 from datetime import datetime
 from urllib.parse import urlencode
 from invoke import task, Collection
@@ -13,6 +14,7 @@ from os.path import join, dirname, exists
 load_dotenv(join(dirname(__file__), '.env'))
 
 AWS_PROFILE = env('AWS_PROFILE')
+STACK_NAME = env('STACK_NAME')
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
@@ -251,6 +253,15 @@ def view_downloads(ctx, limit=20):
     _view_messages("downloads", limit=limit)
 
 
+@task
+def import_schedule(ctx, csv_name="classes.csv", year=None, semester=None):
+    """
+        Csv to dynamo. Optional: --csv_name, --year, --semester
+    """
+    _schedule_csv_to_json(csv_name, "classes.json", year=year, semester=semester)
+    _schedule_json_to_dynamo("classes.json")
+
+
 ns = Collection()
 ns.add_task(create_code_bucket)
 ns.add_task(test)
@@ -300,6 +311,10 @@ dlq_ns.add_task(retry_downloads, 'retry-downloads')
 dlq_ns.add_task(view_uploads, 'view-uploads')
 dlq_ns.add_task(view_downloads, 'view-downloads')
 ns.add_collection(dlq_ns)
+
+schedule_ns = Collection('schedule')
+schedule_ns.add_task(import_schedule, 'import')
+ns.add_collection(schedule_ns)
 
 ###############################################################################
 
@@ -405,7 +420,7 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", False),
-                getenv("LOCAL_TIMEZONE"),
+                getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id
                 )
@@ -596,3 +611,76 @@ def _view_messages(queue_type, limit):
             if 'MessageAttributes' in message and 'FailedReason' in message['MessageAttributes']:
                 print("{}: {}".format('ReportedError', message['MessageAttributes']['FailedReason']['StringValue']))
             print()
+
+
+def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
+    if year is None:
+        year = str(datetime.now().year)
+    if semester is None:
+        month = datetime.now().month
+        if month < 6:
+            semester = "02"
+        elif month < 9:
+            semester = "03"
+        else:
+            semester = "01"
+    elif semester not in ["01", "02", "03"]:
+        print("Semester must be '01' for fall. '02' for winter, or '03' for summer.")
+        return
+
+    csv_file = open(csv_name, "r")
+    json_file = open(json_name, "w")
+
+    reader = csv.DictReader(csv_file)
+
+    data = {}
+
+    for row in reader:
+        del row[""]
+
+        # filter out empty fields for dynamo
+        course = {}
+        for key, val in row.items():
+            if val != '':
+                course[key] = val
+
+        if 'https://zoom.us' not in row['Links']:
+            # not a zoom course (probably Adobe)
+            continue
+        else:
+            zoom_series_id = row['Links'].split('/')[-1]
+
+        opencast_series_id = year + semester + row["CRN"].strip()
+        opencast_subject = row["Subject"].strip()\
+                           + (" S-" if semester == "03" else " E-") \
+                           + row["Course Number"].strip()
+
+        course['opencast_series_id'] = opencast_series_id
+        course['opencast_subject'] = opencast_subject
+        course['zoom_series_id'] = zoom_series_id
+        course['Days'] = [x.strip() for x in course['Day'].split("/")]
+        del course['Day']
+
+        data[zoom_series_id] = course
+
+    json.dump(data, json_file, indent=2)
+
+    csv_file.close()
+    json_file.close()
+
+
+def _schedule_json_to_dynamo(json_name):
+
+    dynamodb = boto3.resource('dynamodb')
+
+    table_name = STACK_NAME + '-schedule'
+    table = dynamodb.Table(table_name)
+
+    file = open(json_name, "r")
+
+    classes = json.load(file)
+
+    for item in classes.values():
+        table.put_item(Item=item)
+
+    file.close()
