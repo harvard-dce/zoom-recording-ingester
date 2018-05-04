@@ -12,6 +12,9 @@ LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
 
 webhook = import_module('zoom-webhook')
 
+FROZEN_TIME = datetime.strftime(
+                datetime(2018, 1, 20, 3, 44, 00, 000000).astimezone(timezone(LOCAL_TIME_ZONE)), '%Y-%m-%dT%H:%M:%SZ')
+
 
 def test_missing_body(handler):
     res = handler(webhook, {})
@@ -42,7 +45,7 @@ def test_parse_payload():
         ('type=SOME_TYPE&content={"uuid": "1234abcd", "host_id": "xyz789"}',
          {'status': 'SOME_TYPE', 'uuid': '1234abcd', 'host_id': 'xyz789'}, None),
         ('uuid=abcd1234', webhook.BadWebhookData,
-         "payload missing 'status'"),
+         "Unrecognized payload format."),
         ('uuid=abcd1234&status=SOME_STATUS&host_id=xyz789',
          {'uuid': 'abcd1234', 'status': 'SOME_STATUS', 'host_id': 'xyz789'}, None)
     ]
@@ -57,7 +60,33 @@ def test_parse_payload():
             assert webhook.parse_payload(payload) == expected
 
 
-@freeze_time("2018-01-20T03:44:00Z")
+@freeze_time(FROZEN_TIME)
+def test_v2_webhook(handler, mocker):
+
+    recording_event = {'body': "{\"payload\":{\"meeting\": {\"uuid\":\"/abc==\", \"host_id\":\"host123\"}},"
+                               "\"event\":\"recording_completed\"}"}
+
+    other_event_type = {'body': "{\"payload\":{\"meeting\": {\"uuid\":\"/abc==\", \"host_id\":\"host123\"}},"
+                                "\"event\":\"other_event_type\"}"}
+
+    bad_event = {'body': "{,"}
+
+    mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
+
+    resp = handler(webhook, recording_event)
+    mock_sqs_send.assert_called_once_with(
+        {'uuid': '/abc==', 'correlation_id': '12345-abcde', 'host_id': 'host123', 'received_time': FROZEN_TIME}
+    )
+    assert resp['statusCode'] == 200
+
+    resp = handler(webhook, other_event_type)
+    assert resp['statusCode'] == 204
+
+    resp = handler(webhook, bad_event)
+    assert resp['statusCode'] == 400
+
+
+@freeze_time(FROZEN_TIME)
 def test_handler_happy_trail(handler, mocker):
 
     event = {
@@ -71,10 +100,7 @@ def test_handler_happy_trail(handler, mocker):
         'uuid': 'abcd-1234',
         'correlation_id': '12345-abcde',
         'host_id': 1,
-        'received_time':
-            datetime.strftime(
-                datetime(2018, 1, 20, 3, 44, 00, 000000).astimezone(timezone(LOCAL_TIME_ZONE)),
-                '%Y-%m-%dT%H:%M:%SZ')
+        'received_time': FROZEN_TIME
     }
 
     mock_sqs_send.assert_called_once_with(expected)
