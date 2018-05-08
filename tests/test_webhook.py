@@ -9,11 +9,12 @@ from pytz import timezone
 from datetime import datetime
 import os
 LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
+tz = timezone(LOCAL_TIME_ZONE)
 
 webhook = import_module('zoom-webhook')
 
-FROZEN_TIME = datetime.strftime(
-                datetime(2018, 1, 20, 3, 44, 00, 000000).astimezone(timezone(LOCAL_TIME_ZONE)), '%Y-%m-%dT%H:%M:%SZ')
+FROZEN_TIME = datetime.strftime(datetime(2018, 1, 20, 3, 44, 00, 000000),
+                                '%Y-%m-%dT%H:%M:%SZ')
 
 
 def test_missing_body(handler):
