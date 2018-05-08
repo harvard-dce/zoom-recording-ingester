@@ -1,0 +1,19 @@
+version: 0.1
+
+phases:
+  install:
+    commands:
+      - apt-get update
+      - apt-get -y install zip unzip
+      - pip install --upgrade pip
+      - pip install -r requirements.txt
+  pre_build:
+    commands:
+      - invoke test
+  build:
+    commands:
+      - invoke package.all
+artifacts:
+  files:
+    - functions/*.zip
+  discard-paths: yes

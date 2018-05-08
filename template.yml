@@ -36,6 +36,48 @@ Conditions:
 
 Resources:
 
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${AWS::StackName}-codebuild"
+      Source:
+        Type: GITHUB
+        Location: "https://github.com/harvard-dce/zoom-recording-ingester.git"
+        GitCloneDepth: 1
+      Environment:
+        Type: "LINUX_CONTAINER"
+        ComputeType: "BUILD_GENERAL1_SMALL"
+        Image: "aws/codebuild/python:3.5.2"
+      Artifacts:
+        Type: S3
+        Location: !Ref LambdaCodeBucket
+        Name: '/'
+      BadgeEnabled: 'true'
+      ServiceRole: !Ref CodeBuildRole
+      TimeoutInMinutes: 5
+
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "codebuild-${AWS::StackName}-service-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+      Policies:
+        - PolicyName: !Sub "${AWS::StackName}-codebuild-policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                - 'logs:*'
+                - 's3:*'
+                Resource: '*'
+
   ZoomVideosBucket:
     Type: AWS::S3::Bucket
     Properties:
