@@ -75,7 +75,10 @@ def test_v2_webhook(handler, mocker):
 
     resp = handler(webhook, recording_event)
     mock_sqs_send.assert_called_once_with(
-        {'uuid': '/abc==', 'correlation_id': '12345-abcde', 'host_id': 'host123', 'received_time': FROZEN_TIME}
+        {'uuid': '/abc==',
+         'host_id': 'host123',
+         'correlation_id': '12345-abcde',
+         'received_time': FROZEN_TIME}
     )
     assert resp['statusCode'] == 200
 
@@ -98,8 +101,8 @@ def test_handler_happy_trail(handler, mocker):
 
     expected = {
         'uuid': 'abcd-1234',
-        'correlation_id': '12345-abcde',
         'host_id': 1,
+        'correlation_id': '12345-abcde',
         'received_time': FROZEN_TIME
     }
 
