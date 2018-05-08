@@ -36,6 +36,14 @@ def create_code_bucket(ctx):
 
 
 @task
+def build(ctx, branch="master"):
+    """
+    Optional: --branch, default is "master"
+    """
+    __start_build(ctx, branch=branch)
+
+
+@task
 def package_all(ctx):
     """
     Create zip packages w/ lambda function code + dependencies and upload to s3
@@ -49,25 +57,21 @@ def package_all(ctx):
 @task
 def package_webhook(ctx):
     __package_function(ctx, 'zoom-webhook')
-    __function_to_s3(ctx, 'zoom-webhook')
 
 
 @task
 def package_downloader(ctx):
     __package_function(ctx, 'zoom-downloader')
-    __function_to_s3(ctx, 'zoom-downloader')
 
 
 @task
 def package_uploader(ctx):
     __package_function(ctx, 'zoom-uploader')
-    __function_to_s3(ctx, 'zoom-uploader')
 
 
 @task
 def package_log_notifications(ctx):
     __package_function(ctx, 'zoom-log-notifications')
-    __function_to_s3(ctx, 'zoom-log-notifications')
 
 
 @task
@@ -202,7 +206,7 @@ def debug_on(ctx):
     """
     Enable debug logging in all lambda functions
     """
-    _set_debug(ctx, 1)
+    __set_debug(ctx, 1)
 
 
 @task
@@ -210,7 +214,7 @@ def debug_off(ctx):
     """
     Disable debug logging in all lambda functions
     """
-    _set_debug(ctx, 0)
+    __set_debug(ctx, 0)
 
 
 @task
@@ -224,47 +228,48 @@ def test(ctx):
 @task
 def retry_uploads(ctx, limit=1, uuid=None):
     """
-        Move SQS messages DLQ to source. Optional: --limit (default 1).
+    Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    _move_messages("uploads", limit=limit, uuid=uuid)
+    __move_messages("uploads", limit=limit, uuid=uuid)
 
 
 @task
 def retry_downloads(ctx, limit=1, uuid=None):
     """
-        Move SQS messages DLQ to source. Optional: --limit (default 1).
+    Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    _move_messages("downloads", limit=limit, uuid=uuid)
+    __move_messages("downloads", limit=limit, uuid=uuid)
 
 
 @task
 def view_uploads(ctx, limit=20):
     """
-        View Uploader DLQ. Optional: --limit (default 20).
+    View Uploader DLQ. Optional: --limit (default 20).
     """
-    _view_messages("uploads", limit=limit)
+    __view_messages("uploads", limit=limit)
 
 
 @task
 def view_downloads(ctx, limit=20):
     """
-        View Downloader DLQ. Optional: --limit (default 20).
+    View Downloader DLQ. Optional: --limit (default 20).
     """
-    _view_messages("downloads", limit=limit)
+    __view_messages("downloads", limit=limit)
 
 
 @task
 def import_schedule(ctx, csv_name="classes.csv", year=None, semester=None):
     """
-        Csv to dynamo. Optional: --csv_name, --year, --semester
+    Csv to dynamo. Optional: --csv_name, --year, --semester
     """
-    _schedule_csv_to_json(csv_name, "classes.json", year=year, semester=semester)
-    _schedule_json_to_dynamo("classes.json")
+    __schedule_csv_to_json(csv_name, "classes.json", year=year, semester=semester)
+    __schedule_json_to_dynamo("classes.json")
 
 
 ns = Collection()
 ns.add_task(create_code_bucket)
 ns.add_task(test)
+ns.add_task(build)
 
 package_ns = Collection('package')
 package_ns.add_task(package_all, 'all')
@@ -428,6 +433,11 @@ def __create_or_update(ctx, op):
     ctx.run(cmd)
 
 
+def __start_build(ctx, branch):
+    ctx.run("aws codebuild start-build --project-name {}-codebuild"
+            " --source-version {}".format(STACK_NAME, branch))
+
+
 def __package_function(ctx, func):
     req_file = join(dirname(__file__), 'functions/{}.txt'.format(func))
     build_path = join(dirname(__file__), 'dist/{}'.format(func))
@@ -480,7 +490,7 @@ def __refresh_function(ctx, func):
     ctx.run(cmd, echo=True)
 
 
-def _set_debug(ctx, debug_val):
+def __set_debug(ctx, debug_val):
     for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
         func_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
         cmd = ("aws {} lambda get-function-configuration --output json "
@@ -503,7 +513,7 @@ def _set_debug(ctx, debug_val):
         ctx.run(cmd)
 
 
-def _move_messages(queue_type, limit, uuid=None):
+def __move_messages(queue_type, limit, uuid=None):
     source_name = "{}-{}.fifo".format(env('STACK_NAME'), queue_type)
     dl_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
 
@@ -577,7 +587,7 @@ def _move_messages(queue_type, limit, uuid=None):
         time.sleep(1)
 
 
-def _view_messages(queue_type, limit):
+def __view_messages(queue_type, limit):
     queue_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
 
     sqs = boto3.client('sqs')
@@ -613,7 +623,7 @@ def _view_messages(queue_type, limit):
             print()
 
 
-def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
+def __schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
     if year is None:
         year = str(datetime.now().year)
     if semester is None:
@@ -669,7 +679,7 @@ def _schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
     json_file.close()
 
 
-def _schedule_json_to_dynamo(json_name):
+def __schedule_json_to_dynamo(json_name):
 
     dynamodb = boto3.resource('dynamodb')
 

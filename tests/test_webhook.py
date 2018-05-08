@@ -1,5 +1,6 @@
 import site
 from os.path import dirname, join
+
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 import pytest
@@ -8,12 +9,16 @@ from freezegun import freeze_time
 from pytz import timezone
 from datetime import datetime
 import os
+
 LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
 
 webhook = import_module('zoom-webhook')
 
+tz = timezone(LOCAL_TIME_ZONE)
+
 FROZEN_TIME = datetime.strftime(
-                datetime(2018, 1, 20, 3, 44, 00, 000000).astimezone(timezone(LOCAL_TIME_ZONE)), '%Y-%m-%dT%H:%M:%SZ')
+    tz.localize(datetime(2018, 1, 20, 3, 44, 00, 000000)),
+    '%Y-%m-%dT%H:%M:%SZ')
 
 
 def test_missing_body(handler):
@@ -32,7 +37,6 @@ def test_started_event(handler):
 
 
 def test_parse_payload():
-
     payloads = [
         ('', webhook.BadWebhookData, 'bad query field'),
         ('foo&bar&baz', webhook.BadWebhookData, 'bad query field'),
@@ -62,7 +66,6 @@ def test_parse_payload():
 
 @freeze_time(FROZEN_TIME)
 def test_v2_webhook(handler, mocker):
-
     recording_event = {'body': "{\"payload\":{\"meeting\": {\"uuid\":\"/abc==\", \"host_id\":\"host123\"}},"
                                "\"event\":\"recording_completed\"}"}
 
@@ -75,7 +78,10 @@ def test_v2_webhook(handler, mocker):
 
     resp = handler(webhook, recording_event)
     mock_sqs_send.assert_called_once_with(
-        {'uuid': '/abc==', 'correlation_id': '12345-abcde', 'host_id': 'host123', 'received_time': FROZEN_TIME}
+        {'uuid': '/abc==',
+         'correlation_id': '12345-abcde',
+         'host_id': 'host123',
+         'received_time': FROZEN_TIME}
     )
     assert resp['statusCode'] == 200
 
@@ -88,7 +94,6 @@ def test_v2_webhook(handler, mocker):
 
 @freeze_time(FROZEN_TIME)
 def test_handler_happy_trail(handler, mocker):
-
     event = {
         'body': 'type=RECORDING_MEETING_COMPLETED&content=%7B%22uuid%22%3A%20%22abcd-1234%22%2C%20%22host_id%22%3A%201%7D'
     }
@@ -105,6 +110,3 @@ def test_handler_happy_trail(handler, mocker):
 
     mock_sqs_send.assert_called_once_with(expected)
     assert resp['statusCode'] == 200
-
-
-
