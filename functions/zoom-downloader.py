@@ -87,12 +87,6 @@ def handler(event, context):
         logger.info("Moved message to DLS and deleted message from source queue.")
         raise
 
-    # experiment to save some unnecessary work
-    if recording_data['duration'] < 2:
-        logger.info("Duration under 2 minutes. Skipping.")
-        download_message.delete()
-        return
-
     chronological_files = sorted(recording_data['recording_files'], key=itemgetter('recording_start'))
     logger.info("downloading {} files".format(len(chronological_files)))
 
