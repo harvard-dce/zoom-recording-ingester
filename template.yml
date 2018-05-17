@@ -53,30 +53,8 @@ Resources:
         Location: !Ref LambdaCodeBucket
         Name: '/'
       BadgeEnabled: 'true'
-      ServiceRole: !Ref CodeBuildRole
+      ServiceRole: !Ref ZoomIngesterRole
       TimeoutInMinutes: 5
-
-  CodeBuildRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "codebuild-${AWS::StackName}-service-role"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-        - Action: sts:AssumeRole
-          Effect: Allow
-          Principal:
-            Service: codebuild.amazonaws.com
-      Policies:
-        - PolicyName: !Sub "${AWS::StackName}-codebuild-policy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                - 'logs:*'
-                - 's3:*'
-                Resource: '*'
 
   ZoomVideosBucket:
     Type: AWS::S3::Bucket
@@ -143,6 +121,10 @@ Resources:
           Effect: Allow
           Principal:
             Service: lambda.amazonaws.com
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
       Policies:
@@ -165,6 +147,14 @@ Resources:
                 # Permissions to perform actions on objects within the S3 bucket needed in addition
                 # to permissions to perform actions on the S3 bucket.
                 Resource: !Join ['', [!GetAtt [ZoomVideosBucket, Arn], "/*"]]
+              - Effect: "Allow"
+                Action:
+                  - "s3:*"
+                Resource: !Join ['', ["arn:aws:s3:::", !Ref LambdaCodeBucket]]
+              - Effect: "Allow"
+                Action:
+                  - "s3:*"
+                Resource: !Join ['', ["arn:aws:s3:::", !Ref LambdaCodeBucket, "/*"]]
               - Effect: "Allow"
                 Action:
                   - "sqs:*"
