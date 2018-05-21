@@ -3,6 +3,7 @@ import boto3
 import jmespath
 import time
 import csv
+import shutil
 from datetime import datetime
 from urllib.parse import urlencode
 from invoke import task, Collection
@@ -15,10 +16,32 @@ load_dotenv(join(dirname(__file__), '.env'))
 
 AWS_PROFILE = env('AWS_PROFILE')
 STACK_NAME = env('STACK_NAME')
+PROD_IDENTIFIER = "prod"
+NONINTERACTIVE = env('NONINTERACTIVE')
+
+FUNCTION_NAMES = [
+    'zoom-webhook',
+    'zoom-downloader',
+    'zoom-uploader',
+    'zoom-log-notifications'
+]
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
 
+
+@task
+def production_failsafe(ctx):
+    """
+    This is not a standalone task and should not be added to any of the task collections.
+    It is meant to be prepended to the execution of other tasks to force a confirmation
+    when a task is being executed that could have an impact on a production stack
+    """
+    if not NONINTERACTIVE and PROD_IDENTIFIER in STACK_NAME.lower():
+        print("You are about to run this task on a production system")
+        ok = input('are you sure? [y/N] ').lower().strip().startswith('y')
+        if not ok:
+            raise Exit("Aborting")
 
 @task
 def create_code_bucket(ctx):
@@ -35,88 +58,87 @@ def create_code_bucket(ctx):
         ctx.run(cmd)
 
 
-@task
-def build(ctx, branch="master"):
+@task(pre=[production_failsafe],
+      help={'revision': 'tag or branch name; default is "master"'})
+def codebuild(ctx, revision="master"):
     """
-    Optional: --branch, default is "master"
+    Execute a codebuild run. Optional: --revision=[tag or branch]
     """
-    __start_build(ctx, branch=branch)
+    cmd = ("aws {} codebuild start-build "
+           "--project-name {}-codebuild --source-version {} "
+           " --environment-variables-override"
+           " name='STACK_NAME',value={},type=PLAINTEXT"
+           " name='LAMBDA_RELEASE_ALIAS',value={},type=PLAINTEXT"
+           " name='NONINTERACTIVE',value=1" ) \
+        .format(
+            profile_arg(),
+            STACK_NAME,
+            revision,
+            STACK_NAME,
+            getenv("LAMBDA_RELEASE_ALIAS")
+            )
+    ctx.run(cmd)
 
 
-@task
-def package_all(ctx):
+@task(help={'function': 'name of a specific function'})
+def package(ctx, function=None, upload_to_s3=False):
     """
-    Create zip packages w/ lambda function code + dependencies and upload to s3
+    Package function(s) + deps into a zip file.
     """
-    package_webhook(ctx)
-    package_downloader(ctx)
-    package_uploader(ctx)
-    package_log_notifications(ctx)
+    if function is not None:
+        functions = [function]
+    else:
+        functions = FUNCTION_NAMES
+
+    for func in functions:
+        __build_function(ctx, func, upload_to_s3)
 
 
-@task
-def package_webhook(ctx):
-    __package_function(ctx, 'zoom-webhook')
-
-
-@task
-def package_downloader(ctx):
-    __package_function(ctx, 'zoom-downloader')
-
-
-@task
-def package_uploader(ctx):
-    __package_function(ctx, 'zoom-uploader')
-
-
-@task
-def package_log_notifications(ctx):
-    __package_function(ctx, 'zoom-log-notifications')
-
-
-@task
-def update_all(ctx):
+@task(pre=[production_failsafe],
+      help={'function': 'name of specific function'})
+def deploy(ctx, function=None, do_release=False):
     """
     Package, upload and register new code for all lambda functions
     """
-    update_webhook(ctx)
-    update_downloader(ctx)
-    update_uploader(ctx)
-    update_log_notifications(ctx)
+    if function is not None:
+        functions = [function]
+    else:
+        functions = FUNCTION_NAMES
+
+    for  func in functions:
+        __build_function(ctx, func)
+        __update_function(ctx, func)
+        if do_release:
+            release(ctx, func)
 
 
-@task
-def update_webhook(ctx):
-    package_webhook(ctx)
-    __update_function(ctx, 'zoom-webhook')
+@task(pre=[production_failsafe],
+      help={'function': 'name of specific function'})
+def release(ctx, function=None, description=""):
+
+    if function is not None:
+        functions = [function]
+    else:
+        functions = FUNCTION_NAMES
+
+    for func in functions:
+        new_version = __publish_version(ctx, func, description)
+        __set_release_alias(ctx, func, "update", new_version)
 
 
-@task
-def update_downloader(ctx):
-    package_downloader(ctx)
-    __update_function(ctx, 'zoom-downloader')
-
-
-@task
-def update_uploader(ctx):
-    package_uploader(ctx)
-    __update_function(ctx, 'zoom-uploader')
-
-
-@task
+@task(help={'uuid': 'meeting instance uuid', 'host_id': 'meeting host id'})
 def exec_webhook(ctx, uuid, host_id, status=None):
     """
-    Positional arguments: uuid, host_id
+    Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
 
     if status is None:
         status = 'RECORDING_MEETING_COMPLETED'
 
-    stack_name = getenv('STACK_NAME')
     apig = boto3.client('apigateway')
 
     apis = apig.get_rest_apis()
-    api_id = jmespath.search("items[?name=='{}'].id | [0]".format(stack_name), apis)
+    api_id = jmespath.search("items[?name=='{}'].id | [0]".format(STACK_NAME), apis)
 
     api_resources = apig.get_resources(restApiId=api_id)
     resource_id = jmespath.search("items[?pathPart=='new_recording'].id | [0]", api_resources)
@@ -133,21 +155,20 @@ def exec_webhook(ctx, uuid, host_id, status=None):
     print(json.dumps(resp, indent=True))
 
 
-@task
-def update_log_notifications(ctx):
-    package_log_notifications(ctx)
-    __update_function(ctx, 'zoom-log-notifications')
-
-
-@task
+@task(pre=[production_failsafe])
 def create(ctx):
     """
     Build the Cloudformation stack identified by $STACK_NAME
     """
-    __create_or_update(ctx, "create")
+#    if stack_exists(ctx):
+#        raise Exit("Stack already exists!")
+#
+#    package(ctx, upload_to_s3=True)
+#    __create_or_update(ctx, "create")
+    __set_initial_function_alias(ctx)
 
 
-@task
+@task(pre=[production_failsafe])
 def update(ctx):
     """
     Update the Cloudformation stack identified by $STACK_NAME
@@ -155,37 +176,19 @@ def update(ctx):
     __create_or_update(ctx, "update")
 
 
-@task
-def refresh_all(ctx):
-    refresh_webhook(ctx)
-    refresh_downloader(ctx)
-    refresh_uploader(ctx)
-
-
-@task
-def refresh_webhook(ctx):
-    __refresh_function(ctx, 'zoom-webhook')
-
-
-@task
-def refresh_downloader(ctx):
-    __refresh_function(ctx, 'zoom-downloader')
-
-
-@task
-def refresh_uploader(ctx):
-    __refresh_function(ctx, 'zoom-uploader')
-
-
-@task
+@task(pre=[production_failsafe])
 def delete(ctx):
     """
     Delete the Cloudformation stack identified by $STACK_NAME
     """
+    if not stack_exists(ctx):
+        raise Exit("Stack doesn't exist!")
+
     cmd = ("aws {} cloudformation delete-stack "
-           "--stack-name {}").format(profile_arg(), getenv("STACK_NAME"))
-    if input('are you sure? [y/N] ').lower().strip().startswith('y'):
+           "--stack-name {}").format(profile_arg(), STACK_NAME)
+    if input('are you really, really sure? [y/N] ').lower().strip().startswith('y'):
         ctx.run(cmd, echo=True)
+        __wait_for(ctx, "delete")
     else:
         print("not deleting stack")
 
@@ -197,11 +200,11 @@ def status(ctx):
     """
     cmd = ("aws {} cloudformation describe-stacks "
            "--stack-name {} --output table"
-           .format(profile_arg(), getenv('STACK_NAME')))
+           .format(profile_arg(), STACK_NAME))
     ctx.run(cmd)
 
 
-@task
+@task(pre=[production_failsafe])
 def debug_on(ctx):
     """
     Enable debug logging in all lambda functions
@@ -209,7 +212,7 @@ def debug_on(ctx):
     __set_debug(ctx, 1)
 
 
-@task
+@task(pre=[production_failsafe])
 def debug_off(ctx):
     """
     Disable debug logging in all lambda functions
@@ -217,7 +220,7 @@ def debug_off(ctx):
     __set_debug(ctx, 0)
 
 
-@task
+@task(pre=[production_failsafe])
 def test(ctx):
     """
     Execute the pytest tests
@@ -225,7 +228,7 @@ def test(ctx):
     ctx.run('py.test --cov-report term-missing --cov=functions tests')
 
 
-@task
+@task(pre=[production_failsafe])
 def retry_uploads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
@@ -233,7 +236,7 @@ def retry_uploads(ctx, limit=1, uuid=None):
     __move_messages("uploads", limit=limit, uuid=uuid)
 
 
-@task
+@task(pre=[production_failsafe])
 def retry_downloads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
@@ -241,7 +244,7 @@ def retry_downloads(ctx, limit=1, uuid=None):
     __move_messages("downloads", limit=limit, uuid=uuid)
 
 
-@task
+@task(pre=[production_failsafe])
 def view_uploads(ctx, limit=20):
     """
     View Uploader DLQ. Optional: --limit (default 20).
@@ -249,7 +252,7 @@ def view_uploads(ctx, limit=20):
     __view_messages("uploads", limit=limit)
 
 
-@task
+@task(pre=[production_failsafe])
 def view_downloads(ctx, limit=20):
     """
     View Downloader DLQ. Optional: --limit (default 20).
@@ -257,7 +260,7 @@ def view_downloads(ctx, limit=20):
     __view_messages("downloads", limit=limit)
 
 
-@task
+@task(pre=[production_failsafe])
 def import_schedule(ctx, csv_name="classes.csv", year=None, semester=None):
     """
     Csv to dynamo. Optional: --csv_name, --year, --semester
@@ -269,34 +272,14 @@ def import_schedule(ctx, csv_name="classes.csv", year=None, semester=None):
 ns = Collection()
 ns.add_task(create_code_bucket)
 ns.add_task(test)
-ns.add_task(build)
-
-package_ns = Collection('package')
-package_ns.add_task(package_all, 'all')
-package_ns.add_task(package_webhook, 'webhook')
-package_ns.add_task(package_downloader, 'downloader')
-package_ns.add_task(package_uploader, 'uploader')
-package_ns.add_task(package_log_notifications, 'log-notifications')
-ns.add_collection(package_ns)
-
-update_ns = Collection('update')
-update_ns.add_task(update_all, 'all')
-update_ns.add_task(update_webhook, 'webhook')
-update_ns.add_task(update_downloader, 'downloader')
-update_ns.add_task(update_uploader, 'uploader')
-update_ns.add_task(update_log_notifications, 'log-notifications')
-ns.add_collection(update_ns)
+ns.add_task(codebuild)
+ns.add_task(package)
+ns.add_task(deploy)
+ns.add_task(release)
 
 exec_ns = Collection('exec')
 exec_ns.add_task(exec_webhook, 'webhook')
 ns.add_collection(exec_ns)
-
-refresh_ns = Collection('refresh')
-refresh_ns.add_task(refresh_all, 'all')
-refresh_ns.add_task(refresh_webhook, 'webhook')
-refresh_ns.add_task(refresh_downloader, 'downloader')
-refresh_ns.add_task(refresh_uploader, 'uploader')
-ns.add_collection(refresh_ns)
 
 debug_ns = Collection('debug')
 debug_ns.add_task(debug_on, 'on')
@@ -338,10 +321,11 @@ def profile_arg():
 
 
 def stack_tags():
-    tags = getenv("STACK_TAGS")
-    if tags is not None:
-        return "--tags {}".format(tags)
-    return ""
+    tags = "Key=cfn-stack,Value={}".format(STACK_NAME)
+    extra_tags = getenv("STACK_TAGS")
+    if extra_tags is not None:
+        tags += " " + extra_tags
+    return "--tags {}".format(tags)
 
 
 def vpc_components(ctx):
@@ -376,13 +360,20 @@ def vpc_components(ctx):
     return subnet_id, sg_id
 
 
+def stack_exists(ctx):
+    cmd = "aws {} cloudformation describe-stacks --stack-name {}" \
+        .format(profile_arg(), STACK_NAME)
+    res = ctx.run(cmd, hide=True, warn=True, echo=False)
+    return res.exited == 0
+
+
 def __create_or_update(ctx, op):
 
     template_path = join(dirname(__file__), 'template.yml')
     lambda_objects = {}
 
     for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
-        zip_path = join(dirname(__file__), 'functions', func + '.zip')
+        zip_path = join(dirname(__file__), 'dist', func + '.zip')
         if not exists(zip_path):
             print("No zip found for {}!".format(func))
             print("Did you run the package* commands?")
@@ -409,11 +400,12 @@ def __create_or_update(ctx, op):
            "ParameterKey=LocalTimeZone,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
+           "ParameterKey=LambdaReleaseAlias,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
                 stack_tags(),
-                getenv("STACK_NAME"),
+                STACK_NAME,
                 template_path,
                 getenv('LAMBDA_CODE_BUCKET'),
                 getenv("NOTIFICATION_EMAIL"),
@@ -427,21 +419,65 @@ def __create_or_update(ctx, op):
                 getenv("DEFAULT_SERIES_ID", False),
                 getenv("LOCAL_TIME_ZONE"),
                 sg_id,
-                subnet_id
+                subnet_id,
+                getenv("LAMBDA_RELEASE_ALIAS")
                 )
     print(cmd)
-    ctx.run(cmd)
+    res = ctx.run(cmd)
+
+    if res.exited == 0:
+        __wait_for(ctx, op)
 
 
-def __start_build(ctx, branch):
-    ctx.run("aws codebuild start-build --project-name {}-codebuild"
-            " --source-version {}".format(STACK_NAME, branch))
+def __wait_for(ctx, op):
+    wait_cmd = ("aws {} cloudformation wait stack-{}-complete "
+                "--stack-name {}").format(profile_arg(), op, STACK_NAME)
+    ctx.run(wait_cmd)
 
 
-def __package_function(ctx, func):
+def __set_initial_function_alias(ctx):
+    for func in FUNCTION_NAMES:
+        initial_version = __publish_version(ctx, func)
+        __set_release_alias(ctx, func, "create", initial_version)
+
+
+def __publish_and_update_alias(ctx, func):
+    version = __publish_version(ctx, func)
+    __set_release_alias(func, "update", version)
+
+
+def __set_release_alias(ctx, func, update_or_create, version):
+        lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+        alias_cmd = ("aws {} lambda {}-alias --function-name {} "
+               "--name {} --function-version '{}'") \
+            .format(
+                profile_arg(),
+                update_or_create,
+                lambda_function_name,
+                getenv("LAMBDA_RELEASE_ALIAS"),
+                version
+            )
+        ctx.run(alias_cmd)
+
+
+def __publish_version(ctx, func, description=""):
+
+    lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+    version_cmd = ("aws {} lambda publish-version --function-name {} "
+                   "--description '{}' --query 'Version'") \
+        .format(profile_arg(), lambda_function_name, description)
+    res = ctx.run(version_cmd, hide=1)
+    return int(res.stdout.replace('"', ''))
+
+
+def __build_function(ctx, func, upload_to_s3=False):
     req_file = join(dirname(__file__), 'functions/{}.txt'.format(func))
+
+    zip_path = join(dirname(__file__), 'dist/{}.zip'.format(func))
+
     build_path = join(dirname(__file__), 'dist/{}'.format(func))
-    zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
+    if exists(build_path):
+        shutil.rmtree(build_path)
 
     if exists(req_file):
         ctx.run("pip install -U -r {} -t {}".format(req_file, build_path))
@@ -455,44 +491,46 @@ def __package_function(ctx, func):
         except FileExistsError:
             pass
 
+    # include the ffprobe binary with the downloader function package
+    if func == 'zoom-downloader':
+        ffprobe_path = join(dirname(__file__), 'bin/ffprobe')
+        ffprobe_dist_path = join(build_path, 'ffprobe')
+        try:
+            symlink(ffprobe_path, ffprobe_dist_path)
+        except FileExistsError:
+            pass
+
     with ctx.cd(build_path):
         ctx.run("zip -r {} .".format(zip_path))
 
-
-def __function_to_s3(ctx, func):
-    zip_path = join(dirname(__file__), 'functions/{}.zip'.format(func))
-    ctx.run("aws {} s3 cp {} s3://{}".format(
-        profile_arg(),
-        zip_path,
-        getenv("LAMBDA_CODE_BUCKET"))
-    )
+    if upload_to_s3:
+        ctx.run("aws {} s3 cp {} s3://{}".format(
+            profile_arg(),
+            zip_path,
+            getenv("LAMBDA_CODE_BUCKET"))
+        )
 
 
 def __update_function(ctx, func):
-    lambda_function_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
+    lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+    zip_path = join(dirname(__file__), 'dist', func + '.zip')
+
+    if not exists(zip_path):
+        raise Exit("{} not found!".format(zip_path))
+
     cmd = ("aws {} lambda update-function-code "
-           "--function-name {} --publish --s3-bucket {} --s3-key {}.zip"
+           "--function-name {} --zip-file fileb://{}"
            ).format(
                 profile_arg(),
                 lambda_function_name,
-                getenv('LAMBDA_CODE_BUCKET'),
-                func
+                zip_path
             )
     ctx.run(cmd)
 
 
-def __refresh_function(ctx, func):
-    lambda_function_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
-    now = datetime.utcnow().isoformat()
-    cmd = ("aws {} lambda update-function-configuration "
-           "--function-name {} --description '{}'"
-           ).format(profile_arg(), lambda_function_name, now)
-    ctx.run(cmd, echo=True)
-
-
 def __set_debug(ctx, debug_val):
     for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
-        func_name = "{}-{}-function".format(getenv("STACK_NAME"), func)
+        func_name = "{}-{}-function".format(STACK_NAME, func)
         cmd = ("aws {} lambda get-function-configuration --output json "
                "--function-name {}").format(profile_arg(), func_name)
         res = ctx.run(cmd, hide=1)
@@ -514,8 +552,8 @@ def __set_debug(ctx, debug_val):
 
 
 def __move_messages(queue_type, limit, uuid=None):
-    source_name = "{}-{}.fifo".format(env('STACK_NAME'), queue_type)
-    dl_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
+    source_name = "{}-{}.fifo".format(STACK_NAME, queue_type)
+    dl_name = "{}-{}-deadletter.fifo".format(STACK_NAME, queue_type)
 
     # using the low-level client in order to access the deduplication id in the received message
     # (which is not an attribute of the sqs.resource message object)
@@ -588,7 +626,7 @@ def __move_messages(queue_type, limit, uuid=None):
 
 
 def __view_messages(queue_type, limit):
-    queue_name = "{}-{}-deadletter.fifo".format(env('STACK_NAME'), queue_type)
+    queue_name = "{}-{}-deadletter.fifo".format(STACK_NAME, queue_type)
 
     sqs = boto3.client('sqs')
     queue_url = sqs.get_queue_url(QueueName=queue_name)['QueueUrl']
@@ -694,3 +732,6 @@ def __schedule_json_to_dynamo(json_name):
         table.put_item(Item=item)
 
     file.close()
+
+
+

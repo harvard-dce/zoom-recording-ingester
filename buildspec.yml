@@ -13,8 +13,9 @@ phases:
       - invoke test
   build:
     commands:
-      - invoke package.all
+      - invoke deploy
+      - invoke release --description "$CODEBUILD_SOURCE_VERSION"
 artifacts:
   files:
-    - functions/*.zip
+    - dist/*.zip
   discard-paths: yes
