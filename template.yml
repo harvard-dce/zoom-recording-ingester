@@ -47,7 +47,7 @@ Resources:
       Environment:
         Type: "LINUX_CONTAINER"
         ComputeType: "BUILD_GENERAL1_SMALL"
-        Image: "aws/codebuild/python:3.5.2"
+        Image: "aws/codebuild/eb-python-3.4-amazonlinux-64:2.1.6"
       Artifacts:
         Type: S3
         Location: !Ref LambdaCodeBucket

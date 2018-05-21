@@ -130,7 +130,7 @@ def exec_webhook(ctx, uuid, host_id, status=None):
         httpMethod='POST',
         body=event_body
     )
-    print(resp)
+    print(json.dumps(resp, indent=True))
 
 
 @task

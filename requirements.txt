@@ -11,10 +11,7 @@ boto3
 requests
 requests-mock
 freezegun
-pytz>=2017.3
-setuptools >= 0.8
 
--r functions/common-requirements.txt
 -r functions/zoom-webhook.txt
 -r functions/zoom-downloader.txt
 -r functions/zoom-uploader.txt

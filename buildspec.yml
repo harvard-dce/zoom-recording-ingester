@@ -1,14 +1,15 @@
-version: 0.1
+version: 0.2
 
 phases:
   install:
     commands:
-      - apt-get update
-      - apt-get -y install zip unzip
-      - pip install --upgrade pip
-      - pip install -r requirements.txt
+      - yum install -y python36 python36-devel python36-pip python36-setuptools python36-virtualenv zip unzip
   pre_build:
     commands:
+      - python36 -m virtualenv venv
+      - source venv/bin/activate
+      - pip install -U pip
+      - pip install -r requirements.txt
       - invoke test
   build:
     commands:
