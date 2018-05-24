@@ -296,7 +296,7 @@ Resources:
   ZoomDownloaderEventRulePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ZoomDownloaderFunction
+      FunctionName: !Sub "${ZoomDownloaderFunction.Arn}:${LambdaReleaseAlias}"
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt [ZoomDownloaderEventRule, Arn]
@@ -347,7 +347,7 @@ Resources:
   ZoomUploaderEventRulePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ZoomUploaderFunction
+      FunctionName: !Sub "${ZoomUploaderFunction.Arn}:${LambdaReleaseAlias}"
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt [ZoomUploaderEventRule, Arn]
@@ -543,7 +543,7 @@ Resources:
   ZoomNewLogGroupEventRulePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ZoomLogNotificationsFunction
+      FunctionName: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt [ZoomNewLogGroupEventRule, Arn]
