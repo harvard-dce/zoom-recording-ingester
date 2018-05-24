@@ -11,6 +11,7 @@ boto3
 requests
 requests-mock
 freezegun
+tabulate
 
 -r functions/zoom-webhook.txt
 -r functions/zoom-downloader.txt

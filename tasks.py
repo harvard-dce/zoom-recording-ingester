@@ -11,6 +11,7 @@ from invoke.exceptions import Exit
 from os import symlink, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists
+from tabulate import tabulate
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -114,7 +115,7 @@ def deploy(ctx, function=None, do_release=False):
 
 @task(pre=[production_failsafe],
       help={'function': 'name of specific function'})
-def release(ctx, function=None, description=""):
+def release(ctx, function=None, description=None):
 
     if function is not None:
         functions = [function]
@@ -123,7 +124,7 @@ def release(ctx, function=None, description=""):
 
     for func in functions:
         new_version = __publish_version(ctx, func, description)
-        __set_release_alias(ctx, func, "update", new_version)
+        __set_release_alias(ctx, func, "update", new_version, description)
 
 
 @task(help={'uuid': 'meeting instance uuid', 'host_id': 'meeting host id'})
@@ -160,11 +161,11 @@ def create(ctx):
     """
     Build the Cloudformation stack identified by $STACK_NAME
     """
-#    if stack_exists(ctx):
-#        raise Exit("Stack already exists!")
-#
-#    package(ctx, upload_to_s3=True)
-#    __create_or_update(ctx, "create")
+    if stack_exists(ctx):
+        raise Exit("Stack already exists!")
+
+    package(ctx, upload_to_s3=True)
+    __create_or_update(ctx, "create")
     __set_initial_function_alias(ctx)
 
 
@@ -198,10 +199,8 @@ def status(ctx):
     """
     Show table of cloudformation stack details
     """
-    cmd = ("aws {} cloudformation describe-stacks "
-           "--stack-name {} --output table"
-           .format(profile_arg(), STACK_NAME))
-    ctx.run(cmd)
+    __show_stack_status(ctx)
+    __show_function_status(ctx)
 
 
 @task(pre=[production_failsafe])
@@ -446,23 +445,29 @@ def __publish_and_update_alias(ctx, func):
     __set_release_alias(func, "update", version)
 
 
-def __set_release_alias(ctx, func, update_or_create, version):
+def __set_release_alias(ctx, func, update_or_create, version, description):
         lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+        if description is None:
+            description = "''"
         alias_cmd = ("aws {} lambda {}-alias --function-name {} "
-               "--name {} --function-version '{}'") \
+               "--name {} --function-version '{}' "
+               "--description {}") \
             .format(
                 profile_arg(),
                 update_or_create,
                 lambda_function_name,
                 getenv("LAMBDA_RELEASE_ALIAS"),
-                version
+                version,
+                description
             )
         ctx.run(alias_cmd)
 
 
-def __publish_version(ctx, func, description=""):
+def __publish_version(ctx, func, description):
 
     lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+    if description is None:
+        description = "''"
     version_cmd = ("aws {} lambda publish-version --function-name {} "
                    "--description '{}' --query 'Version'") \
         .format(profile_arg(), lambda_function_name, description)
@@ -734,4 +739,56 @@ def __schedule_json_to_dynamo(json_name):
     file.close()
 
 
+def __show_stack_status(ctx):
+    cmd = ("aws {} cloudformation describe-stacks "
+           "--stack-name {} --output table"
+           .format(profile_arg(), STACK_NAME))
+    ctx.run(cmd)
 
+
+def __show_function_status(ctx):
+
+    status_table = [
+        [
+            'function',
+            'released version',
+            'description',
+            'timestamp',
+            '$LATEST timestamp'
+        ]
+    ]
+
+    for func in FUNCTION_NAMES:
+        status_row = []
+        lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+        cmd = ("aws {} lambda list-aliases --function-name {} "
+               "--query \"Aliases[?Name=='{}'].[FunctionVersion,Description]\" "
+               "--output text") \
+            .format(
+                profile_arg(),
+                lambda_function_name,
+                getenv('LAMBDA_RELEASE_ALIAS')
+            )
+        res = ctx.run(cmd, hide=True)
+
+        try:
+            released_version, description = res.stdout.strip().split()
+        except ValueError:
+            released_version = res.stdout.strip()
+            description = ""
+
+        status_row = [lambda_function_name, released_version, description]
+
+        cmd = ("aws {} lambda list-versions-by-function --function-name {} "
+               "--query \"Versions[?Version=='{}'].LastModified\" --output text") \
+            .format(profile_arg(), lambda_function_name, released_version)
+        status_row.append(ctx.run(cmd, hide=True).stdout)
+
+        cmd = ("aws {} lambda list-versions-by-function --function-name {} "
+               "--query \"Versions[?Version=='\$LATEST'].LastModified\" --output text") \
+            .format(profile_arg(), lambda_function_name)
+        status_row.append(ctx.run(cmd, hide=True).stdout)
+
+        status_table.append(status_row)
+
+    print(tabulate(status_table, headers="firstrow"))
