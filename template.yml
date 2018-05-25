@@ -388,7 +388,7 @@ Resources:
         - Name: ApiName
           Value: !Ref AWS::StackName
         - Name: Stage
-          Value: "latest"
+          Value: !Ref LambdaReleaseAlias
       Namespace: AWS/ApiGateway
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Period: 60
@@ -407,7 +407,7 @@ Resources:
         - Name: ApiName
           Value: !Ref AWS::StackName
         - Name: Stage
-          Value: "latest"
+          Value: !Ref LambdaReleaseAlias
       Namespace: AWS/ApiGateway
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Period: 60
@@ -426,7 +426,7 @@ Resources:
         - Name: ApiName
           Value: !Ref AWS::StackName
         - Name: Stage
-          Value: "latest"
+          Value: !Ref LambdaReleaseAlias
       Namespace: AWS/ApiGateway
       ComparisonOperator: GreaterThanOrEqualToThreshold
       Period: 60
