@@ -124,7 +124,7 @@ def release(ctx, function=None, description=None):
 
     for func in functions:
         new_version = __publish_version(ctx, func, description)
-        __set_release_alias(ctx, func, "update", new_version, description)
+        __update_release_alias(ctx, func, new_version, description)
 
 
 @task(help={'uuid': 'meeting instance uuid', 'host_id': 'meeting host id'})
@@ -166,7 +166,7 @@ def create(ctx):
 
     package(ctx, upload_to_s3=True)
     __create_or_update(ctx, "create")
-    __set_initial_function_alias(ctx)
+    release(ctx, description="initial release")
 
 
 @task(pre=[production_failsafe])
@@ -421,7 +421,6 @@ def __create_or_update(ctx, op):
                 subnet_id,
                 getenv("LAMBDA_RELEASE_ALIAS")
                 )
-    print(cmd)
     res = ctx.run(cmd)
 
     if res.exited == 0:
@@ -431,40 +430,32 @@ def __create_or_update(ctx, op):
 def __wait_for(ctx, op):
     wait_cmd = ("aws {} cloudformation wait stack-{}-complete "
                 "--stack-name {}").format(profile_arg(), op, STACK_NAME)
+    print("Waiting for stack {} to complete...".format(op))
     ctx.run(wait_cmd)
+    print("Done")
 
 
-def __set_initial_function_alias(ctx):
-    for func in FUNCTION_NAMES:
-        initial_version = __publish_version(ctx, func)
-        __set_release_alias(ctx, func, "create", initial_version)
-
-
-def __publish_and_update_alias(ctx, func):
-    version = __publish_version(ctx, func)
-    __set_release_alias(func, "update", version)
-
-
-def __set_release_alias(ctx, func, update_or_create, version, description):
-        lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
-        if description is None:
-            description = "''"
-        alias_cmd = ("aws {} lambda {}-alias --function-name {} "
-               "--name {} --function-version '{}' "
-               "--description {}") \
-            .format(
-                profile_arg(),
-                update_or_create,
-                lambda_function_name,
-                getenv("LAMBDA_RELEASE_ALIAS"),
-                version,
-                description
-            )
-        ctx.run(alias_cmd)
+def __update_release_alias(ctx, func, version, description):
+    print("Setting {} '{}' alias to version {}".format(func, getenv('LAMBDA_RELEASE_ALIAS'), version))
+    lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+    if description is None:
+        description = "''"
+    alias_cmd = ("aws {} lambda update-alias --function-name {} "
+           "--name {} --function-version '{}' "
+           "--description '{}'") \
+        .format(
+            profile_arg(),
+            lambda_function_name,
+            getenv("LAMBDA_RELEASE_ALIAS"),
+            version,
+            description
+        )
+    ctx.run(alias_cmd)
 
 
 def __publish_version(ctx, func, description):
 
+    print("Publishing new version of {}".format(func))
     lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
     if description is None:
         description = "''"

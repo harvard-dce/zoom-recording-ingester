@@ -229,6 +229,14 @@ Resources:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: zoom-webhook.zip
 
+  ZoomWebhookFunctionAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      Description: "initial release"
+      FunctionName: !Ref ZoomWebhookFunction
+      FunctionVersion: "$LATEST"
+      Name: !Ref LambdaReleaseAlias
+
   ZoomIngesterDeploy:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
@@ -284,6 +292,14 @@ Resources:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: zoom-downloader.zip
 
+  ZoomDownloaderFunctionAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      Description: "initial release"
+      FunctionName: !Ref ZoomDownloaderFunction
+      FunctionVersion: "$LATEST"
+      Name: !Ref LambdaReleaseAlias
+
   ZoomDownloaderEventRule:
     Type: AWS::Events::Rule
     Properties:
@@ -333,6 +349,14 @@ Resources:
             SubnetIds:
               - !Ref VpcSubnetId
           - !Ref AWS::NoValue
+
+  ZoomUploaderFunctionAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      Description: "initial release"
+      FunctionName: !Ref ZoomUploaderFunction
+      FunctionVersion: "$LATEST"
+      Name: !Ref LambdaReleaseAlias
 
   ZoomUploaderEventRule:
     Type: AWS::Events::Rule
@@ -521,6 +545,14 @@ Resources:
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: zoom-log-notifications.zip
+
+  ZoomLogNotificationsFunctionAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      Description: "initial release"
+      FunctionName: !Ref ZoomLogNotificationsFunction
+      FunctionVersion: "$LATEST"
+      Name: !Ref LambdaReleaseAlias
 
   ZoomNewLogGroupEventRule:
     Type: AWS::Events::Rule
