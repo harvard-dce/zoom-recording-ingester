@@ -16,6 +16,7 @@ from tabulate import tabulate
 load_dotenv(join(dirname(__file__), '.env'))
 
 AWS_PROFILE = env('AWS_PROFILE')
+AWS_DEFAULT_REGION = env('AWS_DEFAULT_REGION', 'us-east-1')
 STACK_NAME = env('STACK_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
@@ -60,8 +61,8 @@ def create_code_bucket(ctx):
 
 
 @task(pre=[production_failsafe],
-      help={'revision': 'tag or branch name; default is "master"'})
-def codebuild(ctx, revision="master"):
+      help={'revision': 'tag or branch name to build and release (required)'})
+def codebuild(ctx, revision):
     """
     Execute a codebuild run. Optional: --revision=[tag or branch]
     """
@@ -116,7 +117,9 @@ def deploy(ctx, function=None, do_release=False):
 @task(pre=[production_failsafe],
       help={'function': 'name of specific function'})
 def release(ctx, function=None, description=None):
-
+    """
+    Publish a new version of the function(s) and update the release alias to point to it
+    """
     if function is not None:
         functions = [function]
     else:
@@ -200,6 +203,7 @@ def status(ctx):
     Show table of cloudformation stack details
     """
     __show_stack_status(ctx)
+    __show_webhook_endpoint(ctx)
     __show_function_status(ctx)
 
 
@@ -737,13 +741,24 @@ def __show_stack_status(ctx):
     ctx.run(cmd)
 
 
+def __show_webhook_endpoint(ctx):
+
+    cmd = ("aws {} cloudformation describe-stack-resources --stack-name {} "
+           "--query \"StackResources[?ResourceType=='AWS::ApiGateway::RestApi'].PhysicalResourceId\" "
+           "--output text").format(profile_arg(), STACK_NAME)
+    rest_api_id = ctx.run(cmd, hide=True).stdout.strip()
+    invoke_url = "https://{}.execute-api.{}.amazonaws.com/{}/new_recording" \
+        .format(rest_api_id, AWS_DEFAULT_REGION, getenv("LAMBDA_RELEASE_ALIAS"))
+
+    print(tabulate([["Webhookd Endpoint", invoke_url]], tablefmt="grid"))
+
 def __show_function_status(ctx):
 
     status_table = [
         [
             'function',
-            'released version',
-            'description',
+            'released',
+            'desc',
             'timestamp',
             '$LATEST timestamp'
         ]
@@ -768,7 +783,7 @@ def __show_function_status(ctx):
             released_version = res.stdout.strip()
             description = ""
 
-        status_row = [lambda_function_name, released_version, description]
+        status_row = [func, released_version, description]
 
         cmd = ("aws {} lambda list-versions-by-function --function-name {} "
                "--query \"Versions[?Version=='{}'].LastModified\" --output text") \
@@ -782,4 +797,4 @@ def __show_function_status(ctx):
 
         status_table.append(status_row)
 
-    print(tabulate(status_table, headers="firstrow"))
+    print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
