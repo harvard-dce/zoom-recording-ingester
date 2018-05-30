@@ -23,7 +23,7 @@ PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
 ZOOM_API_KEY = env('ZOOM_API_KEY')
 ZOOM_API_SECRET = env('ZOOM_API_SECRET')
-ZOOM_BASE_URL = "http://api.zoom.us/v2/"
+ZOOM_API_BASE_URL = env('ZOOM_API_BASE_URL')
 
 FUNCTION_NAMES = [
     'zoom-webhook',
@@ -83,7 +83,22 @@ def codebuild(ctx, revision="master"):
             STACK_NAME,
             getenv("LAMBDA_RELEASE_ALIAS")
             )
-    ctx.run(cmd)
+
+    res = ctx.run(cmd, hide='out')
+    build_id = json.loads(res.stdout)["build"]["id"]
+
+    cmd = "aws codebuild batch-get-builds --ids={}".format(build_id)
+    build_status = "IN_PROGRESS"
+    print("Waiting for codebuild to finish...")
+    while build_status != "FAILED" and build_status != "COMPLETED":
+        time.sleep(5)
+        res = ctx.run(cmd, hide='out')
+        new_status = json.loads(res.stdout)["builds"][0]["currentPhase"]
+        if new_status != build_status:
+            print(build_status)
+            build_status = new_status
+
+    print("Build finished with status {}".format(build_status))
 
 
 @task(help={'function': 'name of a specific function'})
@@ -111,7 +126,7 @@ def deploy(ctx, function=None, do_release=False):
     else:
         functions = FUNCTION_NAMES
 
-    for  func in functions:
+    for func in functions:
         __build_function(ctx, func)
         __update_function(ctx, func)
         if do_release:
@@ -146,7 +161,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         uuid = meeting['uuid']
         series_id = meeting['id']
 
-        r = requests.get("{}meetings/{}".format(ZOOM_BASE_URL, series_id),
+        r = requests.get("{}meetings/{}".format(ZOOM_API_BASE_URL, series_id),
                          headers={"Authorization": "Bearer %s" % token.decode()})
 
         if r.status_code == 404:
@@ -156,7 +171,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 
         host_id = r.json()['host_id']
 
-        r = requests.get("{}meetings/{}/recordings".format(ZOOM_BASE_URL, uuid),
+        r = requests.get("{}meetings/{}/recordings".format(ZOOM_API_BASE_URL, uuid),
                          headers={"Authorization": "Bearer %s" % token.decode()})
 
         if r.status_code == 404:
@@ -165,7 +180,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         r.raise_for_status()
         recordings_found += 1
 
-        print("\n--uuid='{}' --host_id='{}'".format(uuid, host_id))
+        print("\n\tuuid, host_id: {} {}".format(uuid, host_id))
         print("\tSeries id: {}".format(r.json()["id"]))
         print("\tTopic: {}".format(r.json()["topic"]))
         print("\tDuration: {} minutes".format(r.json()["duration"]))
@@ -179,7 +194,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 @task(help={'uuid': 'meeting instance uuid', 'host_id': 'meeting host id'})
 def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
     """
-    Manually call the webhook endpoint. Required: --uuid, --host_id
+    Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
 
     apig = boto3.client('apigateway')
@@ -219,6 +234,30 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
     )
 
     print(json.dumps(resp, indent=True))
+
+@task
+def exec_downloader(ctx):
+    """
+    Manually trigger downloader.
+    """
+    cmd = ("aws lambda invoke --function-name='{}-zoom-downloader-function' "
+            "output.txt").format(STACK_NAME)
+    print(cmd)
+    ctx.run(cmd)
+
+@task
+def exec_uploader(ctx):
+    """
+    Manually trigger uploader.
+    """
+    cmd = ("aws lambda invoke --function-name='{}-zoom-uploader-function' "
+           "--payload='{{\"num_uploads\": 1}}' outfile.txt").format(STACK_NAME)
+
+    print(cmd)
+    res = ctx.run(cmd)
+
+    if 'FunctionError' in json.loads(res.stdout):
+        ctx.run("cat outfile.txt && echo")
 
 
 @task(pre=[production_failsafe])
@@ -344,6 +383,8 @@ ns.add_task(list_recordings)
 
 exec_ns = Collection('exec')
 exec_ns.add_task(exec_webhook, 'webhook')
+exec_ns.add_task(exec_downloader, 'downloader')
+exec_ns.add_task(exec_uploader, 'uploader')
 ns.add_collection(exec_ns)
 
 debug_ns = Collection('debug')
@@ -454,6 +495,7 @@ def __create_or_update(ctx, op):
            "--parameters "
            "ParameterKey=LambdaCodeBucket,ParameterValue={} "
            "ParameterKey=NotificationEmail,ParameterValue='{}' "
+           "ParameterKey=ZoomApiBaseUrl,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
            "ParameterKey=ZoomLoginUser,ParameterValue='{}' "
@@ -474,6 +516,7 @@ def __create_or_update(ctx, op):
                 template_path,
                 getenv('LAMBDA_CODE_BUCKET'),
                 getenv("NOTIFICATION_EMAIL"),
+                ZOOM_API_BASE_URL,
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
                 getenv("ZOOM_LOGIN_USER"),
@@ -855,7 +898,7 @@ def __get_meetings(date):
     page_size = 300
     mtg_type = "past"
 
-    url = "{}metrics/meetings/".format(ZOOM_BASE_URL)
+    url = "{}metrics/meetings/".format(ZOOM_API_BASE_URL)
     url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
 
     token = gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET)

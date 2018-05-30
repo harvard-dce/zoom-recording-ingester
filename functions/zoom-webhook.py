@@ -130,7 +130,8 @@ def send_sqs_message(message):
             MessageDeduplicationId=message['uuid']
         )
     except Exception as e:
-        logger.error("Error when sending SQS message for meeting uuid {} :{}".format(uuid, e))
+        logger.error("Error when sending SQS message for meeting uuid {} :{}"
+                     .format(message['uuid'], e))
         raise
 
     logger.debug({"Message sent": message_sent})
