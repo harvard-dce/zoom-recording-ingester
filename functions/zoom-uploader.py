@@ -35,7 +35,6 @@ session.headers.update({
 
 })
 
-
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
     logger.info({'url': url, 'kwargs': kwargs})
@@ -71,9 +70,11 @@ def handler(event, context):
             upload_data = json.loads(upload_message.body)
             logger.info(upload_data)
             wf_id = process_upload(upload_data)
-            logger.info("Workflow id {} initiated".format(wf_id))
             if wf_id:
-                upload_message.delete()
+                logger.info("Workflow id {} initiated".format(wf_id))
+            else:
+                logger.info("No workflow initiated.")
+            upload_message.delete()
         except Exception as e:
             logger.exception(e)
             raise
@@ -171,7 +172,7 @@ class Upload:
         if series_id is not None:
             logger.info("Matched with opencast series {}!".format(series_id))
             self._oc_series_id = series_id
-        elif DEFAULT_SERIES_ID is not None:
+        elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
             logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
             self._oc_series_id = DEFAULT_SERIES_ID
         else:
