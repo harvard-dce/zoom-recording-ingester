@@ -210,6 +210,7 @@ def status(ctx):
     __show_stack_status(ctx)
     __show_webhook_endpoint(ctx)
     __show_function_status(ctx)
+    __show_sqs_status(ctx)
 
 
 @task(pre=[production_failsafe])
@@ -647,7 +648,7 @@ def __view_messages(queue_name, limit):
             VisibilityTimeout=remaining+10,
             WaitTimeSeconds=10)
 
-        if 'Messages' not in response :
+        if 'Messages' not in response:
             if total_messages_received == 0:
                 print("No messages found!")
             else:
@@ -767,7 +768,7 @@ def __show_function_status(ctx):
     ]
 
     for func in FUNCTION_NAMES:
-        status_row = []
+
         lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
         cmd = ("aws {} lambda list-aliases --function-name {} "
                "--query \"Aliases[?Name=='{}'].[FunctionVersion,Description]\" "
@@ -799,4 +800,42 @@ def __show_function_status(ctx):
 
         status_table.append(status_row)
 
+    print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
+
+
+def __show_sqs_status(ctx):
+
+    status_table = [
+        [
+            'queue',
+            'Messages',
+            'MessagesNotVisible',
+            'MessagesDelayed',
+            'LastModified'
+        ]
+    ]
+
+    cmd = "aws sqs list-queues --queue-name-prefix {}".format(STACK_NAME)
+    queue_urls = json.loads(ctx.run(cmd, hide=True).stdout)["QueueUrls"]
+
+    for url in queue_urls:
+        queue_name = url.split("/")[-1]
+
+        cmd = ("aws sqs get-queue-attributes --queue-url {} "
+               "--attribute-names All").format(url)
+
+        res = json.loads(ctx.run(cmd, hide=True).stdout)["Attributes"]
+
+        last_modified = datetime.fromtimestamp(
+            int(res["LastModifiedTimestamp"])).strftime("%Y-%m-%d %I:%M:%S")
+
+        status_row = [queue_name,
+                      res["ApproximateNumberOfMessages"],
+                      res["ApproximateNumberOfMessagesNotVisible"],
+                      res["ApproximateNumberOfMessagesDelayed"],
+                      last_modified]
+
+        status_table.append(status_row)
+
+    print()
     print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
