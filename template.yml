@@ -91,11 +91,8 @@ Resources:
   ZoomIngesterDownloaderQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${AWS::StackName}-downloads.fifo"
-      FifoQueue: true
-      DelaySeconds: 300
+      QueueName: !Sub "${AWS::StackName}-downloads"
       MessageRetentionPeriod: 1209600 # 14 days
-      ContentBasedDeduplication: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, Arn]
         maxReceiveCount: 2
@@ -103,10 +100,8 @@ Resources:
   ZoomIngesterDownloaderDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${AWS::StackName}-downloads-deadletter.fifo"
-      FifoQueue: true
+      QueueName: !Sub "${AWS::StackName}-downloads-deadletter"
       MessageRetentionPeriod: 1209600 # 14 days
-      ContentBasedDeduplication: true
 
   ZoomIngesterRole:
     Type: AWS::IAM::Role
