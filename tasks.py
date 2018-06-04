@@ -12,6 +12,7 @@ from os import symlink, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists
 from tabulate import tabulate
+from pprint import pprint
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -28,10 +29,13 @@ FUNCTION_NAMES = [
     'zoom-log-notifications'
 ]
 
-DOWNLOADS_QUEUE = "{}-downloads".format(STACK_NAME)
-DOWNLOADS_DLQ = "{}-downloads-deadletter".format(STACK_NAME)
-UPLOADS_QUEUE = "{}-uploads.fifo".format(STACK_NAME)
-UPLOADS_DLQ = "{}-uploads-deadletter.fifo".format(STACK_NAME)
+sqs = boto3.client('sqs')
+QUEUE_URLS = sqs.list_queues(QueueNamePrefix=STACK_NAME)["QueueUrls"]
+
+DOWNLOADS_QUEUE = list(filter(lambda s: 'downloads' in s and 'deadletter' not in s, QUEUE_URLS))[0]
+DOWNLOADS_DLQ = list(filter(lambda s: 'downloads' in s and 'deadletter' in s, QUEUE_URLS))[0]
+UPLOADS_QUEUE = list(filter(lambda s: 'uploads' in s and 'deadletter' not in s, QUEUE_URLS))[0]
+UPLOADS_DLQ = list(filter(lambda s: 'uploads' in s and 'deadletter' in s, QUEUE_URLS))[0]
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
@@ -242,6 +246,7 @@ def retry_uploads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
+
     __move_messages(UPLOADS_DLQ, UPLOADS_QUEUE, limit=limit, uuid=uuid)
 
 
@@ -254,19 +259,23 @@ def retry_downloads(ctx, limit=1, uuid=None):
 
 
 @task(pre=[production_failsafe])
-def view_uploads(ctx, limit=20):
+def view_downloads(ctx, limit=20):
     """
-    View Uploader DLQ. Optional: --limit (default 20).
+    View items in download queues. Optional: --limit (default 20).
     """
-    __view_messages(UPLOADS_DLQ, limit=limit)
+
+    __view_messages(DOWNLOADS_QUEUE, limit=limit)
+    __view_messages(DOWNLOADS_DLQ, limit=limit)
 
 
 @task(pre=[production_failsafe])
-def view_downloads(ctx, limit=20):
+def view_uploads(ctx, limit=20):
     """
-    View Downloader DLQ. Optional: --limit (default 20).
+    View items in upload queues. Optional: --limit (default 20).
     """
-    __view_messages(DOWNLOADS_DLQ, limit=limit)
+
+    __view_messages(UPLOADS_QUEUE, limit=limit)
+    __view_messages(UPLOADS_DLQ, limit=limit)
 
 
 @task(pre=[production_failsafe])
@@ -302,12 +311,12 @@ stack_ns.add_task(delete)
 stack_ns.add_task(status)
 ns.add_collection(stack_ns)
 
-dlq_ns = Collection('dlq')
-dlq_ns.add_task(retry_uploads, 'retry-uploads')
-dlq_ns.add_task(retry_downloads, 'retry-downloads')
-dlq_ns.add_task(view_uploads, 'view-uploads')
-dlq_ns.add_task(view_downloads, 'view-downloads')
-ns.add_collection(dlq_ns)
+queue_ns = Collection('queue')
+queue_ns.add_task(view_downloads, 'downloads')
+queue_ns.add_task(view_uploads, 'uploads')
+queue_ns.add_task(retry_downloads, 'retry-downloads')
+queue_ns.add_task(retry_uploads, 'retry-uploads')
+ns.add_collection(queue_ns)
 
 schedule_ns = Collection('schedule')
 schedule_ns.add_task(import_schedule, 'import')
@@ -557,25 +566,28 @@ def __set_debug(ctx, debug_val):
         ctx.run(cmd)
 
 
-def __move_messages(dlq_name, source_name, limit, uuid=None):
+def __move_messages(deadletter_queue, source_queue, limit, uuid=None):
 
-    # using the low-level client in order to access the deduplication id in the received message
-    # (which is not an attribute of the sqs.resource message object)
-    sqs = boto3.client('sqs')
+    fifo = deadletter_queue.endswith('fifo')
 
-    deadletter_queue = sqs.get_queue_url(QueueName=dlq_name)['QueueUrl']
-    source_queue = sqs.get_queue_url(QueueName=source_name)['QueueUrl']
     total_messages_moved = 0
 
     while total_messages_moved < limit:
         remaining = limit - total_messages_moved
 
-        response = sqs.receive_message(
-            QueueUrl=deadletter_queue,
-            AttributeNames=['MessageDeduplicationId'],
-            MaxNumberOfMessages=10 if remaining > 10 else remaining,
-            VisibilityTimeout=10,
-            WaitTimeSeconds=10)
+        if fifo:
+            response = sqs.receive_message(
+                QueueUrl=deadletter_queue,
+                AttributeNames=['MessageDeduplicationId'],
+                MaxNumberOfMessages=10 if remaining > 10 else remaining,
+                VisibilityTimeout=10,
+                WaitTimeSeconds=10)
+        else:
+            response = sqs.receive_message(
+                QueueUrl=deadletter_queue,
+                MaxNumberOfMessages=10 if remaining > 10 else remaining,
+                VisibilityTimeout=10,
+                WaitTimeSeconds=10)
 
         if 'Messages' not in response or len(response['Messages']) == 0:
             if total_messages_moved == 0:
@@ -589,16 +601,22 @@ def __move_messages(dlq_name, source_name, limit, uuid=None):
 
         entries = []
         for i, message in enumerate(messages):
-            deduplication_id = message['Attributes']['MessageDeduplicationId']
-            if uuid is None or uuid == json.loads(message['Body'])['uuid']:
+            message_body = json.loads(message['Body'])
+            if uuid is None or uuid == message_body['uuid']:
+                print("\nMoving message:")
+                pprint(message_body)
                 received_count += 1
-                entries.append({
+                new_entry = {
                     'Id': str(i),
                     'MessageBody': message['Body'],
-                    'MessageDeduplicationId': deduplication_id,
-                    'MessageGroupId': deduplication_id,
                     'DelaySeconds': 0
-                })
+                }
+                if fifo:
+                    deduplication_id = message['Attributes']['MessageDeduplicationId']
+                    new_entry['MessageDeduplicationId'] = deduplication_id
+                    new_entry['MessageGroupId'] = deduplication_id
+
+                entries.append(new_entry)
 
         if received_count == 0:
             continue
@@ -629,24 +647,38 @@ def __move_messages(dlq_name, source_name, limit, uuid=None):
         time.sleep(1)
 
 
-def __view_messages(queue_name, limit):
+def __view_messages(queue_url, limit):
 
-    sqs = boto3.client('sqs')
-    queue_url = sqs.get_queue_url(QueueName=queue_name)['QueueUrl']
+    fifo = queue_url.endswith("fifo")
+
+    if "deadletter" in queue_url:
+        print("\nDEADLETTER QUEUE")
+    else:
+        print("\nMAIN QUEUE")
+
     total_messages_received = 0
 
-    print("\nFetching messages from {}...\n".format(queue_name))
+    print("Fetching messages from {}...\n".format(queue_url.split('/')[-1]))
 
     while total_messages_received < limit:
         remaining = limit - total_messages_received
 
-        response = sqs.receive_message(
-            QueueUrl=queue_url,
-            AttributeNames=['MessageDeduplicationId'],
-            MessageAttributeNames=['FailedReason'],
-            MaxNumberOfMessages=10,
-            VisibilityTimeout=remaining+10,
-            WaitTimeSeconds=10)
+        if fifo:
+            response = sqs.receive_message(
+                QueueUrl=queue_url,
+                AttributeNames=['MessageDeduplicationId'],
+                MessageAttributeNames=['FailedReason'],
+                MaxNumberOfMessages=10,
+                VisibilityTimeout=remaining+10,
+                WaitTimeSeconds=10)
+
+        else:
+            response = sqs.receive_message(
+                QueueUrl=queue_url,
+                MessageAttributeNames=['FailedReason'],
+                MaxNumberOfMessages=10,
+                VisibilityTimeout=remaining + 10,
+                WaitTimeSeconds=10)
 
         if 'Messages' not in response:
             if total_messages_received == 0:
@@ -658,7 +690,11 @@ def __view_messages(queue_name, limit):
         total_messages_received += len(response['Messages'])
 
         for message in response['Messages']:
-            print("Attributes: {}\nBody: {}".format(message['Attributes'], message['Body']))
+            print("Body:")
+            pprint(json.loads(message['Body']))
+            if 'Attributes' in message:
+                print("Attributes:")
+                pprint(message['Attributes'])
             if 'MessageAttributes' in message and 'FailedReason' in message['MessageAttributes']:
                 print("{}: {}".format('ReportedError', message['MessageAttributes']['FailedReason']['StringValue']))
             print()
@@ -755,6 +791,7 @@ def __show_webhook_endpoint(ctx):
 
     print(tabulate([["Webhookd Endpoint", invoke_url]], tablefmt="grid"))
 
+
 def __show_function_status(ctx):
 
     status_table = [
@@ -815,10 +852,7 @@ def __show_sqs_status(ctx):
         ]
     ]
 
-    cmd = "aws sqs list-queues --queue-name-prefix {}".format(STACK_NAME)
-    queue_urls = json.loads(ctx.run(cmd, hide=True).stdout)["QueueUrls"]
-
-    for url in queue_urls:
+    for url in QUEUE_URLS:
         queue_name = url.split("/")[-1]
 
         cmd = ("aws sqs get-queue-attributes --queue-url {} "
