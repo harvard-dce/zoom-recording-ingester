@@ -28,6 +28,11 @@ FUNCTION_NAMES = [
     'zoom-log-notifications'
 ]
 
+DOWNLOADS_QUEUE = "{}-downloads".format(STACK_NAME)
+DOWNLOADS_DLQ = "{}-downloads-deadletter".format(STACK_NAME)
+UPLOADS_QUEUE = "{}-uploads.fifo".format(STACK_NAME)
+UPLOADS_DLQ = "{}-uploads-deadletter.fifo".format(STACK_NAME)
+
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
 
@@ -236,7 +241,7 @@ def retry_uploads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    __move_messages("uploads", limit=limit, uuid=uuid)
+    __move_messages(UPLOADS_DLQ, UPLOADS_QUEUE, limit=limit, uuid=uuid)
 
 
 @task(pre=[production_failsafe])
@@ -244,7 +249,7 @@ def retry_downloads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    __move_messages("downloads", limit=limit, uuid=uuid)
+    __move_messages(DOWNLOADS_DLQ, DOWNLOADS_QUEUE, limit=limit, uuid=uuid)
 
 
 @task(pre=[production_failsafe])
@@ -252,7 +257,7 @@ def view_uploads(ctx, limit=20):
     """
     View Uploader DLQ. Optional: --limit (default 20).
     """
-    __view_messages("uploads", limit=limit)
+    __view_messages(UPLOADS_DLQ, limit=limit)
 
 
 @task(pre=[production_failsafe])
@@ -260,7 +265,7 @@ def view_downloads(ctx, limit=20):
     """
     View Downloader DLQ. Optional: --limit (default 20).
     """
-    __view_messages("downloads", limit=limit)
+    __view_messages(DOWNLOADS_DLQ, limit=limit)
 
 
 @task(pre=[production_failsafe])
@@ -551,15 +556,13 @@ def __set_debug(ctx, debug_val):
         ctx.run(cmd)
 
 
-def __move_messages(queue_type, limit, uuid=None):
-    source_name = "{}-{}.fifo".format(STACK_NAME, queue_type)
-    dl_name = "{}-{}-deadletter.fifo".format(STACK_NAME, queue_type)
+def __move_messages(dlq_name, source_name, limit, uuid=None):
 
     # using the low-level client in order to access the deduplication id in the received message
     # (which is not an attribute of the sqs.resource message object)
     sqs = boto3.client('sqs')
 
-    deadletter_queue = sqs.get_queue_url(QueueName=dl_name)['QueueUrl']
+    deadletter_queue = sqs.get_queue_url(QueueName=dlq_name)['QueueUrl']
     source_queue = sqs.get_queue_url(QueueName=source_name)['QueueUrl']
     total_messages_moved = 0
 
@@ -625,8 +628,7 @@ def __move_messages(queue_type, limit, uuid=None):
         time.sleep(1)
 
 
-def __view_messages(queue_type, limit):
-    queue_name = "{}-{}-deadletter.fifo".format(STACK_NAME, queue_type)
+def __view_messages(queue_name, limit):
 
     sqs = boto3.client('sqs')
     queue_url = sqs.get_queue_url(QueueName=queue_name)['QueueUrl']

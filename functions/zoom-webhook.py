@@ -11,6 +11,7 @@ logger = logging.getLogger()
 
 DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+DEFAULT_MESSAGE_DELAY = 300
 
 
 class BadWebhookData(Exception):
@@ -67,7 +68,11 @@ def handler(event, context):
         'received_time': now
     }
 
-    send_sqs_message(sqs_message)
+    if 'delay_seconds' in payload:
+        logger.debug("Override default message delay.")
+        send_sqs_message(sqs_message, delay=payload['delay_seconds'])
+    else:
+        send_sqs_message(sqs_message)
 
     return {
         'statusCode': 200,
@@ -116,7 +121,7 @@ def parse_payload(event_body):
     return payload
 
 
-def send_sqs_message(message):
+def send_sqs_message(message, delay=DEFAULT_MESSAGE_DELAY):
 
     logger.debug("SQS sending start...")
     sqs = boto3.resource('sqs')
@@ -126,9 +131,9 @@ def send_sqs_message(message):
 
         message_sent = download_queue.send_message(
             MessageBody=json.dumps(message),
-            MessageGroupId=message['uuid'],
-            MessageDeduplicationId=message['uuid']
+            DelaySeconds=delay
         )
+
     except Exception as e:
         logger.error("Error when sending SQS message for meeting uuid {} :{}".format(uuid, e))
         raise
