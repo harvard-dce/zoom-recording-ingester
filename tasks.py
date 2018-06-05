@@ -4,7 +4,7 @@ import jmespath
 import time
 import csv
 import shutil
-from datetime import datetime
+import datetime
 from urllib.parse import urlencode
 from invoke import task, Collection
 from invoke.exceptions import Exit
@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists
 from tabulate import tabulate
 from pprint import pprint
+from functions.common import gen_token
+import requests
+from pytz import timezone
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -88,7 +91,22 @@ def codebuild(ctx, revision):
             STACK_NAME,
             getenv("LAMBDA_RELEASE_ALIAS")
             )
-    ctx.run(cmd)
+
+    res = ctx.run(cmd, hide='out')
+    build_id = json.loads(res.stdout)["build"]["id"]
+
+    cmd = "aws codebuild batch-get-builds --ids={}".format(build_id)
+    build_status = "IN_PROGRESS"
+    print("Waiting for codebuild to finish...")
+    while build_status != "FAILED" and build_status != "COMPLETED":
+        time.sleep(5)
+        res = ctx.run(cmd, hide='out')
+        new_status = json.loads(res.stdout)["builds"][0]["currentPhase"]
+        if new_status != build_status:
+            print(build_status)
+            build_status = new_status
+
+    print("Build finished with status {}".format(build_status))
 
 
 @task(help={'function': 'name of a specific function'})
@@ -116,7 +134,7 @@ def deploy(ctx, function=None, do_release=False):
     else:
         functions = FUNCTION_NAMES
 
-    for  func in functions:
+    for func in functions:
         __build_function(ctx, func)
         __update_function(ctx, func)
         if do_release:
@@ -138,15 +156,66 @@ def release(ctx, function=None, description=None):
         new_version = __publish_version(ctx, func, description)
         __update_release_alias(ctx, func, new_version, description)
 
+@task
+def list_recordings(ctx, date=str(datetime.date.today())):
+    """
+    Optional: --date='YYYY-MM-DD'
+    """
+    base_url = getenv('ZOOM_API_BASE_URL')
+    key = getenv('ZOOM_API_KEY')
+    secret = getenv('ZOOM_API_SECRET')
+    meetings = __get_meetings(date)
+
+    recordings_found = 0
+
+    for meeting in meetings:
+        time.sleep(0.1)
+        token = gen_token(key=key, secret=secret)
+        uuid = meeting['uuid']
+        series_id = meeting['id']
+
+        r = requests.get("{}meetings/{}".format(base_url, series_id),
+                         headers={"Authorization": "Bearer %s" % token.decode()})
+
+        if r.status_code == 404:
+            continue
+
+        r.raise_for_status()
+
+        host_id = r.json()['host_id']
+
+        r = requests.get("{}meetings/{}/recordings".format(base_url, uuid),
+                         headers={"Authorization": "Bearer %s" % token.decode()})
+
+        if r.status_code == 404:
+            continue
+
+        r.raise_for_status()
+        recordings_found += 1
+
+        local_tz = timezone(getenv('LOCAL_TIME_ZONE'))
+        utc = timezone('UTC')
+        utc_start_time = r.json()['recording_files'][0]['recording_start']
+        start_time = utc.localize(datetime.datetime.strptime(utc_start_time,
+                                  "%Y-%m-%dT%H:%M:%SZ")).astimezone(local_tz)
+
+        print("\n\tuuid, host_id: {} {}".format(uuid, host_id))
+        print("\tSeries id: {}".format(r.json()["id"]))
+        print("\tTopic: {}".format(r.json()["topic"]))
+        print("\tStart time: {}".format(start_time))
+        print("\tDuration: {} minutes".format(r.json()["duration"]))
+
+    if recordings_found == 0:
+        print("No recordings found on {}".format(date))
+    else:
+        print("Done!")
+
 
 @task(help={'uuid': 'meeting instance uuid', 'host_id': 'meeting host id'})
-def exec_webhook(ctx, uuid, host_id, status=None):
+def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
-
-    if status is None:
-        status = 'RECORDING_MEETING_COMPLETED'
 
     apig = boto3.client('apigateway')
 
@@ -156,8 +225,26 @@ def exec_webhook(ctx, uuid, host_id, status=None):
     api_resources = apig.get_resources(restApiId=api_id)
     resource_id = jmespath.search("items[?pathPart=='new_recording'].id | [0]", api_resources)
 
-    content = json.dumps({'uuid': uuid, 'host_id': host_id})
-    event_body = "type={}&{}".format(status, urlencode({'content': content}))
+    if webhook_version == 2:
+        if status is None:
+            status = 'recording_completed'
+
+        event_body = json.dumps(
+            {'event': status,
+             'payload': {
+                 'meeting': {
+                     'uuid': uuid,
+                     'host_id': host_id
+                 }
+             }}
+        )
+
+    else:
+        if status is None:
+            status = 'RECORDING_MEETING_COMPLETED'
+
+        content = json.dumps({'uuid': uuid, 'host_id': host_id})
+        event_body = "type={}&{}".format(status,  urlencode({'content': content}))
 
     resp = apig.test_invoke_method(
         restApiId=api_id,
@@ -165,7 +252,32 @@ def exec_webhook(ctx, uuid, host_id, status=None):
         httpMethod='POST',
         body=event_body
     )
+
     print(json.dumps(resp, indent=True))
+
+@task
+def exec_downloader(ctx):
+    """
+    Manually trigger downloader.
+    """
+    cmd = ("aws lambda invoke --function-name='{}-zoom-downloader-function' "
+            "output.txt").format(STACK_NAME)
+    print(cmd)
+    ctx.run(cmd)
+
+@task
+def exec_uploader(ctx):
+    """
+    Manually trigger uploader.
+    """
+    cmd = ("aws lambda invoke --function-name='{}-zoom-uploader-function' "
+           "--payload='{{\"num_uploads\": 1}}' outfile.txt").format(STACK_NAME)
+
+    print(cmd)
+    res = ctx.run(cmd)
+
+    if 'FunctionError' in json.loads(res.stdout):
+        ctx.run("cat outfile.txt && echo")
 
 
 @task(pre=[production_failsafe])
@@ -294,9 +406,12 @@ ns.add_task(codebuild)
 ns.add_task(package)
 ns.add_task(deploy)
 ns.add_task(release)
+ns.add_task(list_recordings)
 
 exec_ns = Collection('exec')
 exec_ns.add_task(exec_webhook, 'webhook')
+exec_ns.add_task(exec_downloader, 'downloader')
+exec_ns.add_task(exec_uploader, 'uploader')
 ns.add_collection(exec_ns)
 
 debug_ns = Collection('debug')
@@ -407,6 +522,7 @@ def __create_or_update(ctx, op):
            "--parameters "
            "ParameterKey=LambdaCodeBucket,ParameterValue={} "
            "ParameterKey=NotificationEmail,ParameterValue='{}' "
+           "ParameterKey=ZoomApiBaseUrl,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
            "ParameterKey=ZoomLoginUser,ParameterValue='{}' "
@@ -427,6 +543,7 @@ def __create_or_update(ctx, op):
                 template_path,
                 getenv('LAMBDA_CODE_BUCKET'),
                 getenv("NOTIFICATION_EMAIL"),
+                getenv("ZOOM_API_BASE_URL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
                 getenv("ZOOM_LOGIN_USER"),
@@ -702,9 +819,9 @@ def __view_messages(queue_url, limit):
 
 def __schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
     if year is None:
-        year = str(datetime.now().year)
+        year = str(datetime.datetime.now().year)
     if semester is None:
-        month = datetime.now().month
+        month = datetime.datetime.now().month
         if month < 6:
             semester = "02"
         elif month < 9:
@@ -839,7 +956,7 @@ def __show_function_status(ctx):
 
     print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
 
-
+    
 def __show_sqs_status(ctx):
 
     status_table = [
@@ -873,3 +990,32 @@ def __show_sqs_status(ctx):
 
     print()
     print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
+    
+    
+def __get_meetings(date):
+    page_size = 300
+    mtg_type = "past"
+    key = getenv('ZOOM_API_KEY')
+    secret = getenv('ZOOM_API_SECRET')
+
+    url = "{}metrics/meetings/".format(getenv('ZOOM_API_BASE_URL'))
+    url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
+
+    token = gen_token(key=key, secret=secret)
+    r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
+    r.raise_for_status()
+    response = r.json()
+    meetings = response['meetings']
+
+    while 'next_page_token' in response and response['next_page_token'].strip() is True:
+        token = gen_token(key=key, secret=secret)
+        r = requests.get(url + "&next_page_token=" + response['next_page_token'],
+                         headers={"Authorization": "Bearer %s" % token.decode()})
+        r.raise_for_status()
+        meetings.extend(r.json()['meetings'])
+        time.sleep(60)
+
+    time.sleep(1)
+
+    return meetings
+  

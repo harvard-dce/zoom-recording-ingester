@@ -6,6 +6,8 @@ Parameters:
     Type: String
   NotificationEmail:
     Type: String
+  ZoomApiBaseUrl:
+    Type: String
   ZoomApiKey:
     Type: String
   ZoomApiSecret:
@@ -280,6 +282,7 @@ Resources:
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
           DEADLETTER_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, QueueName]
+          ZOOM_API_BASE_URL: !Ref ZoomApiBaseUrl
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
           DEBUG: 0
