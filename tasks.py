@@ -14,6 +14,7 @@ from os.path import join, dirname, exists
 from tabulate import tabulate
 from functions.common import gen_token
 import requests
+from pytz import timezone
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -183,9 +184,16 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         r.raise_for_status()
         recordings_found += 1
 
+        local_tz = timezone(getenv('LOCAL_TIME_ZONE'))
+        utc = timezone('UTC')
+        utc_start_time = r.json()['recording_files'][0]['recording_start']
+        start_time = utc.localize(datetime.datetime.strptime(utc_start_time,
+                                  "%Y-%m-%dT%H:%M:%SZ")).astimezone(local_tz)
+
         print("\n\tuuid, host_id: {} {}".format(uuid, host_id))
         print("\tSeries id: {}".format(r.json()["id"]))
         print("\tTopic: {}".format(r.json()["topic"]))
+        print("\tStart time: {}".format(start_time))
         print("\tDuration: {} minutes".format(r.json()["duration"]))
 
     if recordings_found == 0:
