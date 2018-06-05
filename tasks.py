@@ -22,9 +22,6 @@ AWS_DEFAULT_REGION = env('AWS_DEFAULT_REGION', 'us-east-1')
 STACK_NAME = env('STACK_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
-ZOOM_API_KEY = env('ZOOM_API_KEY')
-ZOOM_API_SECRET = env('ZOOM_API_SECRET')
-ZOOM_API_BASE_URL = env('ZOOM_API_BASE_URL')
 
 FUNCTION_NAMES = [
     'zoom-webhook',
@@ -154,17 +151,20 @@ def list_recordings(ctx, date=str(datetime.date.today())):
     """
     Optional: --date='YYYY-MM-DD'
     """
+    base_url = getenv('ZOOM_API_BASE_URL')
+    key = getenv('ZOOM_API_KEY')
+    secret = getenv('ZOOM_API_SECRET')
     meetings = __get_meetings(date)
 
     recordings_found = 0
 
     for meeting in meetings:
         time.sleep(0.1)
-        token = gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET)
+        token = gen_token(key=key, secret=secret)
         uuid = meeting['uuid']
         series_id = meeting['id']
 
-        r = requests.get("{}meetings/{}".format(ZOOM_API_BASE_URL, series_id),
+        r = requests.get("{}meetings/{}".format(base_url, series_id),
                          headers={"Authorization": "Bearer %s" % token.decode()})
 
         if r.status_code == 404:
@@ -174,7 +174,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 
         host_id = r.json()['host_id']
 
-        r = requests.get("{}meetings/{}/recordings".format(ZOOM_API_BASE_URL, uuid),
+        r = requests.get("{}meetings/{}/recordings".format(base_url, uuid),
                          headers={"Authorization": "Bearer %s" % token.decode()})
 
         if r.status_code == 404:
@@ -520,7 +520,7 @@ def __create_or_update(ctx, op):
                 template_path,
                 getenv('LAMBDA_CODE_BUCKET'),
                 getenv("NOTIFICATION_EMAIL"),
-                ZOOM_API_BASE_URL,
+                getenv("ZOOM_API_BASE_URL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
                 getenv("ZOOM_LOGIN_USER"),
@@ -912,18 +912,20 @@ def __show_function_status(ctx):
 def __get_meetings(date):
     page_size = 300
     mtg_type = "past"
+    key = getenv('ZOOM_API_KEY')
+    secret = getenv('ZOOM_API_SECRET')
 
-    url = "{}metrics/meetings/".format(ZOOM_API_BASE_URL)
+    url = "{}metrics/meetings/".format(getenv('ZOOM_API_BASE_URL'))
     url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
 
-    token = gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET)
+    token = gen_token(key=key, secret=secret)
     r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
     r.raise_for_status()
     response = r.json()
     meetings = response['meetings']
 
     while 'next_page_token' in response and response['next_page_token'].strip() is True:
-        token = gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET)
+        token = gen_token(key=key, secret=secret)
         r = requests.get(url + "&next_page_token=" + response['next_page_token'],
                          headers={"Authorization": "Bearer %s" % token.decode()})
         r.raise_for_status()
