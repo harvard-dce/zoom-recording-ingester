@@ -32,16 +32,23 @@ FUNCTION_NAMES = [
     'zoom-log-notifications'
 ]
 
-sqs = boto3.client('sqs')
-QUEUE_URLS = sqs.list_queues(QueueNamePrefix=STACK_NAME)["QueueUrls"]
-
-DOWNLOADS_QUEUE = list(filter(lambda s: 'downloads' in s and 'deadletter' not in s, QUEUE_URLS))[0]
-DOWNLOADS_DLQ = list(filter(lambda s: 'downloads' in s and 'deadletter' in s, QUEUE_URLS))[0]
-UPLOADS_QUEUE = list(filter(lambda s: 'uploads' in s and 'deadletter' not in s, QUEUE_URLS))[0]
-UPLOADS_DLQ = list(filter(lambda s: 'uploads' in s and 'deadletter' in s, QUEUE_URLS))[0]
-
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
+
+
+def get_queue_url(name=None, dlq=False):
+    sqs = boto3.client('sqs')
+    queues = sqs.list_queues(QueueNamePrefix=STACK_NAME)
+    if 'QueueUrls' in queues:
+        if name is None:
+            return queues['QueueUrls']
+        else:
+            return list(filter(
+                lambda s: name in s and 'deadletter' in s == dlq,
+                queues['QueueUrls']
+            ))[0]
+    else:
+        return None
 
 
 @task
@@ -96,17 +103,23 @@ def codebuild(ctx, revision):
     build_id = json.loads(res.stdout)["build"]["id"]
 
     cmd = "aws codebuild batch-get-builds --ids={}".format(build_id)
-    build_status = "IN_PROGRESS"
+    current_phase = "IN_PROGRESS"
     print("Waiting for codebuild to finish...")
-    while build_status != "FAILED" and build_status != "COMPLETED":
+    while True:
         time.sleep(5)
         res = ctx.run(cmd, hide='out')
-        new_status = json.loads(res.stdout)["builds"][0]["currentPhase"]
-        if new_status != build_status:
-            print(build_status)
-            build_status = new_status
+        build = json.loads(res.stdout)["builds"][0]
 
-    print("Build finished with status {}".format(build_status))
+        new_phase = build["currentPhase"]
+        if new_phase != current_phase:
+            print(current_phase)
+            current_phase = new_phase
+
+        build_complete = build["buildComplete"]
+        if build_complete:
+            build_status = build["buildStatus"]
+            print("Build finished with status {}".format(build_status))
+            break
 
 
 @task(help={'function': 'name of a specific function'})
@@ -235,8 +248,9 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
                  'meeting': {
                      'uuid': uuid,
                      'host_id': host_id
-                 }
-             }}
+                 },
+             },
+             'delay_seconds': 0}
         )
 
     else:
@@ -253,7 +267,7 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
         body=event_body
     )
 
-    print(json.dumps(resp, indent=True))
+    print("Returned with status code: {}. {}".format(resp['status'], resp['body']))
 
 @task
 def exec_downloader(ctx):
@@ -354,20 +368,23 @@ def test(ctx):
 
 
 @task(pre=[production_failsafe])
-def retry_uploads(ctx, limit=1, uuid=None):
-    """
-    Move SQS messages DLQ to source. Optional: --limit (default 1).
-    """
-
-    __move_messages(UPLOADS_DLQ, UPLOADS_QUEUE, limit=limit, uuid=uuid)
-
-
-@task(pre=[production_failsafe])
 def retry_downloads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    __move_messages(DOWNLOADS_DLQ, DOWNLOADS_QUEUE, limit=limit, uuid=uuid)
+    downloads_dlq = get_queue_url("downloads", dlq=True)
+    downloads_queue = get_queue_url("downloads")
+    __move_messages(downloads_dlq, downloads_queue, limit=limit, uuid=uuid)
+
+
+@task(pre=[production_failsafe])
+def retry_uploads(ctx, limit=1, uuid=None):
+    """
+    Move SQS messages DLQ to source. Optional: --limit (default 1).
+    """
+    uploads_dql = get_queue_url("uploads", dlq=True)
+    uploads_queue = get_queue_url("uploads")
+    __move_messages(uploads_dql, uploads_queue, limit=limit, uuid=uuid)
 
 
 @task(pre=[production_failsafe])
@@ -375,9 +392,10 @@ def view_downloads(ctx, limit=20):
     """
     View items in download queues. Optional: --limit (default 20).
     """
-
-    __view_messages(DOWNLOADS_QUEUE, limit=limit)
-    __view_messages(DOWNLOADS_DLQ, limit=limit)
+    downloads_queue = get_queue_url("downloads")
+    downloads_dlq = get_queue_url("downloads", dlq=True)
+    __view_messages(downloads_queue, limit=limit)
+    __view_messages(downloads_dlq, limit=limit)
 
 
 @task(pre=[production_failsafe])
@@ -385,9 +403,10 @@ def view_uploads(ctx, limit=20):
     """
     View items in upload queues. Optional: --limit (default 20).
     """
-
-    __view_messages(UPLOADS_QUEUE, limit=limit)
-    __view_messages(UPLOADS_DLQ, limit=limit)
+    uploads_queue = get_queue_url("uploads")
+    uploads_dql = get_queue_url("uploads", dlq=True)
+    __view_messages(uploads_queue, limit=limit)
+    __view_messages(uploads_dql, limit=limit)
 
 
 @task(pre=[production_failsafe])
@@ -684,9 +703,12 @@ def __set_debug(ctx, debug_val):
 
 
 def __move_messages(deadletter_queue, source_queue, limit, uuid=None):
+    if deadletter_queue is None or source_queue is None:
+        print("Missing required queues.")
+        return
 
+    sqs = boto3.client('sqs')
     fifo = deadletter_queue.endswith('fifo')
-
     total_messages_moved = 0
 
     while total_messages_moved < limit:
@@ -766,6 +788,11 @@ def __move_messages(deadletter_queue, source_queue, limit, uuid=None):
 
 def __view_messages(queue_url, limit):
 
+    if queue_url is None:
+        print("Missing required queues.")
+        return
+
+    sqs = boto3.client('sqs')
     fifo = queue_url.endswith("fifo")
 
     if "deadletter" in queue_url:
@@ -969,7 +996,7 @@ def __show_sqs_status(ctx):
         ]
     ]
 
-    for url in QUEUE_URLS:
+    for url in get_queue_url():
         queue_name = url.split("/")[-1]
 
         cmd = ("aws sqs get-queue-attributes --queue-url {} "
@@ -977,7 +1004,7 @@ def __show_sqs_status(ctx):
 
         res = json.loads(ctx.run(cmd, hide=True).stdout)["Attributes"]
 
-        last_modified = datetime.fromtimestamp(
+        last_modified = datetime.date.fromtimestamp(
             int(res["LastModifiedTimestamp"])).strftime("%Y-%m-%d %I:%M:%S")
 
         status_row = [queue_name,
@@ -1018,4 +1045,3 @@ def __get_meetings(date):
     time.sleep(1)
 
     return meetings
-  
