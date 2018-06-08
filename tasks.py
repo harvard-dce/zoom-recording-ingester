@@ -19,6 +19,7 @@ from pytz import timezone
 
 load_dotenv(join(dirname(__file__), '.env'))
 
+AWS_ACCOUNT_ID = None
 AWS_PROFILE = env('AWS_PROFILE')
 AWS_DEFAULT_REGION = env('AWS_DEFAULT_REGION', 'us-east-1')
 STACK_NAME = env('STACK_NAME')
@@ -36,20 +37,19 @@ if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
 
 
-def get_queue_url(name=None, dlq=False):
-    sqs = boto3.client('sqs')
-    queues = sqs.list_queues(QueueNamePrefix=STACK_NAME)
-    if 'QueueUrls' in queues:
-        if name is None:
-            return queues['QueueUrls']
-        else:
-            return list(filter(
-                lambda s: name in s and 'deadletter' in s == dlq,
-                queues['QueueUrls']
-            ))[0]
-    else:
-        return None
+def get_queue_url(queue_name):
 
+    global AWS_ACCOUNT_ID
+    if AWS_ACCOUNT_ID is None:
+        AWS_ACCOUNT_ID = boto3.client('sts').get_caller_identity()['Account']
+
+    queue_url = 'https://queue.amazonaws.com/{}/{}-{}'.format(
+        AWS_ACCOUNT_ID,
+        STACK_NAME,
+        queue_name
+    )
+
+    return queue_url
 
 @task
 def production_failsafe(ctx):
@@ -372,7 +372,7 @@ def retry_downloads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    downloads_dlq = get_queue_url("downloads", dlq=True)
+    downloads_dlq = get_queue_url("downloads-deadletter")
     downloads_queue = get_queue_url("downloads")
     __move_messages(downloads_dlq, downloads_queue, limit=limit, uuid=uuid)
 
@@ -382,8 +382,8 @@ def retry_uploads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    uploads_dql = get_queue_url("uploads", dlq=True)
-    uploads_queue = get_queue_url("uploads")
+    uploads_dql = get_queue_url("uploads-deadletter.fifo")
+    uploads_queue = get_queue_url("uploads.fifo")
     __move_messages(uploads_dql, uploads_queue, limit=limit, uuid=uuid)
 
 
@@ -393,7 +393,7 @@ def view_downloads(ctx, limit=20):
     View items in download queues. Optional: --limit (default 20).
     """
     downloads_queue = get_queue_url("downloads")
-    downloads_dlq = get_queue_url("downloads", dlq=True)
+    downloads_dlq = get_queue_url("downloads-deadletter")
     __view_messages(downloads_queue, limit=limit)
     __view_messages(downloads_dlq, limit=limit)
 
@@ -403,8 +403,8 @@ def view_uploads(ctx, limit=20):
     """
     View items in upload queues. Optional: --limit (default 20).
     """
-    uploads_queue = get_queue_url("uploads")
-    uploads_dql = get_queue_url("uploads", dlq=True)
+    uploads_queue = get_queue_url("uploads.fifo")
+    uploads_dql = get_queue_url("uploads-deadletter.fifo")
     __view_messages(uploads_queue, limit=limit)
     __view_messages(uploads_dql, limit=limit)
 
@@ -933,7 +933,7 @@ def __show_webhook_endpoint(ctx):
     invoke_url = "https://{}.execute-api.{}.amazonaws.com/{}/new_recording" \
         .format(rest_api_id, AWS_DEFAULT_REGION, getenv("LAMBDA_RELEASE_ALIAS"))
 
-    print(tabulate([["Webhookd Endpoint", invoke_url]], tablefmt="grid"))
+    print(tabulate([["Webhook Endpoint", invoke_url]], tablefmt="grid"))
 
 
 def __show_function_status(ctx):
@@ -996,11 +996,18 @@ def __show_sqs_status(ctx):
         ]
     ]
 
-    for url in get_queue_url():
-        queue_name = url.split("/")[-1]
+    queue_names = [
+        'uploads.fifo',
+        'uploads-deadletter.fifo',
+        'downloads',
+        'downloads-deadletter'
+    ]
 
-        cmd = ("aws sqs get-queue-attributes --queue-url {} "
-               "--attribute-names All").format(url)
+    for queue_name in queue_names:
+        url = get_queue_url(queue_name)
+
+        cmd = ("aws {} sqs get-queue-attributes --queue-url {} "
+               "--attribute-names All").format(profile_arg(), url)
 
         res = json.loads(ctx.run(cmd, hide=True).stdout)["Attributes"]
 
