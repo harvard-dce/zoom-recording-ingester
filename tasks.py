@@ -225,10 +225,13 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 
 
 @task(help={'uuid': 'meeting instance uuid', 'host_id': 'meeting host id'})
-def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
+def exec_webhook(ctx, uuid=None, host_id=None, status=None, webhook_version=2):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
+
+    if None in (uuid, host_id):
+        raise Exit("You must provide both a --uuid and a --host-id value")
 
     apig = boto3.client('apigateway')
 
@@ -269,23 +272,43 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
 
     print("Returned with status code: {}. {}".format(resp['status'], resp['body']))
 
+
 @task
-def exec_downloader(ctx):
+def exec_downloader(ctx, qualifier=None):
     """
     Manually trigger downloader.
     """
+    if qualifier is None:
+        qualifier = getenv('LAMBDA_RELEASE_ALIAS')
+
     cmd = ("aws lambda invoke --function-name='{}-zoom-downloader-function' "
-            "output.txt").format(STACK_NAME)
+            "--qualifier {} output.txt").format(STACK_NAME, qualifier)
     print(cmd)
     ctx.run(cmd)
 
-@task
-def exec_uploader(ctx):
+
+@task(help={
+    'series_id': 'override normal opencast series id lookup',
+    'ignore_schedule': 'do opencast series id lookup but ignore if meeting times don\'t match'
+})
+def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger uploader.
     """
+    payload = { 'num_uploads': 1, 'ignore_schedule': ignore_schedule }
+
+    if series_id is not None:
+        payload['override_series_id'] = series_id
+
+    if qualifier is None:
+        qualifier = getenv('LAMBDA_RELEASE_ALIAS')
+
     cmd = ("aws lambda invoke --function-name='{}-zoom-uploader-function' "
-           "--payload='{{\"num_uploads\": 1}}' outfile.txt").format(STACK_NAME)
+           "--payload='{}' --qualifier {} outfile.txt").format(
+        STACK_NAME,
+        json.dumps(payload),
+        qualifier
+    )
 
     print(cmd)
     res = ctx.run(cmd)
