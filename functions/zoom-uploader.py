@@ -20,6 +20,7 @@ OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'S1'
+ZOOM_OPENCAST_WORKFLOW = "DCE-production-zoom"
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
@@ -52,6 +53,8 @@ def handler(event, context):
 
     # allow upload count to be overridden
     num_uploads = event['num_uploads']
+    ignore_schedule = event.get('ignore_schedule', False)
+    override_series_id = event.get('override_series_id')
 
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
@@ -69,6 +72,8 @@ def handler(event, context):
             return
         try:
             upload_data = json.loads(upload_message.body)
+            upload_data['ignore_schedule'] = ignore_schedule
+            upload_data['override_series_id'] = override_series_id
             logger.info(upload_data)
             wf_id = process_upload(upload_data)
             if wf_id:
@@ -128,6 +133,15 @@ class Upload:
     def zoom_series_id(self):
         return self.data['meeting_number']
 
+    @property
+    def ignore_schedule(self):
+        return self.data['ignore_schedule']
+
+    @property
+    def override_series_id(self):
+        return self.data.get('override_series_id')
+
+
     def series_id_from_schedule(self):
 
         dynamodb = boto3.resource('dynamodb')
@@ -163,21 +177,31 @@ class Upload:
         else:
             logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
                          .format(threshold_minutes))
+            if self.ignore_schedule:
+                logger.debug("'ignore_schedule' enabled; using {} as series id."
+                            .format(schedule['opencast_series_id']))
+                return schedule['opencast_series_id']
             return None
 
     @property
     def opencast_series_id(self):
 
-        series_id = self.series_id_from_schedule()
+        if not hasattr(self, '_oc_series_id'):
 
-        if series_id is not None:
-            logger.info("Matched with opencast series {}!".format(series_id))
-            self._oc_series_id = series_id
-        elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
-            logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
-            self._oc_series_id = DEFAULT_SERIES_ID
-        else:
-            self._oc_series_id = None
+            if self.override_series_id:
+                series_id = self.override_series_id
+                logger.info("Using override series id '{}'".format(series_id))
+            else:
+                series_id = self.series_id_from_schedule()
+                logger.info("Matched with opencast series '{}'!".format(series_id))
+
+            if series_id is not None:
+                self._oc_series_id = series_id
+            elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
+                logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
+                self._oc_series_id = DEFAULT_SERIES_ID
+            else:
+                self._oc_series_id = None
 
         return self._oc_series_id
 
