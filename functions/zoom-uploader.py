@@ -22,6 +22,7 @@ ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'S1'
 ZOOM_OPENCAST_WORKFLOW = "DCE-production-zoom"
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
+DEFAULT_PRODUCER_EMAIL = env("DEFAULT_PRODUCER_EMAIL")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
@@ -211,18 +212,22 @@ class Upload:
         return ZOOM_RECORDING_TYPE_NUM
 
     @property
-    def publisher(self):
-        # TODO: this should be configurable
-        return "zoom-ingester@dce.harvard.edu"
+    def producer_email(self):
+        if 'publisher' in self.episode_defaults:
+            return self.episode_defaults['publisher']
+        elif DEFAULT_PRODUCER_EMAIL:
+            return DEFAULT_PRODUCER_EMAIL
 
     @property
-    def contributor(self):
-        # TODO: configurable
-        return "Zoom Ingester"
+    def producer(self):
+        if 'contributor' in self.episode_defaults:
+            return self.episode_defaults['contributor']
+        else:
+            return "Zoom Ingester"
 
     @property
     def workflow_definition_id(self):
-        return "DCE-zoom-test-wf"
+        return ZOOM_OPENCAST_WORKFLOW
 
     @property
     def s3_files(self):
@@ -270,9 +275,9 @@ class Upload:
                 escape(self.creator),
                 self.type_num,
                 self.opencast_series_id,
-                escape(self.publisher),
+                escape(self.producer_email),
                 escape(self.title),
-                escape(self.contributor),
+                escape(self.producer),
                 datetime.strftime(self.created_local, '%Y-%m-%dT%H:%M:%SZ'),
                 escape(self.description)
             ).strip()
@@ -294,6 +299,7 @@ class Upload:
         if not self.verify_series_mapping():
             logger.info("No series mapping found for zoom series {}".format(self.zoom_series_id))
             return
+        self.load_episode_defaults()
         self.create_mediapackage()
         self.add_tracks()
         self.add_episode()
@@ -302,6 +308,20 @@ class Upload:
 
     def verify_series_mapping(self):
         return self.opencast_series_id is not None
+
+    def load_episode_defaults(self):
+
+        # data includes 'contributor', 'publisher' (ie, producer email), and 'creator'
+        endpoint = '/otherpubs/episodedefaults/{}.json'.format(self.opencast_series_id)
+        try:
+           resp = oc_api_request('GET', endpoint)
+           data = resp.json()['http://purl.org/dc/terms/']
+           self.episode_defaults = { k: v[0]['value'] for k, v in data.items() }
+        except requests.RequestException:
+            self.episode_defaults = {}
+
+        logger.debug({'episode_defaults': self.episode_defaults})
+
 
     def create_mediapackage(self):
         logger.info("Creating mediapackage")
