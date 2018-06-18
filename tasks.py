@@ -558,6 +558,10 @@ def __create_or_update(ctx, op):
 
     subnet_id, sg_id = vpc_components(ctx)
 
+    default_producer_email = getenv('DEFAULT_PRODUCER_EMAIL', required=False)
+    if default_producer_email is None:
+        default_producer_email = getenv('NOTIFICATION_EMAIL')
+
     cmd = ("aws {} cloudformation {}-stack {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
            "--template-body file://{} "
@@ -573,6 +577,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
            "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
+           "ParameterKey=DefaultProducerEmail,ParameterValue='{}' "
            "ParameterKey=LocalTimeZone,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
@@ -594,7 +599,8 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_BASE_URL"),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
-                getenv("DEFAULT_SERIES_ID", False),
+                getenv("DEFAULT_SERIES_ID", required=False) or "",
+                default_producer_email,
                 getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id,
