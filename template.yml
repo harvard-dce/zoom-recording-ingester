@@ -28,6 +28,12 @@ Parameters:
   DefaultProducerEmail:
     Type: String
     Default: "${AWS::NoValue}"
+  OverrideProducer:
+    Type: String
+    Default: "${AWS::NoValue}"
+  OverrideProducerEmail:
+    Type: String
+    Default: "${AWS::NoValue}"
   LocalTimeZone:
     Type: String
     Default: 'US/Eastern'
@@ -339,6 +345,8 @@ Resources:
           OPENCAST_API_PASSWORD: !Ref OpencastApiPassword
           DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
           DEFAULT_PRODUCER_EMAIL: !Ref DefaultProducerEmail
+          OVERRIDE_PRODUCER: !Ref OverrideProducer
+          OVERRIDE_PRODUCER_EMAIL: !Ref OverrideProducerEmail
           CLASS_SCHEDULE_TABLE: !Ref ClassScheduleDynamoTable
           LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0

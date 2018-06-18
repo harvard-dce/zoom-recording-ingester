@@ -578,6 +578,8 @@ def __create_or_update(ctx, op):
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
            "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
            "ParameterKey=DefaultProducerEmail,ParameterValue='{}' "
+           "ParameterKey=OverrideProducer,ParameterValue='{}' "
+           "ParameterKey=OverrideProducerEmail,ParameterValue='{}' "
            "ParameterKey=LocalTimeZone,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
@@ -601,6 +603,8 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", required=False) or "",
                 default_producer_email,
+                getenv("OVERRIDE_PRODUCER", required=False) or "",
+                getenv("OVERRIDE_PRODUCER_EMAIL", required=False) or "",
                 getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id,

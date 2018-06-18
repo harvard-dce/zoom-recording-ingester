@@ -23,6 +23,8 @@ ZOOM_RECORDING_TYPE_NUM = 'S1'
 ZOOM_OPENCAST_WORKFLOW = "DCE-production-zoom"
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 DEFAULT_PRODUCER_EMAIL = env("DEFAULT_PRODUCER_EMAIL")
+OVERRIDE_PRODUCER = env("OVERRIDE_PRODUCER")
+OVERRIDE_PRODUCER_EMAIL = env("OVERRIDE_PRODUCER_EMAIL")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
@@ -213,14 +215,18 @@ class Upload:
 
     @property
     def producer_email(self):
-        if 'publisher' in self.episode_defaults:
+        if OVERRIDE_PRODUCER_EMAIL:
+            return OVERRIDE_PRODUCER_EMAIL
+        elif 'publisher' in self.episode_defaults:
             return self.episode_defaults['publisher']
         elif DEFAULT_PRODUCER_EMAIL:
             return DEFAULT_PRODUCER_EMAIL
 
     @property
     def producer(self):
-        if 'contributor' in self.episode_defaults:
+        if OVERRIDE_PRODUCER:
+            return OVERRIDE_PRODUCER
+        elif 'contributor' in self.episode_defaults:
             return self.episode_defaults['contributor']
         else:
             return "Zoom Ingester"
