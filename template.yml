@@ -563,6 +563,10 @@ Resources:
 
   ZoomWebhookLogSubscriptionFilter:
     Type: AWS::Logs::SubscriptionFilter
+    DependsOn:
+      - ZoomWebhookLogGroup
+      - ZoomWebhookFunction
+      - ZoomWebhookFunctionAlias
     Properties:
       LogGroupName: !Ref ZoomWebhookLogGroup
       DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
@@ -581,6 +585,10 @@ Resources:
 
   ZoomDownloaderLogSubscriptionFilter:
     Type: AWS::Logs::SubscriptionFilter
+    DependsOn:
+      - ZoomDownloaderLogGroup
+      - ZoomDownloaderFunction
+      - ZoomDownloaderFunctionAlias
     Properties:
       LogGroupName: !Ref ZoomDownloaderLogGroup
       DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
@@ -599,6 +607,10 @@ Resources:
 
   ZoomUploaderLogSubscriptionFilter:
     Type: AWS::Logs::SubscriptionFilter
+    DependsOn:
+      - ZoomUploaderLogGroup
+      - ZoomUploaderFunction
+      - ZoomUploaderFunctionAlias
     Properties:
       LogGroupName: !Ref ZoomUploaderLogGroup
       DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
