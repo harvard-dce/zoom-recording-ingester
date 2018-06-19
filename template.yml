@@ -34,6 +34,9 @@ Parameters:
     Type: String
   LambdaReleaseAlias:
     Type: String
+  LogNotificationsFilterLogLevel:
+    Type: String
+    Default: "ERROR"
 
 Conditions:
   UploadFunctionVpcConfig: !Not [!Equals ["", !Ref VpcSubnetId]]
@@ -552,37 +555,23 @@ Resources:
       FunctionVersion: "$LATEST"
       Name: !Ref LambdaReleaseAlias
 
-  ZoomNewLogGroupEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - "aws.logs"
-        detail-type:
-          - "AWS API Call via CloudTrail"
-        detail:
-          eventSource:
-            - "logs.amazonaws.com"
-          eventName:
-            - "CreateLogGroup"
-      State: ENABLED
-      Targets:
-        - Arn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
-          Id: "LogNotificationFunction"
-
-  ZoomNewLogGroupEventRulePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt [ZoomNewLogGroupEventRule, Arn]
-
   ZoomWebhookLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-webhook-function"
       RetentionInDays: 60
+
+  ZoomWebhookLogSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      LogGroupName: !Ref ZoomWebhookLogGroup
+      DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
+      FilterPattern:
+        !Join
+          - ""
+          - - "{ $.level = "
+            - !Ref LogNotificationsFilterLogLevel
+            - " }"
 
   ZoomDownloaderLogGroup:
     Type: AWS::Logs::LogGroup
@@ -590,11 +579,42 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-downloader-function"
       RetentionInDays: 60
 
+  ZoomDownloaderLogSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      LogGroupName: !Ref ZoomDownloaderLogGroup
+      DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
+      FilterPattern:
+        !Join
+          - ""
+          - - "{ $.level = "
+            - !Ref LogNotificationsFilterLogLevel
+            - " }"
+
   ZoomUploaderLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-uploader-function"
       RetentionInDays: 60
+
+  ZoomUploaderLogSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      LogGroupName: !Ref ZoomUploaderLogGroup
+      DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
+      FilterPattern:
+        !Join
+          - ""
+          - - "{ $.level = "
+            - !Ref LogNotificationsFilterLogLevel
+            - " }"
+
+  ZoomLogNotificationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
+      Action: lambda:InvokeFunction
+      Principal: !Sub "logs.${AWS::Region}.amazonaws.com"
 
   RecordingCompletedMetricFilter:
     Type: AWS::Logs::MetricFilter
