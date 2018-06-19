@@ -554,6 +554,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
            "ParameterKey=LambdaReleaseAlias,ParameterValue='{}' "
+           "ParameterKey=LogNotificationsFilterLogLevel,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -574,7 +575,8 @@ def __create_or_update(ctx, op):
                 getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id,
-                getenv("LAMBDA_RELEASE_ALIAS")
+                getenv("LAMBDA_RELEASE_ALIAS"),
+                getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False) or ""
                 )
     res = ctx.run(cmd)
 
