@@ -4,6 +4,8 @@ import gzip
 import base64
 import boto3
 from os import getenv as env
+from io import BytesIO
+import codecs
 
 import logging
 from common import setup_logging
@@ -19,9 +21,11 @@ def handler(event, context):
 
         logger.info("processing subscribed events")
 
-        # log event data comes base64 encoded & gzipped
-        raw_data = base64.b64decode(gzip.decompress(event['awslogs']['data']))
-        log_data = json.loads(raw_data.decode())
+        # log event data comes gzipped & base64 decoded
+        raw_data = event['awslogs']['data']
+        decoded = codecs.decode(raw_data, 'base64', 'strict')
+        decompressed = gzip.decompress(BytesIO(decoded).read())
+        log_data = json.loads(decompressed.decode())
         logger.debug({'log data': log_data})
 
         log_group = log_data['logGroup']
