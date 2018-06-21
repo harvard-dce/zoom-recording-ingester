@@ -224,8 +224,8 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         print("Done!")
 
 
-@task(help={'uuid': 'meeting instance uuid', 'host_id': 'meeting host id'})
-def exec_webhook(ctx, uuid=None, host_id=None, status=None, webhook_version=2):
+@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id'})
+def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
