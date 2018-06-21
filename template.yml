@@ -623,6 +623,9 @@ Resources:
 
   ZoomLogNotificationPermission:
     Type: AWS::Lambda::Permission
+    DependsOn:
+      - ZoomLogNotificationsFunction
+      - ZoomLogNotificationsFunctionAlias
     Properties:
       FunctionName: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
       Action: lambda:InvokeFunction
