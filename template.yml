@@ -567,6 +567,7 @@ Resources:
       - ZoomWebhookLogGroup
       - ZoomWebhookFunction
       - ZoomWebhookFunctionAlias
+      - ZoomLogNotificationPermission
     Properties:
       LogGroupName: !Ref ZoomWebhookLogGroup
       DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
@@ -589,6 +590,7 @@ Resources:
       - ZoomDownloaderLogGroup
       - ZoomDownloaderFunction
       - ZoomDownloaderFunctionAlias
+      - ZoomLogNotificationPermission
     Properties:
       LogGroupName: !Ref ZoomDownloaderLogGroup
       DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
@@ -611,6 +613,7 @@ Resources:
       - ZoomUploaderLogGroup
       - ZoomUploaderFunction
       - ZoomUploaderFunctionAlias
+      - ZoomLogNotificationPermission
     Properties:
       LogGroupName: !Ref ZoomUploaderLogGroup
       DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
