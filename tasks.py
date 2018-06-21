@@ -1030,27 +1030,28 @@ def __show_sqs_status(ctx):
     
 def __get_meetings(date):
     page_size = 300
-    mtg_type = "past"
     key = getenv('ZOOM_API_KEY')
     secret = getenv('ZOOM_API_SECRET')
+    meetings = []
 
-    url = "{}metrics/meetings/".format(getenv('ZOOM_API_BASE_URL'))
-    url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
+    for mtg_type in ["past", "pastOne"]:
+        url = "{}metrics/meetings/".format(getenv('ZOOM_API_BASE_URL'))
+        url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
 
-    token = gen_token(key=key, secret=secret)
-    r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
-    r.raise_for_status()
-    response = r.json()
-    meetings = response['meetings']
-
-    while 'next_page_token' in response and response['next_page_token'].strip() is True:
         token = gen_token(key=key, secret=secret)
-        r = requests.get(url + "&next_page_token=" + response['next_page_token'],
-                         headers={"Authorization": "Bearer %s" % token.decode()})
+        r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
         r.raise_for_status()
-        meetings.extend(r.json()['meetings'])
-        time.sleep(60)
+        response = r.json()
+        meetings.extend(response['meetings'])
 
-    time.sleep(1)
+        while 'next_page_token' in response and response['next_page_token'].strip() is True:
+            token = gen_token(key=key, secret=secret)
+            r = requests.get(url + "&next_page_token=" + response['next_page_token'],
+                             headers={"Authorization": "Bearer %s" % token.decode()})
+            r.raise_for_status()
+            meetings.extend(r.json()['meetings'])
+            time.sleep(60)
+
+        time.sleep(1)
 
     return meetings
