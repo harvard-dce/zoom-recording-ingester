@@ -360,12 +360,19 @@ def send_to_sqs(message, queue_name, error=None):
     try:
         queue = sqs.get_queue_by_name(QueueName=queue_name)
 
-        message_sent = queue.send_message(
-            MessageBody=json.dumps(message),
-            MessageGroupId=message['uuid'],
-            MessageDeduplicationId=message['uuid'],
-            MessageAttributes=message_attributes
-        )
+        if 'fifo' in queue.url:
+            message_sent = queue.send_message(
+                MessageBody=json.dumps(message),
+                MessageGroupId=message['uuid'],
+                MessageDeduplicationId=message['uuid'],
+                MessageAttributes=message_attributes
+            )
+        else:
+            message_sent = queue.send_message(
+                MessageBody=json.dumps(message),
+                MessageGroupId=message['uuid'],
+                MessageAttributes=message_attributes
+            )
     except Exception as e:
         logger.exception("Error when sending SQS message for meeting uuid {} to queue {}:{}"
                          .format(message['uuid'], queue_name, e))
