@@ -433,12 +433,17 @@ def view_uploads(ctx, limit=20):
 
 
 @task(pre=[production_failsafe])
-def import_schedule(ctx, csv_name="classes.csv", year=None, semester=None):
+def import_schedule(ctx, filename="classes.csv", year=None, semester=None):
     """
-    Csv to dynamo. Optional: --csv_name, --year, --semester
+    Csv or json to dynamo. Optional: --filename, --year, --semester
     """
-    __schedule_csv_to_json(csv_name, "classes.json", year=year, semester=semester)
-    __schedule_json_to_dynamo("classes.json")
+    if filename.endswith('.csv'):
+        __schedule_csv_to_json(filename, "classes.json", year=year, semester=semester)
+        __schedule_json_to_dynamo("classes.json")
+    elif filename.endswith('.json'):
+        __schedule_json_to_dynamo(filename)
+    else:
+        print("Invalid file type {}".format(filename))
 
 
 ns = Collection()
