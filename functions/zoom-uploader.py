@@ -155,6 +155,7 @@ class Upload:
         )
 
         if 'Item' not in r:
+            logger.debug("'Item' not found in: {}".format(r))
             return None
         else:
             schedule = r['Item']
@@ -284,7 +285,7 @@ class Upload:
                 escape(self.producer_email),
                 escape(self.title),
                 escape(self.producer),
-                datetime.strftime(self.created_local, '%Y-%m-%dT%H:%M:%SZ'),
+                datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'),
                 escape(self.description)
             ).strip()
 
