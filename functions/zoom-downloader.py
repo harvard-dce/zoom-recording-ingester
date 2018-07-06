@@ -119,7 +119,8 @@ def handler(event, context):
             "host_name": host_data['host_name'],
             "host_id": message_body['host_id'],
             "topic": recording_data['topic'],
-            "start_time": recording_data['start_time'],
+            "meeting_start_time": recording_data['start_time'],
+            "recording_start_time": recording_data['recording_files'][0]['recording_start'],
             "recording_count": recording_data['recording_count'],
             "webhook_received_time": message_body['received_time'],
             "correlation_id": message_body['correlation_id']
