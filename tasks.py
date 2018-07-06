@@ -606,16 +606,17 @@ def __create_or_update(ctx, op):
                 getenv("OPENCAST_BASE_URL"),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
-                getenv("DEFAULT_SERIES_ID", required=False) or "",
+                getenv("DEFAULT_SERIES_ID", required=False),
                 default_producer_email,
-                getenv("OVERRIDE_PRODUCER", required=False) or "",
-                getenv("OVERRIDE_PRODUCER_EMAIL", required=False) or "",
+                getenv("OVERRIDE_PRODUCER", required=False),
+                getenv("OVERRIDE_PRODUCER_EMAIL", required=False),
                 getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id,
                 getenv("LAMBDA_RELEASE_ALIAS"),
-                getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False) or ""
+                getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False)
                 )
+
     res = ctx.run(cmd)
 
     if res.exited == 0:

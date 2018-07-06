@@ -106,7 +106,9 @@ class Upload:
 
     @property
     def created(self):
-        utc = datetime.strptime(self.data['start_time'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone('UTC'))
+        utc = datetime.strptime(
+                self.data['recording_start_time'], '%Y-%m-%dT%H:%M:%SZ')\
+                .replace(tzinfo=timezone('UTC'))
         return utc
 
     @property
@@ -143,7 +145,6 @@ class Upload:
     @property
     def override_series_id(self):
         return self.data.get('override_series_id')
-
 
     def series_id_from_schedule(self):
 
@@ -197,9 +198,9 @@ class Upload:
                 logger.info("Using override series id '{}'".format(series_id))
             else:
                 series_id = self.series_id_from_schedule()
-                logger.info("Matched with opencast series '{}'!".format(series_id))
 
             if series_id is not None:
+                logger.info("Matched with opencast series '{}'!".format(series_id))
                 self._oc_series_id = series_id
             elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
                 logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
@@ -216,7 +217,7 @@ class Upload:
 
     @property
     def producer_email(self):
-        if OVERRIDE_PRODUCER_EMAIL:
+        if OVERRIDE_PRODUCER_EMAIL and OVERRIDE_PRODUCER_EMAIL != "None":
             return OVERRIDE_PRODUCER_EMAIL
         elif 'publisher' in self.episode_defaults:
             return self.episode_defaults['publisher']
@@ -225,7 +226,7 @@ class Upload:
 
     @property
     def producer(self):
-        if OVERRIDE_PRODUCER:
+        if OVERRIDE_PRODUCER and OVERRIDE_PRODUCER != "None":
             return OVERRIDE_PRODUCER
         elif 'contributor' in self.episode_defaults:
             return self.episode_defaults['contributor']
