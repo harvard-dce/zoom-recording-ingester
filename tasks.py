@@ -16,6 +16,7 @@ from pprint import pprint
 from functions.common import gen_token
 import requests
 from pytz import timezone
+from multiprocessing import Process
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -446,6 +447,52 @@ def import_schedule(ctx, filename="classes.csv", year=None, semester=None):
         print("Invalid file type {}".format(filename))
 
 
+@task
+def logs(ctx, function=None, watch=False):
+
+    if function is None:
+        functions = FUNCTION_NAMES
+    else:
+        functions = [function]
+
+    def _awslogs(group, watch=False):
+        watch_flag = watch and "--watch" or ""
+        cmd = "awslogs get {} ALL {} {}".format(
+            group,
+            watch_flag,
+            profile_arg()
+        )
+        ctx.run(cmd)
+
+    procs = []
+    for func in functions:
+        group = "/aws/lambda/{}-{}-function".format(STACK_NAME, func)
+        procs.append(
+            Process(target=_awslogs, name=func, args=(group, watch))
+        )
+
+    for p in procs:
+        p.start()
+
+    for p in procs:
+        p.join()
+
+
+@task
+def logs_webhook(ctx, watch=False):
+    logs(ctx, 'zoom-webhook', watch)
+
+
+@task
+def logs_downloader(ctx, watch=False):
+    logs(ctx, 'zoom-downloader', watch)
+
+
+@task
+def logs_uploader(ctx, watch=False):
+    logs(ctx, 'zoom-uploader', watch)
+
+
 ns = Collection()
 ns.add_task(create_code_bucket)
 ns.add_task(test)
@@ -483,6 +530,13 @@ ns.add_collection(queue_ns)
 schedule_ns = Collection('schedule')
 schedule_ns.add_task(import_schedule, 'import')
 ns.add_collection(schedule_ns)
+
+logs_ns = Collection('logs')
+logs_ns.add_task(logs, 'all')
+logs_ns.add_task(logs_webhook, 'webhook')
+logs_ns.add_task(logs_downloader, 'downloader')
+logs_ns.add_task(logs_uploader, 'uploader')
+ns.add_collection(logs_ns)
 
 ###############################################################################
 

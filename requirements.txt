@@ -12,6 +12,7 @@ requests
 requests-mock
 freezegun
 tabulate
+awslogs
 
 -r functions/zoom-webhook.txt
 -r functions/zoom-downloader.txt
