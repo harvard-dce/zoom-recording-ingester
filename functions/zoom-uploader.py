@@ -176,7 +176,7 @@ class Upload:
                         zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
                         ).total_seconds()
 
-        threshold_minutes = 20
+        threshold_minutes = 30
         if timedelta < (threshold_minutes * 60):
             return schedule['opencast_series_id']
         else:
