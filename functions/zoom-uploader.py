@@ -341,16 +341,10 @@ class Upload:
 
         logger.info("Adding tracks")
 
-        def sorted_videos(vids):
-            return sorted(
-                    vids,
-                    key=lambda vid: vid.metadata['track_sequence']
-                   )
-
         if self.speaker_videos is not None:
-            videos = sorted_videos(self.speaker_videos)
+            videos = self.speaker_videos
         elif self.gallery_videos is not None:
-            videos = sorted_videos(self.gallery_videos)
+            videos = self.gallery_videos
         else:
             raise Exception("No mp4 files available for upload.")
 

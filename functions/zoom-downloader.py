@@ -236,8 +236,7 @@ def next_track_sequence(prev_file, file):
 
 def stream_file_to_s3(file, uuid, track_sequence):
 
-    metadata = {'uuid': uuid,
-                'track_sequence': str(track_sequence)}
+    metadata = {'uuid': uuid}
 
     if file['file_type'].lower() in ["mp4", "m4a", "chat"]:
         stream, zoom_name = get_connection_using_play_url(file['play_url'])
@@ -250,7 +249,9 @@ def stream_file_to_s3(file, uuid, track_sequence):
         stream, zoom_name = get_connection_using_download_url(file['download_url'])
 
     metadata['file_type'] = zoom_name.split('.')[-1]
-    filename = create_filename(file['id'], file['meeting_id'], zoom_name)
+    filename = create_filename("{:03d}-{}".format(track_sequence, file['id']),
+                               file['meeting_id'],
+                               zoom_name)
 
     logger.info("Beginning upload of {}".format(filename))
     part_info = {'Parts': []}
