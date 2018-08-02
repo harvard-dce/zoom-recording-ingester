@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pytz import timezone
 from xml.sax.saxutils import escape
+from uuid import UUID
 
 import logging
 from common import setup_logging
@@ -19,7 +20,7 @@ OPENCAST_BASE_URL = env("OPENCAST_BASE_URL")
 OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
-ZOOM_RECORDING_TYPE_NUM = 'S1'
+ZOOM_RECORDING_TYPE_NUM = 'S01'
 ZOOM_OPENCAST_WORKFLOW = "DCE-production-zoom"
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 DEFAULT_PRODUCER_EMAIL = env("DEFAULT_PRODUCER_EMAIL")
@@ -112,19 +113,8 @@ class Upload:
         return utc
 
     @property
-    def created_local(self, tz=LOCAL_TIME_ZONE):
-        return self.created.astimezone(timezone(tz))
-
-    @property
     def title(self):
         return self.data['topic']
-
-    @property
-    def description(self):
-        formatted_time = datetime.strftime(self.created_local, '%B %-d, %Y at %H:%M:%S %Z')
-        return "Zoom Session Recording by {} for {} on {}".format(
-            self.creator, self.title, formatted_time
-        )
 
     @property
     def meeting_uuid(self):
@@ -147,7 +137,6 @@ class Upload:
         return self.data.get('override_series_id')
 
     def series_id_from_schedule(self):
-
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
 
@@ -156,13 +145,12 @@ class Upload:
         )
 
         if 'Item' not in r:
-            logger.debug("'Item' not found in: {}".format(r))
             return None
         else:
             schedule = r['Item']
             logger.info(schedule)
 
-        zoom_time = self.created_local
+        zoom_time = self.created.astimezone(timezone(LOCAL_TIME_ZONE))
         weekdays = ['M', 'T', 'W', 'R', 'F']
         if zoom_time.weekday() > 4:
             logger.debug("Meeting occurred on a weekend.")
@@ -209,7 +197,6 @@ class Upload:
                 self._oc_series_id = None
 
         return self._oc_series_id
-
 
     @property
     def type_num(self):
@@ -261,39 +248,6 @@ class Upload:
         return self._get_video_files('gallery')
 
     @property
-    def episode_xml(self):
-
-        if not hasattr(self, '_episode_xml'):
-            self._episode_xml = """
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<dublincore xmlns="http://www.opencastproject.org/xsd/1.0/dublincore/" xmlns:dcterms="http://purl.org/dc/terms/">
-    <dcterms:creator>{}</dcterms:creator>
-    <dcterms:type>{}</dcterms:type>
-    <dcterms:isPartOf>{}</dcterms:isPartOf>
-    <dcterms:license>Creative Commons 3.0: Attribution-NonCommercial-NoDerivs</dcterms:license>
-    <dcterms:publisher>{}</dcterms:publisher>
-    <dcterms:title>{}</dcterms:title>
-    <dcterms:contributor>{}</dcterms:contributor>
-    <dcterms:created>{}</dcterms:created>
-    <dcterms:language xmlns="http://www.w3.org/1999/xhtml">en</dcterms:language>
-    <dcterms:description xmlns="http://www.w3.org/1999/xhtml">{}</dcterms:description>
-</dublincore>
-""" \
-            .format(
-                escape(self.creator),
-                self.type_num,
-                self.opencast_series_id,
-                escape(self.producer_email),
-                escape(self.title),
-                escape(self.producer),
-                datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'),
-                escape(self.description)
-            ).strip()
-
-        logger.debug({'episode_xml': self._episode_xml})
-        return self._episode_xml
-
-    @property
     def workflow_id(self):
         if not hasattr(self, 'workflow_xml'):
             logger.warning("No workflow xml yet!")
@@ -305,41 +259,50 @@ class Upload:
 
     def upload(self):
         if not self.verify_series_mapping():
-            logger.info("No series mapping found for zoom series {}".format(self.zoom_series_id))
+            logger.info("No series mapping found for zoom series {}"
+                        .format(self.zoom_series_id))
             return
         self.load_episode_defaults()
-        self.create_mediapackage()
-        self.add_tracks()
-        self.add_episode()
+        self.create_mediapackage_id()
+        if self.already_ingested():
+            logger.warning("Episode with mediapackage id {} already ingested"
+                           .format(self.mediapackage_id))
+            return None
         self.ingest()
         return self.workflow_id
 
     def verify_series_mapping(self):
         return self.opencast_series_id is not None
 
+    def already_ingested(self):
+        endpoint = '/workflow/instances.json?mp={}'.format(self.mediapackage_id)
+        resp = oc_api_request('GET', endpoint)
+        logger.debug("Lookup for mpid: {}, {}"
+                     .format(self.mediapackage_id, resp.json()))
+        return int(resp.json()["workflows"]["totalCount"]) > 0
+
     def load_episode_defaults(self):
 
         # data includes 'contributor', 'publisher' (ie, producer email), and 'creator'
         endpoint = '/otherpubs/episodedefaults/{}.json'.format(self.opencast_series_id)
         try:
-           resp = oc_api_request('GET', endpoint)
-           data = resp.json()['http://purl.org/dc/terms/']
-           self.episode_defaults = { k: v[0]['value'] for k, v in data.items() }
+            resp = oc_api_request('GET', endpoint)
+            data = resp.json()['http://purl.org/dc/terms/']
+            self.episode_defaults = { k: v[0]['value'] for k, v in data.items() }
         except requests.RequestException:
             self.episode_defaults = {}
 
         logger.debug({'episode_defaults': self.episode_defaults})
 
+    def create_mediapackage_id(self):
+        mpid = str(UUID(md5(self.meeting_uuid.encode()).hexdigest()))
+        logger.debug("Created mediapackage id {} from uuid {}"
+                     .format(mpid, self.meeting_uuid))
+        self.mediapackage_id = mpid
 
-    def create_mediapackage(self):
-        logger.info("Creating mediapackage")
-        create_mp_resp = oc_api_request('GET', '/ingest/createMediaPackage')
-        self.mediapackage_xml = create_mp_resp.text
-        logger.debug({'mediapackage_xml': self.mediapackage_xml})
+    def ingest(self):
 
-    def add_tracks(self):
-
-        logger.info("Adding tracks")
+        logger.info("Adding mediapackage and ingesting")
 
         if self.speaker_videos is not None:
             videos = self.speaker_videos
@@ -348,42 +311,34 @@ class Upload:
         else:
             raise Exception("No mp4 files available for upload.")
 
+        endpoint = "/ingest/addMediaPackage/{}".format(self.workflow_definition_id)
+
+        params = [
+            ('creator', (None, escape(self.creator))),
+            ('identifier', (None, self.mediapackage_id)),
+            ('title', (None, escape(self.title))),
+            ('type', (None, self.type_num)),
+            ('isPartOf', (None, self.opencast_series_id)),
+            ('license', (None, 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')),
+            ('publisher', (None, escape(self.producer_email))),
+            ('contributor', (None, escape(self.producer))),
+            ('created', (None, datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'))),
+            ('language', (None, 'en')),
+            ('description', (None, self.type_num))
+        ]
+
         for video in videos:
             url = self._generate_presigned_url(video)
-            logger.info("Adding track {}".format(url))
-            logger.debug({"metadata": video.metadata})
-            add_track_params = {
-                'mediaPackage': self.mediapackage_xml,
-                'flavor': 'multipart/partsource',
-                'url': url
-            }
-            add_track_resp = oc_api_request('POST', '/ingest/addTrack',
-                                            data=add_track_params)
-            self.mediapackage_xml = add_track_resp.text
+            params.extend([
+                ('flavor', (None, escape('multipart/partsource'))),
+                ('mediaUri', (None, url))
+            ])
 
-    def add_episode(self):
+        resp = oc_api_request('POST', endpoint, files=params)
 
-        logger.info("Adding episode")
-        add_episode_params = {
-            'mediaPackage': self.mediapackage_xml,
-            'flavor': 'dublincore/episode',
-            'dublinCore': self.episode_xml
-        }
+        logger.debug(resp.text)
 
-        add_episode_resp = oc_api_request('POST', '/ingest/addDCCatalog',
-                                          data=add_episode_params)
-        self.mediapackage_xml = add_episode_resp.text
-
-    def ingest(self):
-        logger.info("Ingesting")
-        ingest_params = {
-            'mediaPackage': self.mediapackage_xml,
-            'workflowDefinitionId': self.workflow_definition_id
-        }
-
-        ingest_resp = oc_api_request('POST', '/ingest/ingest',
-                                     data=ingest_params)
-        self.workflow_xml = ingest_resp.text
+        self.workflow_xml = resp.text
 
     def _generate_presigned_url(self, video):
         url = s3.meta.client.generate_presigned_url(
@@ -401,4 +356,3 @@ class Upload:
         if len(files) == 0:
             return None
         return files
-
