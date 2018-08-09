@@ -20,7 +20,7 @@ OPENCAST_BASE_URL = env("OPENCAST_BASE_URL")
 OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
-ZOOM_RECORDING_TYPE_NUM = 'S01'
+ZOOM_RECORDING_TYPE_NUM = 'L01'
 ZOOM_OPENCAST_WORKFLOW = "DCE-production-zoom"
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 DEFAULT_PRODUCER_EMAIL = env("DEFAULT_PRODUCER_EMAIL")
@@ -111,10 +111,6 @@ class Upload:
                 self.data['recording_start_time'], '%Y-%m-%dT%H:%M:%SZ')\
                 .replace(tzinfo=timezone('UTC'))
         return utc
-
-    @property
-    def title(self):
-        return self.data['topic']
 
     @property
     def meeting_uuid(self):
@@ -268,6 +264,7 @@ class Upload:
             logger.warning("Episode with mediapackage id {} already ingested"
                            .format(self.mediapackage_id))
             return None
+        self.get_series_catalog()
         self.ingest()
         return self.workflow_id
 
@@ -300,6 +297,18 @@ class Upload:
                      .format(mpid, self.meeting_uuid))
         self.mediapackage_id = mpid
 
+    def get_series_catalog(self):
+
+        logger.info("Getting series catalog for series: {}"
+                    .format(self.opencast_series_id))
+
+        endpoint = "/series/{}.json".format(self.opencast_series_id)
+        resp = oc_api_request('GET', endpoint)
+
+        logger.debug({'series_catalog': resp.text})
+
+        self.series_catalog = resp.text
+
     def ingest(self):
 
         logger.info("Adding mediapackage and ingesting")
@@ -316,7 +325,7 @@ class Upload:
         params = [
             ('creator', (None, escape(self.creator))),
             ('identifier', (None, self.mediapackage_id)),
-            ('title', (None, escape(self.title))),
+            ('title', (None, "Lecture")),
             ('type', (None, self.type_num)),
             ('isPartOf', (None, self.opencast_series_id)),
             ('license', (None, 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')),
@@ -324,7 +333,7 @@ class Upload:
             ('contributor', (None, escape(self.producer))),
             ('created', (None, datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'))),
             ('language', (None, 'en')),
-            ('description', (None, self.type_num))
+            ('seriesDCCatalog', (None, self.series_catalog))
         ]
 
         for video in videos:
@@ -336,7 +345,7 @@ class Upload:
 
         resp = oc_api_request('POST', endpoint, files=params)
 
-        logger.debug(resp.text)
+        logger.debug({'addMediaPackage': resp.text})
 
         self.workflow_xml = resp.text
 
