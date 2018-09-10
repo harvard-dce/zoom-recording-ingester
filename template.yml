@@ -46,6 +46,8 @@ Parameters:
   LogNotificationsFilterLogLevel:
     Type: String
     Default: "ERROR"
+  ZoomAdminEmail:
+    Type: String
 
 Conditions:
   UploadFunctionVpcConfig: !Not [!Equals ["", !Ref VpcSubnetId]]
@@ -67,7 +69,7 @@ Resources:
       Artifacts:
         Type: S3
         Location: !Ref LambdaCodeBucket
-        Name: '/'
+        Name: !Sub "${AWS::StackName}"
       BadgeEnabled: 'true'
       ServiceRole: !Ref ZoomIngesterRole
       TimeoutInMinutes: 5
@@ -236,7 +238,7 @@ Resources:
           DEBUG: 0
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: zoom-webhook.zip
+        S3Key: !Sub "${AWS::StackName}/zoom-webhook.zip"
 
   ZoomWebhookFunctionAlias:
     Type: AWS::Lambda::Alias
@@ -297,10 +299,11 @@ Resources:
           ZOOM_API_BASE_URL: !Ref ZoomApiBaseUrl
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
+          ZOOM_ADMIN_EMAIL: !Ref ZoomAdminEmail
           DEBUG: 0
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: zoom-downloader.zip
+        S3Key: !Sub "${AWS::StackName}/zoom-downloader.zip"
 
   ZoomDownloaderFunctionAlias:
     Type: AWS::Lambda::Alias
@@ -313,6 +316,7 @@ Resources:
   ZoomDownloaderEventRule:
     Type: AWS::Events::Rule
     Properties:
+      Name: !Sub "${AWS::StackName}-downloader-rule"
       ScheduleExpression: rate(5 minutes)
       State: ENABLED
       Targets:
@@ -352,7 +356,7 @@ Resources:
           DEBUG: 0
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: zoom-uploader.zip
+        S3Key: !Sub "${AWS::StackName}/zoom-uploader.zip"
       VpcConfig:
         !If
           - UploadFunctionVpcConfig
@@ -374,6 +378,7 @@ Resources:
   ZoomUploaderEventRule:
     Type: AWS::Events::Rule
     Properties:
+      Name: !Sub "${AWS::StackName}-uploader-rule"
       ScheduleExpression: rate(20 minutes)
       State: ENABLED
       Targets:
@@ -557,7 +562,7 @@ Resources:
           SNS_TOPIC_ARN: !Ref ZoomIngesterNotificationTopic
       Code:
         S3Bucket: !Ref LambdaCodeBucket
-        S3Key: zoom-log-notifications.zip
+        S3Key: !Sub "${AWS::StackName}/zoom-log-notifications.zip"
 
   ZoomLogNotificationsFunctionAlias:
     Type: AWS::Lambda::Alias

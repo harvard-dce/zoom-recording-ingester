@@ -155,22 +155,24 @@ class Upload:
             logger.debug("No opencast recording scheduled for this day of the week.")
             return None
 
-        scheduled_time = datetime.strptime(schedule['Time'], '%H:%M')
-        timedelta = abs(zoom_time -
-                        zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
-                        ).total_seconds()
-
-        threshold_minutes = 30
-        if timedelta < (threshold_minutes * 60):
-            return schedule['opencast_series_id']
-        else:
-            logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
-                         .format(threshold_minutes))
-            if self.ignore_schedule:
-                logger.debug("'ignore_schedule' enabled; using {} as series id."
-                            .format(schedule['opencast_series_id']))
+        for time in schedule['Time']:
+            scheduled_time = datetime.strptime(time, '%H:%M')
+            timedelta = abs(zoom_time -
+                            zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
+                            ).total_seconds()
+            threshold_minutes = 30
+            if timedelta < (threshold_minutes * 60):
                 return schedule['opencast_series_id']
-            return None
+
+        logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
+                     .format(threshold_minutes))
+
+        if self.ignore_schedule:
+            logger.debug("'ignore_schedule' enabled; using {} as series id."
+                        .format(schedule['opencast_series_id']))
+            return schedule['opencast_series_id']
+
+        return None
 
     @property
     def opencast_series_id(self):
@@ -273,10 +275,14 @@ class Upload:
 
     def already_ingested(self):
         endpoint = '/workflow/instances.json?mp={}'.format(self.mediapackage_id)
-        resp = oc_api_request('GET', endpoint)
-        logger.debug("Lookup for mpid: {}, {}"
-                     .format(self.mediapackage_id, resp.json()))
-        return int(resp.json()["workflows"]["totalCount"]) > 0
+        try:
+            resp = oc_api_request('GET', endpoint)
+            logger.debug("Lookup for mpid: {}, {}"
+                         .format(self.mediapackage_id, resp.json()))
+            return int(resp.json()["workflows"]["totalCount"]) > 0
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == '404':
+                return False
 
     def load_episode_defaults(self):
 

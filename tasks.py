@@ -65,20 +65,6 @@ def production_failsafe(ctx):
         if not ok:
             raise Exit("Aborting")
 
-@task
-def create_code_bucket(ctx):
-    """
-    Create the s3 bucket for storing packaged lambda code
-    """
-    code_bucket = getenv('LAMBDA_CODE_BUCKET')
-    cmd = "aws {} s3 ls {}".format(profile_arg(), code_bucket)
-    exists = ctx.run(cmd, hide=True, warn=True)
-    if exists.ok:
-        print("Bucket exists!")
-    else:
-        cmd = "aws {} s3 mb s3://{}".format(profile_arg(), code_bucket)
-        ctx.run(cmd)
-
 
 @task(pre=[production_failsafe],
       help={'revision': 'tag or branch name to build and release (required)'})
@@ -326,6 +312,13 @@ def create(ctx):
     if stack_exists(ctx):
         raise Exit("Stack already exists!")
 
+    code_bucket = getenv('LAMBDA_CODE_BUCKET')
+    cmd = "aws {} s3 ls {}".format(profile_arg(), code_bucket)
+    exists = ctx.run(cmd, hide=True, warn=True)
+    if not exists.ok:
+        print("Specified lambda code bucket does not exist!")
+        return
+
     package(ctx, upload_to_s3=True)
     __create_or_update(ctx, "create")
     release(ctx, description="initial release")
@@ -349,11 +342,22 @@ def delete(ctx):
 
     cmd = ("aws {} cloudformation delete-stack "
            "--stack-name {}").format(profile_arg(), STACK_NAME)
-    if input('are you really, really sure? [y/N] ').lower().strip().startswith('y'):
+    if input('Are you sure you want to delete stack "{}"? [y/N] '.format(STACK_NAME))\
+            .lower().strip().startswith('y'):
         ctx.run(cmd, echo=True)
         __wait_for(ctx, "delete")
     else:
         print("not deleting stack")
+
+    files = ["zoom-webhook.zip",
+             "zoom-downloader.zip",
+             "zoom-uploader.zip",
+             "zoom-log-notifications.zip"]
+
+    for file in files:
+        cmd = "aws {} s3 rm s3://{}/{}/{}" \
+            .format(profile_arg(), getenv("LAMBDA_CODE_BUCKET"), STACK_NAME, file)
+        ctx.run(cmd, echo=True)
 
 
 @task
@@ -494,7 +498,6 @@ def logs_uploader(ctx, watch=False):
 
 
 ns = Collection()
-ns.add_task(create_code_bucket)
 ns.add_task(test)
 ns.add_task(codebuild)
 ns.add_task(package)
@@ -644,6 +647,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
            "ParameterKey=LambdaReleaseAlias,ParameterValue='{}' "
            "ParameterKey=LogNotificationsFilterLogLevel,ParameterValue='{}' "
+           "ParameterKey=ZoomAdminEmail,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -668,7 +672,8 @@ def __create_or_update(ctx, op):
                 sg_id,
                 subnet_id,
                 getenv("LAMBDA_RELEASE_ALIAS"),
-                getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False)
+                getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
+                getenv('ZOOM_ADMIN_EMAIL')
                 )
 
     res = ctx.run(cmd)
@@ -750,10 +755,12 @@ def __build_function(ctx, func, upload_to_s3=False):
         ctx.run("zip -r {} .".format(zip_path))
 
     if upload_to_s3:
-        ctx.run("aws {} s3 cp {} s3://{}".format(
+        ctx.run("aws {} s3 cp {} s3://{}/{}/{}.zip".format(
             profile_arg(),
             zip_path,
-            getenv("LAMBDA_CODE_BUCKET"))
+            getenv("LAMBDA_CODE_BUCKET"),
+            STACK_NAME,
+            func)
         )
 
 

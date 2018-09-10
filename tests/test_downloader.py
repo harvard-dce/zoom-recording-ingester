@@ -158,22 +158,3 @@ def test_get_recording_data(mocker):
 
         mock_get_api_data.side_effect = side_effect
         downloader.get_recording_data(call[0])
-
-
-def test_retrieve_url_from_play_page(mocker):
-
-    with requests_mock.mock() as req_mock:
-        req_mock.get(requests_mock.ANY, status_code=200,
-                     content='<source src="https://ssrweb.zoom.us/cmr/replay" type="video/mp4" />'.encode('utf-8'))
-        resp = downloader.retrieve_url_from_play_page("https://www.example.com")
-        assert (resp == "https://ssrweb.zoom.us/cmr/replay")
-
-        rec_data = [('no videos here', 'No source element found'),
-                    ('<div id=password_form> </div>', 'Password protected')]
-
-        for content, message in rec_data:
-            with pytest.raises(downloader.PermanentDownloadError) as excinfo:
-                req_mock.get(requests_mock.ANY, status_code=200,
-                             content=content.encode('utf-8'))
-                downloader.retrieve_url_from_play_page("https://www.example.com")
-            assert(message in str(excinfo.value))
