@@ -1,0 +1,15 @@
+{
+  "zoom_series_id": {
+    "Instructor 1 First Name": "First",
+    "Instructor 1 Last Name": "Last",
+    "Time": [
+      "14:30"
+    ],
+    "opencast_series_id": "20190100000",
+    "opencast_subject": "Course number",
+    "zoom_series_id": "zoom_series_id",
+    "Days": [
+      "M", "W", "F"
+    ]
+  }
+}

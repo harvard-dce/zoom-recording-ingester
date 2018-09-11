@@ -3,8 +3,6 @@ import json
 import time
 import requests
 from os import getenv as env
-from bs4 import BeautifulSoup
-from bs4 import SoupStrainer
 from hashlib import md5
 from urllib.parse import urljoin
 from operator import itemgetter
