@@ -306,11 +306,11 @@ def get_stream(download_url):
 
 def get_admin_token():
     # get admin user id from admin email
-    r = requests.get("https://api.zoom.us/v2/users/{}".format(ZOOM_ADMIN_EMAIL),
+    r = requests.get("{}users/{}".format(ZOOM_API_BASE_URL, ZOOM_ADMIN_EMAIL),
                      headers={"Authorization": "Bearer %s" % gen_token().decode()})
     admin_id = r.json()['id']
     # get admin level zak token from admin id
-    r = requests.get("https://api.zoom.us/v2/users/{}/token?type=zak".format(admin_id),
+    r = requests.get("{}users/{}/token?type=zak".format(ZOOM_API_BASE_URL, admin_id),
                      headers={"Authorization": "Bearer %s" % gen_token().decode()})
     return r.json()['token']
 
