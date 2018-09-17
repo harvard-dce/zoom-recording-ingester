@@ -3,8 +3,6 @@ import json
 import time
 import requests
 from os import getenv as env
-from bs4 import BeautifulSoup
-from bs4 import SoupStrainer
 from hashlib import md5
 from urllib.parse import urljoin
 from operator import itemgetter
@@ -22,6 +20,7 @@ MIN_CHUNK_SIZE = 5242880
 MEETING_LOOKUP_RETRIES = 2
 MEETING_LOOKUP_RETRY_DELAY = 60
 ZOOM_API_BASE_URL = env('ZOOM_API_BASE_URL')
+ZOOM_ADMIN_EMAIL = env('ZOOM_ADMIN_EMAIL')
 
 sqs = boto3.resource('sqs')
 s3 = boto3.client('s3')
@@ -238,15 +237,12 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
     metadata = {'uuid': uuid}
 
-    if file['file_type'].lower() in ["mp4", "m4a", "chat"]:
-        stream, zoom_name = get_connection_using_play_url(file['play_url'])
+    stream, zoom_name = get_stream(file['download_url'])
 
-        if 'gallery' in zoom_name.lower():
-            metadata['view'] = "gallery"
-        elif file['file_type'].lower() == "mp4":
-            metadata['view'] = "speaker"
-    else:
-        stream, zoom_name = get_connection_using_download_url(file['download_url'])
+    if 'gallery' in zoom_name.lower():
+        metadata['view'] = "gallery"
+    elif file['file_type'].lower() == "mp4":
+        metadata['view'] = "speaker"
 
     metadata['file_type'] = zoom_name.split('.')[-1]
     filename = create_filename("{:03d}-{}".format(track_sequence, file['id']),
@@ -284,59 +280,39 @@ def stream_file_to_s3(file, uuid, track_sequence):
     stream.close()
 
 
-def retrieve_url_from_play_page(play_url):
+def get_stream(download_url):
 
-    r = requests.get(play_url)
-    r.raise_for_status()
+    admin_token = get_admin_token()
 
-    only_source_tags = SoupStrainer("source", type="video/mp4")
-
-    source = BeautifulSoup(r.content, "html.parser", parse_only=only_source_tags)
-    logger.debug(str(source))
-
-    source_object = source.find("source")
-
-    if source_object is None:
-        password_form = BeautifulSoup(r.content, "html.parser",
-                                      parse_only=SoupStrainer(id="password_form"))
-        if len(password_form) == 0:
-            raise PermanentDownloadError("No source element found on page: {}".format(play_url))
-        else:
-            raise PermanentDownloadError("Password protected play url: {}".format(play_url))
-
-    link = source_object['src']
-    logger.info("Got download url {}".format(link))
-
-    return link
-
-
-def get_connection_using_play_url(play_url):
-    file_url = retrieve_url_from_play_page(play_url)
-
-    zoom_name = file_url.split("?")[0].split("/")[-1]
-
-    logger.info("requesting {}".format(file_url))
-
-    r = requests.get(file_url, stream=True)
-    r.raise_for_status()
-
-    return r, zoom_name
-
-
-def get_connection_using_download_url(download_url):
-
+    # use zak token to get download stream
     logger.info("requesting {}".format(download_url))
 
-    r = requests.get(download_url, stream=True)
-    r.raise_for_status()
-
-    try:
+    r = requests.get("{}?zak={}".format(download_url, admin_token), allow_redirects=False)
+    if 'Location' in r.headers:
+        location = r.headers['Location']
+        zoom_name = location.split('?')[0].split('/')[-1]
+    else:
         zoom_name = r.headers['Content-Disposition'].split("=")[-1]
-        logger.info("got filename {}".format(zoom_name))
-    except KeyError:
-        raise PermanentDownloadError("File name not in headers: {}".format(download_url))
+
+    if zoom_name == '':
+        raise PermanentDownloadError("Failed to get file name from download header.")
+
+    logger.info("got filename {}".format(zoom_name))
+
+    r = requests.get("{}?zak={}".format(download_url, admin_token), stream=True)
 
     return r, zoom_name
+
+
+def get_admin_token():
+    # get admin user id from admin email
+    r = requests.get("{}users/{}".format(ZOOM_API_BASE_URL, ZOOM_ADMIN_EMAIL),
+                     headers={"Authorization": "Bearer %s" % gen_token().decode()})
+    admin_id = r.json()['id']
+    # get admin level zak token from admin id
+    r = requests.get("{}users/{}/token?type=zak".format(ZOOM_API_BASE_URL, admin_id),
+                     headers={"Authorization": "Bearer %s" % gen_token().decode()})
+    return r.json()['token']
 
 
 def create_filename(file_id, meeting_id, zoom_filename):
