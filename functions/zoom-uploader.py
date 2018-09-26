@@ -21,7 +21,7 @@ OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'L01'
-ZOOM_OPENCAST_WORKFLOW = "DCE-production-zoom"
+ZOOM_OPENCAST_WORKFLOW = "dce-int-production-zoom"
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 DEFAULT_PRODUCER_EMAIL = env("DEFAULT_PRODUCER_EMAIL")
 OVERRIDE_PRODUCER = env("OVERRIDE_PRODUCER")
@@ -345,7 +345,7 @@ class Upload:
         for video in videos:
             url = self._generate_presigned_url(video)
             params.extend([
-                ('flavor', (None, escape('multipart/partsource'))),
+                ('flavor', (None, escape('multipart/chunked+source'))),
                 ('mediaUri', (None, url))
             ])
 
