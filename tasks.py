@@ -546,6 +546,8 @@ ns.add_collection(logs_ns)
 
 def getenv(var, required=True):
     val = env(var)
+    if val is not None and val.strip() == '':
+        val = None
     if required and val is None:
         raise Exit("{} not defined".format(var))
     return val
@@ -654,8 +656,8 @@ def __create_or_update(ctx, op):
                 stack_tags(),
                 STACK_NAME,
                 template_path,
-                getenv('LAMBDA_CODE_BUCKET'),
-                getenv('NOTIFICATION_EMAIL'),
+                getenv("LAMBDA_CODE_BUCKET"),
+                getenv("NOTIFICATION_EMAIL"),
                 getenv("ZOOM_API_BASE_URL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
@@ -672,8 +674,8 @@ def __create_or_update(ctx, op):
                 subnet_id,
                 getenv("LAMBDA_RELEASE_ALIAS"),
                 getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
-                getenv('OC_WORKFLOW'),
-                getenv('OC_FLAVOR')
+                getenv("OC_WORKFLOW"),
+                getenv("OC_FLAVOR")
                 )
 
     res = ctx.run(cmd)
