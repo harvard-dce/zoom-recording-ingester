@@ -620,9 +620,9 @@ def __create_or_update(ctx, op):
 
     subnet_id, sg_id = vpc_components(ctx)
 
-    default_producer_email = getenv('DEFAULT_PRODUCER_EMAIL', required=False)
-    if default_producer_email is None:
-        default_producer_email = getenv('NOTIFICATION_EMAIL')
+    default_publisher = getenv('DEFAULT_PUBLISHER', required=False)
+    if default_publisher is None:
+        default_publisher = getenv('NOTIFICATION_EMAIL')
 
     cmd = ("aws {} cloudformation {}-stack {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
@@ -633,21 +633,21 @@ def __create_or_update(ctx, op):
            "ParameterKey=ZoomApiBaseUrl,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
-           "ParameterKey=ZoomLoginUser,ParameterValue='{}' "
-           "ParameterKey=ZoomLoginPassword,ParameterValue='{}' "
+           "ParameterKey=ZoomAdminEmail,ParameterValue='{}' "
            "ParameterKey=OpencastBaseUrl,ParameterValue='{}' "
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
            "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
-           "ParameterKey=DefaultProducerEmail,ParameterValue='{}' "
-           "ParameterKey=OverrideProducer,ParameterValue='{}' "
-           "ParameterKey=OverrideProducerEmail,ParameterValue='{}' "
+           "ParameterKey=DefaultPublisher,ParameterValue='{}' "
+           "ParameterKey=OverridePublisher,ParameterValue='{}' "
+           "ParameterKey=OverrideContributor,ParameterValue='{}' "
            "ParameterKey=LocalTimeZone,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
            "ParameterKey=LambdaReleaseAlias,ParameterValue='{}' "
            "ParameterKey=LogNotificationsFilterLogLevel,ParameterValue='{}' "
-           "ParameterKey=ZoomAdminEmail,ParameterValue='{}' "
+           "ParameterKey=OCWorkflow,ParameterValue='{}' "
+           "ParameterKey=OCFlavor,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -655,25 +655,25 @@ def __create_or_update(ctx, op):
                 STACK_NAME,
                 template_path,
                 getenv('LAMBDA_CODE_BUCKET'),
-                getenv("NOTIFICATION_EMAIL"),
+                getenv('NOTIFICATION_EMAIL'),
                 getenv("ZOOM_API_BASE_URL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
-                getenv("ZOOM_LOGIN_USER"),
-                getenv("ZOOM_LOGIN_PASSWORD"),
+                getenv("ZOOM_ADMIN_EMAIL"),
                 getenv("OPENCAST_BASE_URL"),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", required=False),
-                default_producer_email,
-                getenv("OVERRIDE_PRODUCER", required=False),
-                getenv("OVERRIDE_PRODUCER_EMAIL", required=False),
+                default_publisher,
+                getenv("OVERRIDE_PUBLISHER", required=False),
+                getenv("OVERRIDE_CONTRIBUTOR", required=False),
                 getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id,
                 getenv("LAMBDA_RELEASE_ALIAS"),
                 getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
-                getenv('ZOOM_ADMIN_EMAIL')
+                getenv('OC_WORKFLOW'),
+                getenv('OC_FLAVOR')
                 )
 
     res = ctx.run(cmd)

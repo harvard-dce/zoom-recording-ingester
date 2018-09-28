@@ -12,9 +12,7 @@ Parameters:
     Type: String
   ZoomApiSecret:
     Type: String
-  ZoomLoginUser:
-    Type: String
-  ZoomLoginPassword:
+  ZoomAdminEmail:
     Type: String
   OpencastBaseUrl:
     Type: String
@@ -25,13 +23,13 @@ Parameters:
   DefaultOpencastSeriesId:
     Type: String
     Default: "${AWS::NoValue}"
-  DefaultProducerEmail:
+  DefaultPublisher:
     Type: String
     Default: "${AWS::NoValue}"
-  OverrideProducer:
+  OverridePublisher:
     Type: String
     Default: "${AWS::NoValue}"
-  OverrideProducerEmail:
+  OverrideContributor:
     Type: String
     Default: "${AWS::NoValue}"
   LocalTimeZone:
@@ -46,7 +44,9 @@ Parameters:
   LogNotificationsFilterLogLevel:
     Type: String
     Default: "ERROR"
-  ZoomAdminEmail:
+  OCWorkflow:
+    Type: String
+  OCFlavor:
     Type: String
 
 Conditions:
@@ -291,15 +291,13 @@ Resources:
       Environment:
         Variables:
           ZOOM_VIDEOS_BUCKET: !Ref ZoomVideosBucket
-          ZOOM_LOGIN_USER: !Ref ZoomLoginUser
-          ZOOM_LOGIN_PASSWORD: !Ref ZoomLoginPassword
+          ZOOM_ADMIN_EMAIL: !Ref ZoomAdminEmail
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
           DEADLETTER_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, QueueName]
           ZOOM_API_BASE_URL: !Ref ZoomApiBaseUrl
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
-          ZOOM_ADMIN_EMAIL: !Ref ZoomAdminEmail
           DEBUG: 0
       Code:
         S3Bucket: !Ref LambdaCodeBucket
@@ -348,12 +346,14 @@ Resources:
           OPENCAST_API_USER: !Ref OpencastApiUser
           OPENCAST_API_PASSWORD: !Ref OpencastApiPassword
           DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
-          DEFAULT_PRODUCER_EMAIL: !Ref DefaultProducerEmail
-          OVERRIDE_PRODUCER: !Ref OverrideProducer
-          OVERRIDE_PRODUCER_EMAIL: !Ref OverrideProducerEmail
+          DEFAULT_PUBLISHER: !Ref DefaultPublisher
+          OVERRIDE_PUBLISHER: !Ref OverridePublisher
+          OVERRIDE_CONTRIBUTOR: !Ref OverrideContributor
           CLASS_SCHEDULE_TABLE: !Ref ClassScheduleDynamoTable
           LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
+          OC_WORKFLOW: !Ref OCWorkflow
+          OC_FLAVOR: !Ref OCFlavor
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-uploader.zip"
