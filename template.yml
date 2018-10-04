@@ -48,6 +48,8 @@ Parameters:
     Type: String
   OCFlavor:
     Type: String
+  ParallelEndpoint:
+    Type: String
 
 Conditions:
   UploadFunctionVpcConfig: !Not [!Equals ["", !Ref VpcSubnetId]]
@@ -236,6 +238,7 @@ Resources:
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
+          PARALLEL_ENDPOINT: !Join ['/', !Split ['!', !Ref ParallelEndpoint]]
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-webhook.zip"

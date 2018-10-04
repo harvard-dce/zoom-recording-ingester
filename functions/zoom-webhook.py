@@ -1,10 +1,11 @@
-import boto3
+import requests
 import json
 from urllib.parse import parse_qsl
 from os import getenv as env
 from common import setup_logging
 from datetime import datetime
 from pytz import timezone
+import boto3
 
 import logging
 logger = logging.getLogger()
@@ -47,6 +48,20 @@ def handler(event, context):
 
     if 'body' not in event:
         return resp_400("bad data: no body in event")
+
+    parallel_endpoint = env("PARALLEL_ENDPOINT")
+    if parallel_endpoint and parallel_endpoint != "None":
+
+        logger.debug("Sending webhook to {}".format(parallel_endpoint))
+
+        r = requests.post(parallel_endpoint,
+                          headers={'content-type': 'application/json'},
+                          data=event['body'])
+
+        r.raise_for_status()
+
+        logger.info("Copied webhook to endpoint {}, status code {}"
+                    .format(parallel_endpoint, r.status_code))
 
     try:
         payload = parse_payload(event['body'])

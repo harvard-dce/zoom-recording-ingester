@@ -191,6 +191,11 @@ def list_recordings(ctx, date=str(datetime.date.today())):
             continue
 
         r.raise_for_status()
+
+        # sometimes this zoom endpoint sends an empty list of recording files
+        if not len(r.json()['recording_files']):
+            continue
+
         recordings_found += 1
 
         local_tz = timezone(getenv('LOCAL_TIME_ZONE'))
@@ -650,6 +655,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=LogNotificationsFilterLogLevel,ParameterValue='{}' "
            "ParameterKey=OCWorkflow,ParameterValue='{}' "
            "ParameterKey=OCFlavor,ParameterValue='{}' "
+           "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -675,7 +681,8 @@ def __create_or_update(ctx, op):
                 getenv("LAMBDA_RELEASE_ALIAS"),
                 getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
                 getenv("OC_WORKFLOW"),
-                getenv("OC_FLAVOR")
+                getenv("OC_FLAVOR"),
+                getenv("PARALLEL_ENDPOINT").replace('/', '!')
                 )
 
     res = ctx.run(cmd)

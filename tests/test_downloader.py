@@ -61,8 +61,8 @@ def test_recording_data_request(mocker):
 def test_verify_recording_status():
 
     rec_data = [
-        ({}, False, None),
-        ({'recording_files': []}, False, None),
+        ({}, downloader.PermanentDownloadError, "No recordings for this meeting."),
+        ({'recording_files': []}, downloader.PermanentDownloadError, "No recordings for this meeting."),
         ({'recording_files': [{'id': 1, 'status': 'not completed'}]}, False, None),
         ({'recording_files': [{'id': 1, 'status': 'completed'}]},
          downloader.ApiResponseParsingFailure, 'missing a download_url'),

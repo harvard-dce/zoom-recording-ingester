@@ -192,7 +192,7 @@ def verify_recording_status(recording_data):
 
     if 'recording_files' not in recording_data \
             or not len(recording_data['recording_files']):
-        return False
+        raise PermanentDownloadError("No recordings for this meeting.")
 
     for file in recording_data['recording_files']:
 
