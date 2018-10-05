@@ -488,6 +488,13 @@ def logs(ctx, function=None, watch=False):
 
 
 @task
+def recording(ctx, uuid, function=None):
+    functions = function is None and FUNCTION_NAMES or [function]
+    for function in functions:
+        __find_recording_log_events(ctx, function, uuid)
+
+
+@task
 def logs_webhook(ctx, watch=False):
     logs(ctx, 'zoom-webhook', watch)
 
@@ -544,6 +551,7 @@ logs_ns.add_task(logs, 'all')
 logs_ns.add_task(logs_webhook, 'webhook')
 logs_ns.add_task(logs_downloader, 'downloader')
 logs_ns.add_task(logs_uploader, 'uploader')
+logs_ns.add_task(recording)
 ns.add_collection(logs_ns)
 
 ###############################################################################
@@ -1193,3 +1201,44 @@ def __get_meetings(date):
         time.sleep(1)
 
     return meetings
+
+
+def __find_recording_log_events(ctx, function, uuid):
+    if function == 'zoom-webhook':
+        filter_pattern = '{ $.message.payload.uuid = "' + uuid + '" }'
+    elif function == 'zoom-downloader':
+        filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
+    elif function == 'zoom-uploader':
+        filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
+    else:
+        return
+
+    log_group = '/aws/lambda/{}-{}-function'.format(STACK_NAME, function)
+
+    for log_stream, request_id in __request_ids_from_logs(ctx, log_group, filter_pattern):
+
+        request_id_pattern = '{ $.aws_request_id = "' + request_id + '" }'
+        cmd = ("aws logs filter-log-events {} --log-group-name {} "
+               "--log-stream-name '{}' "
+               "--output text --query 'events[].message' "
+               "--filter-pattern '{}'") \
+            .format(profile_arg(), log_group, log_stream, request_id_pattern)
+        for line in ctx.run(cmd, hide=True).stdout.split("\t"):
+            try:
+                event = json.loads(line)
+                print(json.dumps(event, indent=2))
+            except json.JSONDecodeError:
+                print(line)
+
+
+def __request_ids_from_logs(ctx, log_group, filter_pattern):
+
+    cmd = ("aws logs filter-log-events {} --log-group-name {} "
+           "--output text --query 'events[][logStreamName,message]' "
+           "--filter-pattern '{}'").format(profile_arg(), log_group, filter_pattern)
+
+    for line in ctx.run(cmd, hide=True).stdout.splitlines():
+        log_stream, message = line.strip().split(maxsplit=1)
+        message = json.loads(message)
+        yield log_stream, message['aws_request_id']
+
