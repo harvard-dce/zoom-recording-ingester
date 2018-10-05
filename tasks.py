@@ -614,16 +614,6 @@ def stack_exists(ctx):
 def __create_or_update(ctx, op):
 
     template_path = join(dirname(__file__), 'template.yml')
-    lambda_objects = {}
-
-    for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
-        zip_path = join(dirname(__file__), 'dist', func + '.zip')
-        if not exists(zip_path):
-            print("No zip found for {}!".format(func))
-            print("Did you run the package* commands?")
-            raise Exit(1)
-        func_code = '/'.join([getenv("LAMBDA_CODE_BUCKET"), func + '.zip'])
-        lambda_objects[func] = func_code
 
     subnet_id, sg_id = vpc_components(ctx)
 
