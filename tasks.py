@@ -287,7 +287,7 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger uploader.
     """
-    payload = { 'num_uploads': 1, 'ignore_schedule': ignore_schedule }
+    payload = { 'ignore_schedule': ignore_schedule }
 
     if series_id is not None:
         payload['override_series_id'] = series_id
@@ -646,6 +646,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OCWorkflow,ParameterValue='{}' "
            "ParameterKey=OCFlavor,ParameterValue='{}' "
            "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
+           "ParameterKey=UploadMessagesPerInvocation,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -672,7 +673,8 @@ def __create_or_update(ctx, op):
                 getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
                 getenv("OC_WORKFLOW"),
                 getenv("OC_FLAVOR"),
-                getenv("PARALLEL_ENDPOINT", required=False)
+                getenv("PARALLEL_ENDPOINT", required=False),
+                getenv('UPLOAD_MESSAGES_PER_INVOCATION')
                 )
 
     if op == 'create-change-set':

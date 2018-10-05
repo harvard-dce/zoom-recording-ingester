@@ -50,6 +50,8 @@ Parameters:
     Type: String
   ParallelEndpoint:
     Type: String
+  UploadMessagesPerInvocation:
+    Type: String
 
 Conditions:
   UploadFunctionVpcConfig: !Not [!Equals ["", !Ref VpcSubnetId]]
@@ -357,6 +359,7 @@ Resources:
           DEBUG: 0
           OC_WORKFLOW: !Ref OCWorkflow
           OC_FLAVOR: !Ref OCFlavor
+          UPLOAD_MESSAGES_PER_INVOCATION: !Ref UploadMessagesPerInvocation
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-uploader.zip"
@@ -387,7 +390,6 @@ Resources:
       Targets:
         - Arn: !Sub "${ZoomUploaderFunction.Arn}:${LambdaReleaseAlias}"
           Id: "UploaderFunction"
-          Input: "{\"num_uploads\": 1}"
 
   ZoomUploaderEventRulePermission:
     Type: AWS::Lambda::Permission
