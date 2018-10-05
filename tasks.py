@@ -672,7 +672,7 @@ def __create_or_update(ctx, op):
                 getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
                 getenv("OC_WORKFLOW"),
                 getenv("OC_FLAVOR"),
-                getenv("PARALLEL_ENDPOINT").replace('/', '!')
+                getenv("PARALLEL_ENDPOINT", required=False)
                 )
 
     if op == 'create-change-set':
