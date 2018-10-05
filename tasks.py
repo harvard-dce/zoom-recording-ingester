@@ -325,7 +325,7 @@ def create(ctx):
         return
 
     package(ctx, upload_to_s3=True)
-    __create_or_update(ctx, "create")
+    __create_or_update(ctx, "create-stack")
     release(ctx, description="initial release")
 
 
@@ -334,7 +334,7 @@ def update(ctx):
     """
     Update the Cloudformation stack identified by $STACK_NAME
     """
-    __create_or_update(ctx, "update")
+    __create_or_update(ctx, "create-change-set")
 
 
 @task(pre=[production_failsafe])
@@ -350,7 +350,7 @@ def delete(ctx):
     if input('Are you sure you want to delete stack "{}"? [y/N] '.format(STACK_NAME))\
             .lower().strip().startswith('y'):
         ctx.run(cmd, echo=True)
-        __wait_for(ctx, "delete")
+        __wait_for(ctx, "stack-delete")
     else:
         print("not deleting stack")
 
@@ -631,7 +631,7 @@ def __create_or_update(ctx, op):
     if default_publisher is None:
         default_publisher = getenv('NOTIFICATION_EMAIL')
 
-    cmd = ("aws {} cloudformation {}-stack {} "
+    cmd = ("aws {} cloudformation {} {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
            "--template-body file://{} "
            "--parameters "
@@ -685,18 +685,55 @@ def __create_or_update(ctx, op):
                 getenv("PARALLEL_ENDPOINT").replace('/', '!')
                 )
 
+    if op == 'create-change-set':
+        ts = time.mktime(datetime.datetime.utcnow().timetuple())
+        change_set_name = "stack-update-{}".format(int(ts))
+        cmd += ' --change-set-name ' + change_set_name
+        cmd += ' --output text --query "Id"'
+
     res = ctx.run(cmd)
 
-    if res.exited == 0:
-        __wait_for(ctx, op)
+    if res.failed:
+        return
 
+    if op == 'stack-create':
+        __wait_for(ctx, 'stack-create-complete')
+    else:
+        change_set_id = res.stdout.strip()
+        wait_res = __wait_for(ctx, 'change-set-create-complete --change-set-name {} '.format(change_set_id))
 
-def __wait_for(ctx, op):
-    wait_cmd = ("aws {} cloudformation wait stack-{}-complete "
-                "--stack-name {}").format(profile_arg(), op, STACK_NAME)
-    print("Waiting for stack {} to complete...".format(op))
-    ctx.run(wait_cmd)
+        if wait_res.failed:
+            cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
+                   "--output text --query 'StatusReason'").format(
+                profile_arg(),
+                change_set_id
+            )
+            ctx.run(cmd)
+        else:
+            print("Cloudformation stack changeset created.")
+            ok = input('After reviewing would you like to proceed? [y/N] ').lower().strip().startswith('y')
+            if not ok:
+                cmd = ("aws {} cloudformation delete-change-set "
+                       "--change-set-name {}").format(profile_arg(), change_set_id)
+                ctx.run(cmd, hide=True)
+                print("Update cancelled.")
+                return
+            else:
+                cmd = ("aws {} cloudformation execute-change-set "
+                       "--change-set-name {}").format(profile_arg(), change_set_id)
+                print("Executing update...")
+                res = ctx.run(cmd)
+                if res.exited == 0:
+                    __wait_for(ctx, 'stack-update-complete')
     print("Done")
+
+
+def __wait_for(ctx, wait_op):
+
+    wait_cmd = ("aws {} cloudformation wait {} "
+                "--stack-name {}").format(profile_arg(), wait_op, STACK_NAME)
+    print("Waiting for stack operation to complete...")
+    return ctx.run(wait_cmd, warn=True)
 
 
 def __update_release_alias(ctx, func, version, description):
