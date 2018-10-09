@@ -29,6 +29,7 @@ OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+UPLOAD_MESSAGES_PER_INVOCATION = env('UPLOAD_MESSAGES_PER_INVOCATION')
 
 sqs = boto3.resource('sqs')
 s3 = boto3.resource('s3')
@@ -56,21 +57,24 @@ def oc_api_request(method, endpoint, **kwargs):
 @setup_logging
 def handler(event, context):
 
-    # allow upload count to be overridden
-    num_uploads = event['num_uploads']
     ignore_schedule = event.get('ignore_schedule', False)
     override_series_id = event.get('override_series_id')
 
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
-    for i in range(num_uploads):
+    for i in range(int(UPLOAD_MESSAGES_PER_INVOCATION)):
         try:
             messages = upload_queue.receive_messages(
                 MaxNumberOfMessages=1,
                 VisibilityTimeout=2500
             )
             upload_message = messages[0]
-            logger.debug({'queue_message': upload_message})
+            logger.debug({
+                'queue_message': {
+                    'attributes': upload_message.attributes,
+                    'body': upload_message.body
+                }
+            })
 
         except IndexError:
             logger.warning("No upload queue messages available")
@@ -81,11 +85,13 @@ def handler(event, context):
             upload_data['override_series_id'] = override_series_id
             logger.info(upload_data)
             wf_id = process_upload(upload_data)
+            upload_message.delete()
             if wf_id:
                 logger.info("Workflow id {} initiated".format(wf_id))
+                # only ingest one per invocation
+                break
             else:
                 logger.info("No workflow initiated.")
-            upload_message.delete()
         except Exception as e:
             logger.exception(e)
             raise

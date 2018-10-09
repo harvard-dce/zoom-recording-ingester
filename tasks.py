@@ -287,7 +287,7 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger uploader.
     """
-    payload = { 'num_uploads': 1, 'ignore_schedule': ignore_schedule }
+    payload = { 'ignore_schedule': ignore_schedule }
 
     if series_id is not None:
         payload['override_series_id'] = series_id
@@ -325,7 +325,7 @@ def create(ctx):
         return
 
     package(ctx, upload_to_s3=True)
-    __create_or_update(ctx, "create")
+    __create_or_update(ctx, "create-stack")
     release(ctx, description="initial release")
 
 
@@ -334,7 +334,7 @@ def update(ctx):
     """
     Update the Cloudformation stack identified by $STACK_NAME
     """
-    __create_or_update(ctx, "update")
+    __create_or_update(ctx, "create-change-set")
 
 
 @task(pre=[production_failsafe])
@@ -350,7 +350,7 @@ def delete(ctx):
     if input('Are you sure you want to delete stack "{}"? [y/N] '.format(STACK_NAME))\
             .lower().strip().startswith('y'):
         ctx.run(cmd, echo=True)
-        __wait_for(ctx, "delete")
+        __wait_for(ctx, "stack-delete")
     else:
         print("not deleting stack")
 
@@ -488,6 +488,13 @@ def logs(ctx, function=None, watch=False):
 
 
 @task
+def recording(ctx, uuid, function=None):
+    functions = function is None and FUNCTION_NAMES or [function]
+    for function in functions:
+        __find_recording_log_events(ctx, function, uuid)
+
+
+@task
 def logs_webhook(ctx, watch=False):
     logs(ctx, 'zoom-webhook', watch)
 
@@ -544,6 +551,7 @@ logs_ns.add_task(logs, 'all')
 logs_ns.add_task(logs_webhook, 'webhook')
 logs_ns.add_task(logs_downloader, 'downloader')
 logs_ns.add_task(logs_uploader, 'uploader')
+logs_ns.add_task(recording)
 ns.add_collection(logs_ns)
 
 ###############################################################################
@@ -614,16 +622,6 @@ def stack_exists(ctx):
 def __create_or_update(ctx, op):
 
     template_path = join(dirname(__file__), 'template.yml')
-    lambda_objects = {}
-
-    for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
-        zip_path = join(dirname(__file__), 'dist', func + '.zip')
-        if not exists(zip_path):
-            print("No zip found for {}!".format(func))
-            print("Did you run the package* commands?")
-            raise Exit(1)
-        func_code = '/'.join([getenv("LAMBDA_CODE_BUCKET"), func + '.zip'])
-        lambda_objects[func] = func_code
 
     subnet_id, sg_id = vpc_components(ctx)
 
@@ -631,7 +629,7 @@ def __create_or_update(ctx, op):
     if default_publisher is None:
         default_publisher = getenv('NOTIFICATION_EMAIL')
 
-    cmd = ("aws {} cloudformation {}-stack {} "
+    cmd = ("aws {} cloudformation {} {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
            "--template-body file://{} "
            "--parameters "
@@ -656,6 +654,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OCWorkflow,ParameterValue='{}' "
            "ParameterKey=OCFlavor,ParameterValue='{}' "
            "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
+           "ParameterKey=UploadMessagesPerInvocation,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -682,21 +681,59 @@ def __create_or_update(ctx, op):
                 getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
                 getenv("OC_WORKFLOW"),
                 getenv("OC_FLAVOR"),
-                getenv("PARALLEL_ENDPOINT").replace('/', '!')
+                getenv("PARALLEL_ENDPOINT", required=False),
+                getenv('UPLOAD_MESSAGES_PER_INVOCATION')
                 )
+
+    if op == 'create-change-set':
+        ts = time.mktime(datetime.datetime.utcnow().timetuple())
+        change_set_name = "stack-update-{}".format(int(ts))
+        cmd += ' --change-set-name ' + change_set_name
+        cmd += ' --output text --query "Id"'
 
     res = ctx.run(cmd)
 
-    if res.exited == 0:
-        __wait_for(ctx, op)
+    if res.failed:
+        return
 
+    if op == 'stack-create':
+        __wait_for(ctx, 'stack-create-complete')
+    else:
+        change_set_id = res.stdout.strip()
+        wait_res = __wait_for(ctx, 'change-set-create-complete --change-set-name {} '.format(change_set_id))
 
-def __wait_for(ctx, op):
-    wait_cmd = ("aws {} cloudformation wait stack-{}-complete "
-                "--stack-name {}").format(profile_arg(), op, STACK_NAME)
-    print("Waiting for stack {} to complete...".format(op))
-    ctx.run(wait_cmd)
+        if wait_res.failed:
+            cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
+                   "--output text --query 'StatusReason'").format(
+                profile_arg(),
+                change_set_id
+            )
+            ctx.run(cmd)
+        else:
+            print("Cloudformation stack changeset created.")
+            ok = input('After reviewing would you like to proceed? [y/N] ').lower().strip().startswith('y')
+            if not ok:
+                cmd = ("aws {} cloudformation delete-change-set "
+                       "--change-set-name {}").format(profile_arg(), change_set_id)
+                ctx.run(cmd, hide=True)
+                print("Update cancelled.")
+                return
+            else:
+                cmd = ("aws {} cloudformation execute-change-set "
+                       "--change-set-name {}").format(profile_arg(), change_set_id)
+                print("Executing update...")
+                res = ctx.run(cmd)
+                if res.exited == 0:
+                    __wait_for(ctx, 'stack-update-complete')
     print("Done")
+
+
+def __wait_for(ctx, wait_op):
+
+    wait_cmd = ("aws {} cloudformation wait {} "
+                "--stack-name {}").format(profile_arg(), wait_op, STACK_NAME)
+    print("Waiting for stack operation to complete...")
+    return ctx.run(wait_cmd, warn=True)
 
 
 def __update_release_alias(ctx, func, version, description):
@@ -1164,3 +1201,44 @@ def __get_meetings(date):
         time.sleep(1)
 
     return meetings
+
+
+def __find_recording_log_events(ctx, function, uuid):
+    if function == 'zoom-webhook':
+        filter_pattern = '{ $.message.payload.uuid = "' + uuid + '" }'
+    elif function == 'zoom-downloader':
+        filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
+    elif function == 'zoom-uploader':
+        filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
+    else:
+        return
+
+    log_group = '/aws/lambda/{}-{}-function'.format(STACK_NAME, function)
+
+    for log_stream, request_id in __request_ids_from_logs(ctx, log_group, filter_pattern):
+
+        request_id_pattern = '{ $.aws_request_id = "' + request_id + '" }'
+        cmd = ("aws logs filter-log-events {} --log-group-name {} "
+               "--log-stream-name '{}' "
+               "--output text --query 'events[].message' "
+               "--filter-pattern '{}'") \
+            .format(profile_arg(), log_group, log_stream, request_id_pattern)
+        for line in ctx.run(cmd, hide=True).stdout.split("\t"):
+            try:
+                event = json.loads(line)
+                print(json.dumps(event, indent=2))
+            except json.JSONDecodeError:
+                print(line)
+
+
+def __request_ids_from_logs(ctx, log_group, filter_pattern):
+
+    cmd = ("aws logs filter-log-events {} --log-group-name {} "
+           "--output text --query 'events[][logStreamName,message]' "
+           "--filter-pattern '{}'").format(profile_arg(), log_group, filter_pattern)
+
+    for line in ctx.run(cmd, hide=True).stdout.splitlines():
+        log_stream, message = line.strip().split(maxsplit=1)
+        message = json.loads(message)
+        yield log_stream, message['aws_request_id']
+
