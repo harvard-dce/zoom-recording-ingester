@@ -53,13 +53,18 @@ def oc_api_request(method, endpoint, **kwargs):
     return resp
 
 
+# boto resource/client setup must be wrapped for unit testing
+def sqs_resource():
+    return boto3.resource('sqs')
+
+
 @setup_logging
 def handler(event, context):
 
     ignore_schedule = event.get('ignore_schedule', False)
     override_series_id = event.get('override_series_id')
 
-    sqs = boto3.resource('sqs')
+    sqs = sqs_resource()
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
     for i in range(int(UPLOAD_MESSAGES_PER_INVOCATION)):
