@@ -312,7 +312,7 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
 @task(pre=[production_failsafe])
 def create(ctx):
     """
-    Build the Cloudformation stack identified by $STACK_NAME
+    Build the CloudFormation stack identified by $STACK_NAME
     """
     if stack_exists(ctx):
         raise Exit("Stack already exists!")
@@ -332,7 +332,7 @@ def create(ctx):
 @task(pre=[production_failsafe])
 def update(ctx):
     """
-    Update the Cloudformation stack identified by $STACK_NAME
+    Update the CloudFormation stack identified by $STACK_NAME
     """
     __create_or_update(ctx, "create-change-set")
 
@@ -340,7 +340,7 @@ def update(ctx):
 @task(pre=[production_failsafe])
 def delete(ctx):
     """
-    Delete the Cloudformation stack identified by $STACK_NAME
+    Delete the CloudFormation stack identified by $STACK_NAME
     """
     if not stack_exists(ctx):
         raise Exit("Stack doesn't exist!")
@@ -350,7 +350,7 @@ def delete(ctx):
     if input('Are you sure you want to delete stack "{}"? [y/N] '.format(STACK_NAME))\
             .lower().strip().startswith('y'):
         ctx.run(cmd, echo=True)
-        __wait_for(ctx, "stack-delete")
+        __wait_for(ctx, 'stack-delete-complete')
     else:
         print("not deleting stack")
 
@@ -368,7 +368,7 @@ def delete(ctx):
 @task
 def status(ctx):
     """
-    Show table of cloudformation stack details
+    Show table of CloudFormation stack details
     """
     __show_stack_status(ctx)
     __show_webhook_endpoint(ctx)
@@ -696,11 +696,11 @@ def __create_or_update(ctx, op):
     if res.failed:
         return
 
-    if op == 'stack-create':
+    if op == 'create-stack':
         __wait_for(ctx, 'stack-create-complete')
     else:
         change_set_id = res.stdout.strip()
-        wait_res = __wait_for(ctx, 'change-set-create-complete --change-set-name {} '.format(change_set_id))
+        wait_res = __wait_for(ctx, "change-set-create-complete --change-set-name {} ".format(change_set_id))
 
         if wait_res.failed:
             cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
@@ -710,8 +710,16 @@ def __create_or_update(ctx, op):
             )
             ctx.run(cmd)
         else:
-            print("Cloudformation stack changeset created.")
-            ok = input('After reviewing would you like to proceed? [y/N] ').lower().strip().startswith('y')
+            print("\nCloudFormation stack changeset created.\n")
+            cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
+                   "--query 'Changes[*].ResourceChange.{{ID:LogicalResourceId,Change:Details[*].CausingEntity}}' "
+                   "--output text").format(
+                profile_arg(),
+                change_set_id
+            )
+            ctx.run(cmd)
+            ok = input('\nView the full changeset details on the CloudFormation stack page.'
+                       '\nAfter reviewing would you like to proceed? [y/N] ').lower().strip().startswith('y')
             if not ok:
                 cmd = ("aws {} cloudformation delete-change-set "
                        "--change-set-name {}").format(profile_arg(), change_set_id)
@@ -1206,9 +1214,7 @@ def __get_meetings(date):
 def __find_recording_log_events(ctx, function, uuid):
     if function == 'zoom-webhook':
         filter_pattern = '{ $.message.payload.uuid = "' + uuid + '" }'
-    elif function == 'zoom-downloader':
-        filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
-    elif function == 'zoom-uploader':
+    elif function == 'zoom-downloader' or function == 'zoom-uploader':
         filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
     else:
         return

@@ -22,9 +22,6 @@ MEETING_LOOKUP_RETRY_DELAY = 60
 ZOOM_API_BASE_URL = env('ZOOM_API_BASE_URL')
 ZOOM_ADMIN_EMAIL = env('ZOOM_ADMIN_EMAIL')
 
-sqs = boto3.resource('sqs')
-s3 = boto3.client('s3')
-
 
 class PermanentDownloadError(Exception):
     pass
@@ -48,6 +45,7 @@ def handler(event, context):
     This function receives an event on each new entry in the download urls
     DyanmoDB table
     """
+    sqs = boto3.resource('sqs')
 
     download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
 
@@ -234,6 +232,7 @@ def next_track_sequence(prev_file, file):
 
 
 def stream_file_to_s3(file, uuid, track_sequence):
+    s3 = boto3.client('s3')
 
     metadata = {'uuid': uuid}
 
@@ -325,6 +324,7 @@ def create_filename(file_id, meeting_id, zoom_filename):
 def send_to_sqs(message, queue_name, error=None):
     logger.debug("Sending SQS message to {}...".format(queue_name))
     logger.debug(message)
+    sqs = boto3.resource('sqs')
 
     if error is None:
         message_attributes = {}
@@ -361,6 +361,7 @@ def send_to_sqs(message, queue_name, error=None):
 
 
 def is_valid_mp4(filename):
+    s3 = boto3.client('s3')
     url = s3.generate_presigned_url(
         'get_object',
         Params={'Bucket': ZOOM_VIDEOS_BUCKET, 'Key': filename}

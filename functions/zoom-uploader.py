@@ -31,7 +31,6 @@ CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 UPLOAD_MESSAGES_PER_INVOCATION = env('UPLOAD_MESSAGES_PER_INVOCATION')
 
-sqs = boto3.resource('sqs')
 s3 = boto3.resource('s3')
 
 session = requests.Session()
@@ -60,13 +59,14 @@ def handler(event, context):
     ignore_schedule = event.get('ignore_schedule', False)
     override_series_id = event.get('override_series_id')
 
+    sqs = boto3.resource('sqs')
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
     for i in range(int(UPLOAD_MESSAGES_PER_INVOCATION)):
         try:
             messages = upload_queue.receive_messages(
                 MaxNumberOfMessages=1,
-                VisibilityTimeout=2500
+                VisibilityTimeout=300
             )
             upload_message = messages[0]
             logger.debug({
