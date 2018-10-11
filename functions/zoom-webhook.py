@@ -1,10 +1,11 @@
-import boto3
+import requests
 import json
 from urllib.parse import parse_qsl
 from os import getenv as env
 from common import setup_logging
 from datetime import datetime
 from pytz import timezone
+import boto3
 
 import logging
 logger = logging.getLogger()
@@ -12,6 +13,7 @@ logger = logging.getLogger()
 DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
+PARALLEL_ENDPOINT = env('PARALLEL_ENDPOINT')
 
 
 class BadWebhookData(Exception):
@@ -47,6 +49,19 @@ def handler(event, context):
 
     if 'body' not in event:
         return resp_400("bad data: no body in event")
+
+    if PARALLEL_ENDPOINT and PARALLEL_ENDPOINT != "None":
+
+        logger.debug("Sending webhook to {}".format(PARALLEL_ENDPOINT))
+
+        r = requests.post(PARALLEL_ENDPOINT,
+                          headers={'content-type': 'application/json'},
+                          data=event['body'])
+
+        r.raise_for_status()
+
+        logger.info("Copied webhook to endpoint {}, status code {}"
+                    .format(PARALLEL_ENDPOINT, r.status_code))
 
     try:
         payload = parse_payload(event['body'])

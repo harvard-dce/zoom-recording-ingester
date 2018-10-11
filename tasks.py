@@ -191,6 +191,11 @@ def list_recordings(ctx, date=str(datetime.date.today())):
             continue
 
         r.raise_for_status()
+
+        # sometimes this zoom endpoint sends an empty list of recording files
+        if not len(r.json()['recording_files']):
+            continue
+
         recordings_found += 1
 
         local_tz = timezone(getenv('LOCAL_TIME_ZONE'))
@@ -282,7 +287,7 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger uploader.
     """
-    payload = { 'num_uploads': 1, 'ignore_schedule': ignore_schedule }
+    payload = { 'ignore_schedule': ignore_schedule }
 
     if series_id is not None:
         payload['override_series_id'] = series_id
@@ -307,7 +312,7 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
 @task(pre=[production_failsafe])
 def create(ctx):
     """
-    Build the Cloudformation stack identified by $STACK_NAME
+    Build the CloudFormation stack identified by $STACK_NAME
     """
     if stack_exists(ctx):
         raise Exit("Stack already exists!")
@@ -320,22 +325,22 @@ def create(ctx):
         return
 
     package(ctx, upload_to_s3=True)
-    __create_or_update(ctx, "create")
+    __create_or_update(ctx, "create-stack")
     release(ctx, description="initial release")
 
 
 @task(pre=[production_failsafe])
 def update(ctx):
     """
-    Update the Cloudformation stack identified by $STACK_NAME
+    Update the CloudFormation stack identified by $STACK_NAME
     """
-    __create_or_update(ctx, "update")
+    __create_or_update(ctx, "create-change-set")
 
 
 @task(pre=[production_failsafe])
 def delete(ctx):
     """
-    Delete the Cloudformation stack identified by $STACK_NAME
+    Delete the CloudFormation stack identified by $STACK_NAME
     """
     if not stack_exists(ctx):
         raise Exit("Stack doesn't exist!")
@@ -345,7 +350,7 @@ def delete(ctx):
     if input('Are you sure you want to delete stack "{}"? [y/N] '.format(STACK_NAME))\
             .lower().strip().startswith('y'):
         ctx.run(cmd, echo=True)
-        __wait_for(ctx, "delete")
+        __wait_for(ctx, 'stack-delete-complete')
     else:
         print("not deleting stack")
 
@@ -363,7 +368,7 @@ def delete(ctx):
 @task
 def status(ctx):
     """
-    Show table of cloudformation stack details
+    Show table of CloudFormation stack details
     """
     __show_stack_status(ctx)
     __show_webhook_endpoint(ctx)
@@ -483,6 +488,13 @@ def logs(ctx, function=None, watch=False):
 
 
 @task
+def recording(ctx, uuid, function=None):
+    functions = function is None and FUNCTION_NAMES or [function]
+    for function in functions:
+        __find_recording_log_events(ctx, function, uuid)
+
+
+@task
 def logs_webhook(ctx, watch=False):
     logs(ctx, 'zoom-webhook', watch)
 
@@ -539,6 +551,7 @@ logs_ns.add_task(logs, 'all')
 logs_ns.add_task(logs_webhook, 'webhook')
 logs_ns.add_task(logs_downloader, 'downloader')
 logs_ns.add_task(logs_uploader, 'uploader')
+logs_ns.add_task(recording)
 ns.add_collection(logs_ns)
 
 ###############################################################################
@@ -546,6 +559,8 @@ ns.add_collection(logs_ns)
 
 def getenv(var, required=True):
     val = env(var)
+    if val is not None and val.strip() == '':
+        val = None
     if required and val is None:
         raise Exit("{} not defined".format(var))
     return val
@@ -607,24 +622,14 @@ def stack_exists(ctx):
 def __create_or_update(ctx, op):
 
     template_path = join(dirname(__file__), 'template.yml')
-    lambda_objects = {}
-
-    for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
-        zip_path = join(dirname(__file__), 'dist', func + '.zip')
-        if not exists(zip_path):
-            print("No zip found for {}!".format(func))
-            print("Did you run the package* commands?")
-            raise Exit(1)
-        func_code = '/'.join([getenv("LAMBDA_CODE_BUCKET"), func + '.zip'])
-        lambda_objects[func] = func_code
 
     subnet_id, sg_id = vpc_components(ctx)
 
-    default_producer_email = getenv('DEFAULT_PRODUCER_EMAIL', required=False)
-    if default_producer_email is None:
-        default_producer_email = getenv('NOTIFICATION_EMAIL')
+    default_publisher = getenv('DEFAULT_PUBLISHER', required=False)
+    if default_publisher is None:
+        default_publisher = getenv('NOTIFICATION_EMAIL')
 
-    cmd = ("aws {} cloudformation {}-stack {} "
+    cmd = ("aws {} cloudformation {} {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
            "--template-body file://{} "
            "--parameters "
@@ -633,61 +638,110 @@ def __create_or_update(ctx, op):
            "ParameterKey=ZoomApiBaseUrl,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
-           "ParameterKey=ZoomLoginUser,ParameterValue='{}' "
-           "ParameterKey=ZoomLoginPassword,ParameterValue='{}' "
+           "ParameterKey=ZoomAdminEmail,ParameterValue='{}' "
            "ParameterKey=OpencastBaseUrl,ParameterValue='{}' "
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
            "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
-           "ParameterKey=DefaultProducerEmail,ParameterValue='{}' "
-           "ParameterKey=OverrideProducer,ParameterValue='{}' "
-           "ParameterKey=OverrideProducerEmail,ParameterValue='{}' "
+           "ParameterKey=DefaultPublisher,ParameterValue='{}' "
+           "ParameterKey=OverridePublisher,ParameterValue='{}' "
+           "ParameterKey=OverrideContributor,ParameterValue='{}' "
            "ParameterKey=LocalTimeZone,ParameterValue='{}' "
            "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
            "ParameterKey=VpcSubnetId,ParameterValue='{}' "
            "ParameterKey=LambdaReleaseAlias,ParameterValue='{}' "
            "ParameterKey=LogNotificationsFilterLogLevel,ParameterValue='{}' "
-           "ParameterKey=ZoomAdminEmail,ParameterValue='{}' "
+           "ParameterKey=OCWorkflow,ParameterValue='{}' "
+           "ParameterKey=OCFlavor,ParameterValue='{}' "
+           "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
+           "ParameterKey=UploadMessagesPerInvocation,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
                 stack_tags(),
                 STACK_NAME,
                 template_path,
-                getenv('LAMBDA_CODE_BUCKET'),
+                getenv("LAMBDA_CODE_BUCKET"),
                 getenv("NOTIFICATION_EMAIL"),
                 getenv("ZOOM_API_BASE_URL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
-                getenv("ZOOM_LOGIN_USER"),
-                getenv("ZOOM_LOGIN_PASSWORD"),
+                getenv("ZOOM_ADMIN_EMAIL"),
                 getenv("OPENCAST_BASE_URL"),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", required=False),
-                default_producer_email,
-                getenv("OVERRIDE_PRODUCER", required=False),
-                getenv("OVERRIDE_PRODUCER_EMAIL", required=False),
+                default_publisher,
+                getenv("OVERRIDE_PUBLISHER", required=False),
+                getenv("OVERRIDE_CONTRIBUTOR", required=False),
                 getenv("LOCAL_TIME_ZONE"),
                 sg_id,
                 subnet_id,
                 getenv("LAMBDA_RELEASE_ALIAS"),
                 getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
-                getenv('ZOOM_ADMIN_EMAIL')
+                getenv("OC_WORKFLOW"),
+                getenv("OC_FLAVOR"),
+                getenv("PARALLEL_ENDPOINT", required=False),
+                getenv('UPLOAD_MESSAGES_PER_INVOCATION')
                 )
+
+    if op == 'create-change-set':
+        ts = time.mktime(datetime.datetime.utcnow().timetuple())
+        change_set_name = "stack-update-{}".format(int(ts))
+        cmd += ' --change-set-name ' + change_set_name
+        cmd += ' --output text --query "Id"'
 
     res = ctx.run(cmd)
 
-    if res.exited == 0:
-        __wait_for(ctx, op)
+    if res.failed:
+        return
 
+    if op == 'create-stack':
+        __wait_for(ctx, 'stack-create-complete')
+    else:
+        change_set_id = res.stdout.strip()
+        wait_res = __wait_for(ctx, "change-set-create-complete --change-set-name {} ".format(change_set_id))
 
-def __wait_for(ctx, op):
-    wait_cmd = ("aws {} cloudformation wait stack-{}-complete "
-                "--stack-name {}").format(profile_arg(), op, STACK_NAME)
-    print("Waiting for stack {} to complete...".format(op))
-    ctx.run(wait_cmd)
+        if wait_res.failed:
+            cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
+                   "--output text --query 'StatusReason'").format(
+                profile_arg(),
+                change_set_id
+            )
+            ctx.run(cmd)
+        else:
+            print("\nCloudFormation stack changeset created.\n")
+            cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
+                   "--query 'Changes[*].ResourceChange.{{ID:LogicalResourceId,Change:Details[*].CausingEntity}}' "
+                   "--output text").format(
+                profile_arg(),
+                change_set_id
+            )
+            ctx.run(cmd)
+            ok = input('\nView the full changeset details on the CloudFormation stack page.'
+                       '\nAfter reviewing would you like to proceed? [y/N] ').lower().strip().startswith('y')
+            if not ok:
+                cmd = ("aws {} cloudformation delete-change-set "
+                       "--change-set-name {}").format(profile_arg(), change_set_id)
+                ctx.run(cmd, hide=True)
+                print("Update cancelled.")
+                return
+            else:
+                cmd = ("aws {} cloudformation execute-change-set "
+                       "--change-set-name {}").format(profile_arg(), change_set_id)
+                print("Executing update...")
+                res = ctx.run(cmd)
+                if res.exited == 0:
+                    __wait_for(ctx, 'stack-update-complete')
     print("Done")
+
+
+def __wait_for(ctx, wait_op):
+
+    wait_cmd = ("aws {} cloudformation wait {} "
+                "--stack-name {}").format(profile_arg(), wait_op, STACK_NAME)
+    print("Waiting for stack operation to complete...")
+    return ctx.run(wait_cmd, warn=True)
 
 
 def __update_release_alias(ctx, func, version, description):
@@ -1155,3 +1209,42 @@ def __get_meetings(date):
         time.sleep(1)
 
     return meetings
+
+
+def __find_recording_log_events(ctx, function, uuid):
+    if function == 'zoom-webhook':
+        filter_pattern = '{ $.message.payload.uuid = "' + uuid + '" }'
+    elif function == 'zoom-downloader' or function == 'zoom-uploader':
+        filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
+    else:
+        return
+
+    log_group = '/aws/lambda/{}-{}-function'.format(STACK_NAME, function)
+
+    for log_stream, request_id in __request_ids_from_logs(ctx, log_group, filter_pattern):
+
+        request_id_pattern = '{ $.aws_request_id = "' + request_id + '" }'
+        cmd = ("aws logs filter-log-events {} --log-group-name {} "
+               "--log-stream-name '{}' "
+               "--output text --query 'events[].message' "
+               "--filter-pattern '{}'") \
+            .format(profile_arg(), log_group, log_stream, request_id_pattern)
+        for line in ctx.run(cmd, hide=True).stdout.split("\t"):
+            try:
+                event = json.loads(line)
+                print(json.dumps(event, indent=2))
+            except json.JSONDecodeError:
+                print(line)
+
+
+def __request_ids_from_logs(ctx, log_group, filter_pattern):
+
+    cmd = ("aws logs filter-log-events {} --log-group-name {} "
+           "--output text --query 'events[][logStreamName,message]' "
+           "--filter-pattern '{}'").format(profile_arg(), log_group, filter_pattern)
+
+    for line in ctx.run(cmd, hide=True).stdout.splitlines():
+        log_stream, message = line.strip().split(maxsplit=1)
+        message = json.loads(message)
+        yield log_stream, message['aws_request_id']
+

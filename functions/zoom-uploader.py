@@ -21,15 +21,16 @@ OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'L01'
-ZOOM_OPENCAST_WORKFLOW = "DCE-production-zoom"
+ZOOM_OPENCAST_WORKFLOW = env('OC_WORKFLOW')
+ZOOM_OPENCAST_FLAVOR = env('OC_FLAVOR')
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
-DEFAULT_PRODUCER_EMAIL = env("DEFAULT_PRODUCER_EMAIL")
-OVERRIDE_PRODUCER = env("OVERRIDE_PRODUCER")
-OVERRIDE_PRODUCER_EMAIL = env("OVERRIDE_PRODUCER_EMAIL")
+DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
+OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
+OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+UPLOAD_MESSAGES_PER_INVOCATION = env('UPLOAD_MESSAGES_PER_INVOCATION')
 
-sqs = boto3.resource('sqs')
 s3 = boto3.resource('s3')
 
 session = requests.Session()
@@ -52,24 +53,33 @@ def oc_api_request(method, endpoint, **kwargs):
     return resp
 
 
+# boto resource/client setup must be wrapped for unit testing
+def sqs_resource():
+    return boto3.resource('sqs')
+
+
 @setup_logging
 def handler(event, context):
 
-    # allow upload count to be overridden
-    num_uploads = event['num_uploads']
     ignore_schedule = event.get('ignore_schedule', False)
     override_series_id = event.get('override_series_id')
 
+    sqs = sqs_resource()
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
-    for i in range(num_uploads):
+    for i in range(int(UPLOAD_MESSAGES_PER_INVOCATION)):
         try:
             messages = upload_queue.receive_messages(
                 MaxNumberOfMessages=1,
-                VisibilityTimeout=2500
+                VisibilityTimeout=300
             )
             upload_message = messages[0]
-            logger.debug({'queue_message': upload_message})
+            logger.debug({
+                'queue_message': {
+                    'attributes': upload_message.attributes,
+                    'body': upload_message.body
+                }
+            })
 
         except IndexError:
             logger.warning("No upload queue messages available")
@@ -80,11 +90,13 @@ def handler(event, context):
             upload_data['override_series_id'] = override_series_id
             logger.info(upload_data)
             wf_id = process_upload(upload_data)
+            upload_message.delete()
             if wf_id:
                 logger.info("Workflow id {} initiated".format(wf_id))
+                # only ingest one per invocation
+                break
             else:
                 logger.info("No workflow initiated.")
-            upload_message.delete()
         except Exception as e:
             logger.exception(e)
             raise
@@ -201,18 +213,18 @@ class Upload:
         return ZOOM_RECORDING_TYPE_NUM
 
     @property
-    def producer_email(self):
-        if OVERRIDE_PRODUCER_EMAIL and OVERRIDE_PRODUCER_EMAIL != "None":
-            return OVERRIDE_PRODUCER_EMAIL
+    def publisher(self):
+        if OVERRIDE_PUBLISHER and OVERRIDE_PUBLISHER != "None":
+            return OVERRIDE_PUBLISHER
         elif 'publisher' in self.episode_defaults:
             return self.episode_defaults['publisher']
-        elif DEFAULT_PRODUCER_EMAIL:
-            return DEFAULT_PRODUCER_EMAIL
+        elif DEFAULT_PUBLISHER:
+            return DEFAULT_PUBLISHER
 
     @property
-    def producer(self):
-        if OVERRIDE_PRODUCER and OVERRIDE_PRODUCER != "None":
-            return OVERRIDE_PRODUCER
+    def contributor(self):
+        if OVERRIDE_CONTRIBUTOR and OVERRIDE_CONTRIBUTOR != "None":
+            return OVERRIDE_CONTRIBUTOR
         elif 'contributor' in self.episode_defaults:
             return self.episode_defaults['contributor']
         else:
@@ -286,7 +298,7 @@ class Upload:
 
     def load_episode_defaults(self):
 
-        # data includes 'contributor', 'publisher' (ie, producer email), and 'creator'
+        # data includes 'contributor', 'publisher'
         endpoint = '/otherpubs/episodedefaults/{}.json'.format(self.opencast_series_id)
         try:
             resp = oc_api_request('GET', endpoint)
@@ -335,17 +347,18 @@ class Upload:
             ('type', (None, self.type_num)),
             ('isPartOf', (None, self.opencast_series_id)),
             ('license', (None, 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')),
-            ('publisher', (None, escape(self.producer_email))),
-            ('contributor', (None, escape(self.producer))),
+            ('publisher', (None, escape(self.publisher))),
+            ('contributor', (None, escape(self.contributor))),
             ('created', (None, datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'))),
             ('language', (None, 'en')),
-            ('seriesDCCatalog', (None, self.series_catalog))
+            ('seriesDCCatalog', (None, self.series_catalog)),
+            ('source', (None, "Zoom"))
         ]
 
         for video in videos:
             url = self._generate_presigned_url(video)
             params.extend([
-                ('flavor', (None, escape('multipart/partsource'))),
+                ('flavor', (None, escape(ZOOM_OPENCAST_FLAVOR))),
                 ('mediaUri', (None, url))
             ])
 
