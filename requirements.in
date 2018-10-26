@@ -1,0 +1,19 @@
+invoke
+python-dotenv
+awscli
+pytest
+pytest-env
+pytest-mock
+pytest-cov
+tox
+boto3
+requests
+requests-mock
+freezegun
+tabulate
+awslogs
+
+-r function_requirements/zoom-webhook.in
+-r function_requirements/zoom-downloader.in
+-r function_requirements/zoom-uploader.in
+-r function_requirements/zoom-log-notifications.in

@@ -1,4 +1,0 @@
-aws-lambda-logging==0.0.23
-requests
-PyJWT
-pytz>=2017.3

@@ -19,13 +19,17 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
     
 ## Initial Setup
 
-Python 3 is required.
+#### local environment setup
 
-1. Make a python virtualenv and activate it: `virtualenv venv && source venv/bin/activate`
-1. Install the dependencies: `pip install -r requirements.txt`
+1. Make a python virtualenv and activate it however you normally do those things, e.g.: `virtualenv venv && source venv/bin/activate`
+1. Python dependencies are handled via `pip-tools` so you need to install that first: `pip install pip-tools`
+1. Install the dependencies by running `pip-sync`
 1. Copy `example.env` to `.env` and update as necessary. See inline comments for an explanation of each setting
 1. Run `invoke test` to confirm the installation
 1. (Optional) run `invoke -l` to see a list of all available tasks + descriptions
+
+#### deployment
+
 1. Run `invoke create-code-bucket` to ensure the s3 bucket for packaged lambda code exists
 1. Run `invoke stack.create` to build the CloudFormation stack
 1. Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
@@ -34,6 +38,27 @@ Python 3 is required.
 
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the 
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
+
+#### dependency changes
+
+Dependencies for the project as a whole and the individual functions are managed using
+the `pip-tools` command, `pip-compile`. Top-level dependencies are listed in a `.in` file
+which is then compiled to a "locked" `.txt` version like so:
+
+`pip-compile -o requirements.txt requirements.in`
+
+Both the `.in` and `.txt` files are version-controlled, so the initial compile was
+only necessary once. Now we only have to run `pip-compile` in a couple of situations:
+
+* when upgrading a particular package. 
+* to update the project's base requirements list if a dependency for a specific function is changed
+
+In the first case you run `pip-compile -P [package-name] [source file]` where `source_file` is the `.in` file getting the update.
+
+Following that you must run `pip-compile` in the project root to pull the function-specific change(s) into the main project list.
+
+Finally, run `pip-sync` to ensure the packages are updated in your virtualenv .
+
 
 ## Lambda Versions, Release Alias & Initial Code Release
 
