@@ -1,5 +1,5 @@
 import site
-from mock import patch
+from unittest.mock import patch
 from os.path import dirname, join
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
