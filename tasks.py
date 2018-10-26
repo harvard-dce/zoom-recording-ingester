@@ -776,7 +776,7 @@ def __publish_version(ctx, func, description):
 
 
 def __build_function(ctx, func, upload_to_s3=False):
-    req_file = join(dirname(__file__), 'functions/{}.txt'.format(func))
+    req_file = join(dirname(__file__), 'function_requirements/{}.txt'.format(func))
 
     zip_path = join(dirname(__file__), 'dist/{}.zip'.format(func))
 
