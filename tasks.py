@@ -262,6 +262,8 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
         body=event_body
     )
 
+    print(event_body)
+
     print("Returned with status code: {}. {}".format(resp['status'], resp['body']))
 
 
@@ -594,11 +596,12 @@ def vpc_components(ctx):
 
     cmd = ("aws {} ec2 describe-subnets --filters "
            "'Name=vpc-id,Values={}' "
-           "'Name=tag:aws:cloudformation:logical-id,Values=PrivateSubnet'") \
+           "'Name=tag:aws:cloudformation:logical-id,Values=PrivateSubnet,PrivateSubnet1'") \
         .format(profile_arg(), vpc_id)
 
     res = ctx.run(cmd, hide=1)
     subnet_data = json.loads(res.stdout)
+
     subnet_id = subnet_data['Subnets'][0]['SubnetId']
 
     cmd = ("aws {} ec2 describe-security-groups --filters "

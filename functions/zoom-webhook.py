@@ -52,7 +52,8 @@ def handler(event, context):
 
     if PARALLEL_ENDPOINT and PARALLEL_ENDPOINT != "None":
 
-        logger.debug("Sending webhook to {}".format(PARALLEL_ENDPOINT))
+        logger.debug("Sending webhook to {}. Data: {}"
+                     .format(PARALLEL_ENDPOINT, event['body']))
 
         r = requests.post(PARALLEL_ENDPOINT,
                           headers={'content-type': 'application/json'},
