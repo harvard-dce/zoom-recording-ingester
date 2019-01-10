@@ -596,21 +596,20 @@ def vpc_components(ctx):
 
     cmd = ("aws {} ec2 describe-subnets --filters "
            "'Name=vpc-id,Values={}' "
-           "'Name=tag:aws:cloudformation:logical-id,Values=PrivateSubnet,PrivateSubnet1'") \
+           "'Name=tag:aws:cloudformation:logical-id,Values=Private*'" 
+           "--query \"Subnets[0].SubnetId\" --output text") \
         .format(profile_arg(), vpc_id)
 
     res = ctx.run(cmd, hide=1)
-    subnet_data = json.loads(res.stdout)
-
-    subnet_id = subnet_data['Subnets'][0]['SubnetId']
+    subnet_id = res.stdout
 
     cmd = ("aws {} ec2 describe-security-groups --filters "
            "'Name=vpc-id,Values={}' "
-           "'Name=tag:aws:cloudformation:logical-id,Values=OpsworksLayerSecurityGroupCommon'") \
+           "'Name=tag:aws:cloudformation:logical-id,Values=OpsworksLayerSecurityGroupCommon' "
+           "--query \"SecurityGroups[0].GroupId\" --output text") \
         .format(profile_arg(), vpc_id)
     res = ctx.run(cmd, hide=1)
-    sg_data = json.loads(res.stdout)
-    sg_id = sg_data['SecurityGroups'][0]['GroupId']
+    sg_id = res.stdout
 
     return subnet_id, sg_id
 
