@@ -84,7 +84,7 @@ def handler(event, context):
         logger.info("Moved message to DLS and deleted message from source queue.")
         raise
 
-    chronological_files = sort_files(recording_data['recording_files'])
+    chronological_files = filter_and_sort(recording_data['recording_files'])
     if not chronological_files:
         raise PermanentDownloadError("No files available to download.")
     logger.info("downloading {} files".format(len(chronological_files)))
@@ -378,15 +378,17 @@ def is_valid_mp4(filename):
         return True
 
 
-def sort_files(files):
+def filter_and_sort(files):
     """ Sort files by recording start time and filter out multiple MP4 files
     that occur during the same time segment. Choose which MP4 recording_type to
     keep based on priority_list."""
     if not files:
         return None
 
-    filtered_files = [file for file in files
-                      if file['file_type'].lower() != 'mp4']
+    non_mp4_files = [file for file in files
+                     if file['file_type'].lower() != 'mp4']
+
+    mp4_files = []
 
     priority_list = [
         'shared_screen_with_speaker_view',
@@ -404,7 +406,7 @@ def sort_files(files):
                 logger.debug("Selected MP4 recording type '{}' for start time {}."
                              .format(mp4_type, start_time))
                 added_mp4 = True
-                filtered_files.append(recordings[mp4_type])
+                mp4_files.append(recordings[mp4_type])
                 break
 
         # make sure at least one mp4 is added, in case the zoom api changes
@@ -413,8 +415,9 @@ def sort_files(files):
                            "shared_screen_with_speaker_view, "
                            "shared_screen, or"
                            "active_speaker.")
-            filtered_files.append(recordings.values()[0])
+            mp4_files.append(recordings.values()[0])
 
-    sorted_files = sorted(filtered_files, key=itemgetter('recording_start'))
+    sorted_files = sorted(mp4_files + non_mp4_files,
+                          key=itemgetter('recording_start'))
 
     return sorted_files
