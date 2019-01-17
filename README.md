@@ -93,8 +93,13 @@ send completed recording notifications to it via the Zoom Webhook settings.
 
 1. Get your ingester's webhook endpoint URL. You can find it in the `invoke stack.status` output
 or by browsing to the release stage of your API Gateway REST api.
-1. Enter the API endpoint in the settings at https://developer.zoom.us/me/.
-1. Enable recording completed push notifications at https://zoom.us/account/setting?tab=recording.
+1. Go to [marketplace.zoom.us](marketplace.zoom.us) and log in. Under "Develop" select "Build App."
+1. Give your app a name. Turn off "Intend to publish this app on Zoom Marketplace."
+Choose app type "Webhook only app."
+1. Click "Create." Fill out the rest of the required information,
+and enter the API endpoint under "Event Subscription."
+1. Make sure to subscribe to "All recordings have completed" events.
+1. Activate the app.
 
 ## Schedule DB
 
