@@ -158,3 +158,80 @@ def test_get_recording_data(mocker):
 
         mock_get_api_data.side_effect = side_effect
         downloader.get_recording_data(call[0])
+
+
+def test_filter_and_sort(mocker):
+
+    now = datetime.now()
+    one_minute_ago = (now - timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    two_minutes_ago = (now - timedelta(minutes=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    now = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    files = [
+            {'recording_start': now,
+             'file_type': 'MP4',
+             'recording_type': 'shared_screen_with_speaker_view'},
+            {'recording_start': now,
+             'file_type': 'MP4',
+             'recording_type': 'shared_screen'},
+            {'recording_start': now,
+             'file_type': 'MP4',
+             'recording_type': 'active_speaker'}
+        ]
+
+    expected = [
+            {'recording_start': now,
+             'file_type': 'MP4',
+             'recording_type': 'shared_screen_with_speaker_view'}
+        ]
+
+    assert downloader.filter_and_sort(files) == expected
+
+    files = [
+        {'recording_start': now,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen_with_speaker_view'},
+        {'recording_start': one_minute_ago,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen'},
+        {'recording_start': now,
+         'file_type': 'MP4',
+         'recording_type': 'active_speaker'}
+    ]
+
+    expected = [
+        {'recording_start': one_minute_ago,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen'},
+        {'recording_start': now,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen_with_speaker_view'}
+    ]
+
+    assert downloader.filter_and_sort(files) == expected
+
+    files = [
+        {'recording_start': now,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen_with_speaker_view'},
+        {'recording_start': one_minute_ago,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen'},
+        {'recording_start': two_minutes_ago,
+         'file_type': 'MP4',
+         'recording_type': 'active_speaker'}
+    ]
+
+    expected = [
+        {'recording_start': two_minutes_ago,
+         'file_type': 'MP4',
+         'recording_type': 'active_speaker'},
+        {'recording_start': one_minute_ago,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen'},
+        {'recording_start': now,
+         'file_type': 'MP4',
+         'recording_type': 'shared_screen_with_speaker_view'}
+    ]
+
+    assert downloader.filter_and_sort(files) == expected

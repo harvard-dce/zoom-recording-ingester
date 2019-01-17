@@ -84,7 +84,9 @@ def handler(event, context):
         logger.info("Moved message to DLS and deleted message from source queue.")
         raise
 
-    chronological_files = sorted(recording_data['recording_files'], key=itemgetter('recording_start'))
+    chronological_files = filter_and_sort(recording_data['recording_files'])
+    if not chronological_files:
+        raise PermanentDownloadError("No files available to download.")
     logger.info("downloading {} files".format(len(chronological_files)))
 
     track_sequence = 1
@@ -374,3 +376,48 @@ def is_valid_mp4(filename):
     else:
         logger.debug("Successfully verified mp4 {}".format(url))
         return True
+
+
+def filter_and_sort(files):
+    """ Sort files by recording start time and filter out multiple MP4 files
+    that occur during the same time segment. Choose which MP4 recording_type to
+    keep based on priority_list."""
+    if not files:
+        return None
+
+    non_mp4_files = [file for file in files
+                     if file['file_type'].lower() != 'mp4']
+
+    mp4_files = []
+
+    priority_list = [
+        'shared_screen_with_speaker_view',
+        'shared_screen',
+        'active_speaker']
+    start_times = set([file['recording_start'] for file in files])
+    for start_time in start_times:
+        recordings = {file['recording_type']: file for file in files
+                      if file['file_type'].lower() == 'mp4'
+                      and file['recording_start'] == start_time}
+
+        added_mp4 = False
+        for mp4_type in priority_list:
+            if mp4_type in recordings:
+                logger.debug("Selected MP4 recording type '{}' for start time {}."
+                             .format(mp4_type, start_time))
+                added_mp4 = True
+                mp4_files.append(recordings[mp4_type])
+                break
+
+        # make sure at least one mp4 is added, in case the zoom api changes
+        if not added_mp4 and recordings:
+            logger.warning("No MP4 found with the 'recording_type'"
+                           "shared_screen_with_speaker_view, "
+                           "shared_screen, or"
+                           "active_speaker.")
+            mp4_files.append(recordings.values()[0])
+
+    sorted_files = sorted(mp4_files + non_mp4_files,
+                          key=itemgetter('recording_start'))
+
+    return sorted_files
