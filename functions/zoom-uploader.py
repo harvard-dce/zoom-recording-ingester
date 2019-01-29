@@ -214,21 +214,15 @@ class Upload:
 
     @property
     def publisher(self):
+        series_data = {k: v[0]['value'] for k, v in
+                       json.loads(self.series_catalog)['http://purl.org/dc/terms/'].items()}
+
         if OVERRIDE_PUBLISHER and OVERRIDE_PUBLISHER != "None":
             return OVERRIDE_PUBLISHER
-        elif 'publisher' in self.episode_defaults:
-            return self.episode_defaults['publisher']
+        elif 'publisher' in series_data:
+            return series_data['publisher']
         elif DEFAULT_PUBLISHER:
             return DEFAULT_PUBLISHER
-
-    @property
-    def contributor(self):
-        if OVERRIDE_CONTRIBUTOR and OVERRIDE_CONTRIBUTOR != "None":
-            return OVERRIDE_CONTRIBUTOR
-        elif 'contributor' in self.episode_defaults:
-            return self.episode_defaults['contributor']
-        else:
-            return "Zoom Ingester"
 
     @property
     def workflow_definition_id(self):
@@ -272,7 +266,6 @@ class Upload:
             logger.info("No series mapping found for zoom series {}"
                         .format(self.zoom_series_id))
             return
-        self.load_episode_defaults()
         self.create_mediapackage_id()
         if self.already_ingested():
             logger.warning("Episode with mediapackage id {} already ingested"
@@ -295,19 +288,6 @@ class Upload:
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == '404':
                 return False
-
-    def load_episode_defaults(self):
-
-        # data includes 'contributor', 'publisher'
-        endpoint = '/otherpubs/episodedefaults/{}.json'.format(self.opencast_series_id)
-        try:
-            resp = oc_api_request('GET', endpoint)
-            data = resp.json()['http://purl.org/dc/terms/']
-            self.episode_defaults = { k: v[0]['value'] for k, v in data.items() }
-        except requests.RequestException:
-            self.episode_defaults = {}
-
-        logger.debug({'episode_defaults': self.episode_defaults})
 
     def create_mediapackage_id(self):
         mpid = str(UUID(md5(self.meeting_uuid.encode()).hexdigest()))
@@ -348,11 +328,11 @@ class Upload:
             ('isPartOf', (None, self.opencast_series_id)),
             ('license', (None, 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')),
             ('publisher', (None, escape(self.publisher))),
-            ('contributor', (None, escape(self.contributor))),
             ('created', (None, datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'))),
             ('language', (None, 'en')),
             ('seriesDCCatalog', (None, self.series_catalog)),
-            ('source', (None, "Zoom"))
+            ('source', (None, "Zoom")),
+            ('spatial', (None, "Zoom"))
         ]
 
         for video in videos:

@@ -596,7 +596,7 @@ def vpc_components(ctx):
 
     cmd = ("aws {} ec2 describe-subnets --filters "
            "'Name=vpc-id,Values={}' "
-           "'Name=tag:aws:cloudformation:logical-id,Values=Private*'" 
+           "'Name=tag:aws:cloudformation:logical-id,Values=Private*' " 
            "--query \"Subnets[0].SubnetId\" --output text") \
         .format(profile_arg(), vpc_id)
 
