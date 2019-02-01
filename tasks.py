@@ -24,6 +24,7 @@ AWS_ACCOUNT_ID = None
 AWS_PROFILE = env('AWS_PROFILE')
 AWS_DEFAULT_REGION = env('AWS_DEFAULT_REGION', 'us-east-1')
 STACK_NAME = env('STACK_NAME')
+OC_CLUSTER_NAME = env('OC_CLUSTER_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
 
@@ -347,11 +348,18 @@ def delete(ctx):
     if not stack_exists(ctx):
         raise Exit("Stack doesn't exist!")
 
-    cmd = ("aws {} cloudformation delete-stack "
-           "--stack-name {}").format(profile_arg(), STACK_NAME)
-    if input('Are you sure you want to delete stack "{}"? [y/N] '.format(STACK_NAME))\
-            .lower().strip().startswith('y'):
-        ctx.run(cmd, echo=True)
+    delete_files = "aws {} s3 rm s3://{}-recording-files --recursive"\
+                   .format(profile_arg(), STACK_NAME)
+
+    delete_stack = ("aws {} cloudformation delete-stack "
+                    "--stack-name {}").format(profile_arg(), STACK_NAME)
+    if input('\nAre you sure you want to delete stack "{}"?\n'
+             'WARNING: This will also delete all recording files saved '
+             'in the S3 bucket "{}-recording-files".\n'
+             'Type stack name to confirm deletion: '.format(STACK_NAME, STACK_NAME))\
+            == STACK_NAME:
+        ctx.run(delete_files, echo=True)
+        ctx.run(delete_stack, echo=True)
         __wait_for(ctx, 'stack-delete-complete')
     else:
         print("not deleting stack")
@@ -584,9 +592,14 @@ def stack_tags():
 
 def vpc_components(ctx):
 
-    vpc_id = getenv("VPC_ID", False)
+    cmd = ("aws {} opsworks describe-stacks "
+           "--query \"Stacks[?Name=='{}'].VpcId\" --output text")\
+        .format(profile_arg(), OC_CLUSTER_NAME)
+    res = ctx.run(cmd, hide=1)
+    vpc_id = res.stdout.strip()
+
     if vpc_id is None:
-        confirm = ("No $VPC_ID defined. "
+        confirm = ("No VPC found "
                    "Uploader will not be able to communicate with "
                    "the opencast admin. Do you wish to proceed? [y/N] ")
         if not input(confirm).lower().strip().startswith('y'):
@@ -599,7 +612,6 @@ def vpc_components(ctx):
            "'Name=tag:aws:cloudformation:logical-id,Values=Private*' " 
            "--query \"Subnets[0].SubnetId\" --output text") \
         .format(profile_arg(), vpc_id)
-
     res = ctx.run(cmd, hide=1)
     subnet_id = res.stdout
 
@@ -612,6 +624,28 @@ def vpc_components(ctx):
     sg_id = res.stdout
 
     return subnet_id, sg_id
+
+
+def oc_base_url(ctx):
+    cmd = ("aws {} opsworks --region us-east-1 describe-stacks "
+           "--query \"Stacks[?Name=='{}'].StackId\" --output text")\
+        .format(profile_arg(), OC_CLUSTER_NAME)
+    res = ctx.run(cmd, hide=1)
+    stack_id = res.stdout.strip()
+
+    cmd = ("aws {} opsworks describe-layers --stack-id {} "
+           "--query \"Layers[?Name=='Admin'].LayerId\" --output text")\
+        .format(profile_arg(), stack_id)
+    res = ctx.run(cmd, hide=1)
+    admin_layer_id = res.stdout.strip()
+
+    cmd = ("aws {} opsworks describe-instances --stack-id {} "
+           "--query \"Instances[?LayerIds[0]=='{}'].PublicDns\" --output text")\
+        .format(profile_arg(), stack_id, admin_layer_id)
+    res = ctx.run(cmd, hide=1)
+    url = "http://" + res.stdout.strip()
+
+    return url
 
 
 def stack_exists(ctx):
@@ -669,7 +703,7 @@ def __create_or_update(ctx, op):
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
                 getenv("ZOOM_ADMIN_EMAIL"),
-                getenv("OPENCAST_BASE_URL"),
+                oc_base_url(ctx),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", required=False),
