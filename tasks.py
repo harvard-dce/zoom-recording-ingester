@@ -627,23 +627,17 @@ def vpc_components(ctx):
 
 
 def oc_base_url(ctx):
-    cmd = ("aws {} opsworks --region us-east-1 describe-stacks "
-           "--query \"Stacks[?Name=='{}'].StackId\" --output text")\
+
+    cmd = ("aws {} ec2 describe-instances "
+           "--filters \"Name=tag:opsworks:stack,Values={}\" " 
+           "\"Name=tag:opsworks:layer:admin,Values=Admin\" --query \"Reservations[].Instances[].PublicDnsName\" "
+           "--output text")\
         .format(profile_arg(), OC_CLUSTER_NAME)
-    res = ctx.run(cmd, hide=1)
-    stack_id = res.stdout.strip()
 
-    cmd = ("aws {} opsworks describe-layers --stack-id {} "
-           "--query \"Layers[?Name=='Admin'].LayerId\" --output text")\
-        .format(profile_arg(), stack_id)
-    res = ctx.run(cmd, hide=1)
-    admin_layer_id = res.stdout.strip()
-
-    cmd = ("aws {} opsworks describe-instances --stack-id {} "
-           "--query \"Instances[?LayerIds[0]=='{}'].PublicDns\" --output text")\
-        .format(profile_arg(), stack_id, admin_layer_id)
     res = ctx.run(cmd, hide=1)
     url = "http://" + res.stdout.strip()
+
+    print("OC BASE URL {}".format(url))
 
     return url
 
