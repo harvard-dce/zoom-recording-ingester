@@ -1223,7 +1223,15 @@ def __get_meetings(date):
         url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
 
         token = gen_token(key=key, secret=secret)
-        r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
+
+        while True:
+            r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
+            if r.status_code != 429:
+                break
+            else:
+                print("API rate limited, waiting 10 seconds to retry...")
+                time.sleep(10)
+
         r.raise_for_status()
         response = r.json()
         meetings.extend(response['meetings'])
