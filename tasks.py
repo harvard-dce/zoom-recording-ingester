@@ -54,7 +54,7 @@ def get_queue_url(queue_name):
     return queue_url
 
 
-def empty_queue(ctx, queue_name):
+def queue_is_empty(ctx, queue_name):
     queue_url = get_queue_url(queue_name)
 
     cmd = ("aws {} sqs get-queue-attributes --queue-url {} "
@@ -325,7 +325,7 @@ def exec_downloader(ctx, qualifier=None):
     Manually trigger downloader.
     """
 
-    if empty_queue(ctx, "downloads"):
+    if queue_is_empty(ctx, "downloads"):
         print("No downloads in queue")
         return
 
@@ -349,7 +349,7 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     Manually trigger uploader.
     """
 
-    if empty_queue(ctx, "uploads.fifo"):
+    if queue_is_empty(ctx, "uploads.fifo"):
         print("No uploads in queue")
         return
 
