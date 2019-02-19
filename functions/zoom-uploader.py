@@ -6,8 +6,6 @@ from urllib.parse import urljoin
 from hashlib import md5
 from os import getenv as env
 import xml.etree.ElementTree as ET
-from datetime import datetime
-from pytz import timezone
 from xml.sax.saxutils import escape
 from uuid import UUID
 
@@ -23,12 +21,9 @@ ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
 ZOOM_RECORDING_TYPE_NUM = 'L01'
 ZOOM_OPENCAST_WORKFLOW = env('OC_WORKFLOW')
 ZOOM_OPENCAST_FLAVOR = env('OC_FLAVOR')
-DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
 OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
-CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
-LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 UPLOAD_MESSAGES_PER_INVOCATION = env('UPLOAD_MESSAGES_PER_INVOCATION')
 
 s3 = boto3.resource('s3')
@@ -61,9 +56,6 @@ def sqs_resource():
 @setup_logging
 def handler(event, context):
 
-    ignore_schedule = event.get('ignore_schedule', False)
-    override_series_id = event.get('override_series_id')
-
     sqs = sqs_resource()
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
@@ -86,8 +78,6 @@ def handler(event, context):
             return
         try:
             upload_data = json.loads(upload_message.body)
-            upload_data['ignore_schedule'] = ignore_schedule
-            upload_data['override_series_id'] = override_series_id
             logger.info(upload_data)
             wf_id = process_upload(upload_data)
             upload_message.delete()
@@ -119,10 +109,7 @@ class Upload:
 
     @property
     def created(self):
-        utc = datetime.strptime(
-                self.data['recording_start_time'], '%Y-%m-%dT%H:%M:%SZ')\
-                .replace(tzinfo=timezone('UTC'))
-        return utc
+        return self.data['created']
 
     @property
     def meeting_uuid(self):
@@ -134,79 +121,15 @@ class Upload:
 
     @property
     def zoom_series_id(self):
-        return self.data['meeting_number']
-
-    @property
-    def ignore_schedule(self):
-        return self.data['ignore_schedule']
+        return self.data['zoom_series_id']
 
     @property
     def override_series_id(self):
         return self.data.get('override_series_id')
 
-    def series_id_from_schedule(self):
-        dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
-
-        r = table.get_item(
-            Key={"zoom_series_id": str(self.zoom_series_id)}
-        )
-
-        if 'Item' not in r:
-            return None
-        else:
-            schedule = r['Item']
-            logger.info(schedule)
-
-        zoom_time = self.created.astimezone(timezone(LOCAL_TIME_ZONE))
-        weekdays = ['M', 'T', 'W', 'R', 'F']
-        if zoom_time.weekday() > 4:
-            logger.debug("Meeting occurred on a weekend.")
-            return None
-        elif weekdays[zoom_time.weekday()] not in schedule['Days']:
-            logger.debug("No opencast recording scheduled for this day of the week.")
-            return None
-
-        for time in schedule['Time']:
-            scheduled_time = datetime.strptime(time, '%H:%M')
-            timedelta = abs(zoom_time -
-                            zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
-                            ).total_seconds()
-            threshold_minutes = 30
-            if timedelta < (threshold_minutes * 60):
-                return schedule['opencast_series_id']
-
-        logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
-                     .format(threshold_minutes))
-
-        if self.ignore_schedule:
-            logger.debug("'ignore_schedule' enabled; using {} as series id."
-                        .format(schedule['opencast_series_id']))
-            return schedule['opencast_series_id']
-
-        return None
-
     @property
     def opencast_series_id(self):
-
-        if not hasattr(self, '_oc_series_id'):
-
-            if self.override_series_id:
-                series_id = self.override_series_id
-                logger.info("Using override series id '{}'".format(series_id))
-            else:
-                series_id = self.series_id_from_schedule()
-
-            if series_id is not None:
-                logger.info("Matched with opencast series '{}'!".format(series_id))
-                self._oc_series_id = series_id
-            elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
-                logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
-                self._oc_series_id = DEFAULT_SERIES_ID
-            else:
-                self._oc_series_id = None
-
-        return self._oc_series_id
+        return self.data['opencast_series_id']
 
     @property
     def type_num(self):
@@ -262,10 +185,8 @@ class Upload:
         return self._workflow_id
 
     def upload(self):
-        if not self.verify_series_mapping():
-            logger.info("No series mapping found for zoom series {}"
-                        .format(self.zoom_series_id))
-            return
+        if not self.opencast_series_id:
+           raise Exception("No opencast series id found!")
         self.create_mediapackage_id()
         if self.already_ingested():
             logger.warning("Episode with mediapackage id {} already ingested"
@@ -274,9 +195,6 @@ class Upload:
         self.get_series_catalog()
         self.ingest()
         return self.workflow_id
-
-    def verify_series_mapping(self):
-        return self.opencast_series_id is not None
 
     def already_ingested(self):
         endpoint = '/workflow/instances.json?mp={}'.format(self.mediapackage_id)
@@ -328,7 +246,7 @@ class Upload:
             ('isPartOf', (None, self.opencast_series_id)),
             ('license', (None, 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')),
             ('publisher', (None, escape(self.publisher))),
-            ('created', (None, datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'))),
+            ('created', (None, self.created)),
             ('language', (None, 'en')),
             ('seriesDCCatalog', (None, self.series_catalog)),
             ('source', (None, "Zoom")),

@@ -4,10 +4,11 @@ import time
 import requests
 from os import getenv as env
 from hashlib import md5
-from urllib.parse import urljoin
 from operator import itemgetter
 from common import setup_logging, gen_token
 import subprocess
+from pytz import timezone
+from datetime import datetime
 
 import logging
 logger = logging.getLogger()
@@ -21,6 +22,9 @@ MEETING_LOOKUP_RETRIES = 2
 MEETING_LOOKUP_RETRY_DELAY = 60
 ZOOM_API_BASE_URL = env('ZOOM_API_BASE_URL')
 ZOOM_ADMIN_EMAIL = env('ZOOM_ADMIN_EMAIL')
+DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
+CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
+LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
 
 class PermanentDownloadError(Exception):
@@ -45,10 +49,14 @@ def handler(event, context):
     This function receives an event on each new entry in the download urls
     DyanmoDB table
     """
-    sqs = boto3.resource('sqs')
 
+    ignore_schedule = event.get('ignore_schedule', False)
+    override_series_id = event.get('override_series_id')
+
+    sqs = boto3.resource('sqs')
     download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
 
+    # find a message from the downloads queue
     try:
         messages = download_queue.receive_messages(
             MaxNumberOfMessages=1,
@@ -60,96 +68,213 @@ def handler(event, context):
         logger.info("No download queue messages available")
         return
 
-    message_body = json.loads(download_message.body)
-    logger.info(message_body)
+    download_data = json.loads(download_message.body)
+    download_data['ignore_schedule'] = ignore_schedule
+    download_data['override_series_id'] = override_series_id
+    meeting_info = meeting_metadata(download_data['uuid'])
+    download_data.update(meeting_info)
 
+    logger.info(download_data)
+
+    # download the recordings to s3
     try:
-        # get name/email of host
-        host_data = get_host_data(message_body['host_id'])
-        logger.info({'host_data': host_data})
-
-        # get data about recording files
-        recording_data = get_recording_data(message_body['uuid'])
-        logger.info(recording_data)
-    except ApiLookupFailure as e:
-        # Retry-able error
+        upload_message = process_download(download_data)
+    except PermanentDownloadError as e:
         logger.error(e)
-        return
-    except Exception as e:
-        logger.exception("Something went horribly wrong "
-                         "trying to fetch the host or recording data:"
-                         " {}".format(e))
-        send_to_sqs(message_body, DEADLETTER_QUEUE_NAME, error=e)
+        send_to_sqs(download_data, DEADLETTER_QUEUE_NAME, error=e)
         download_message.delete()
-        logger.info("Moved message to DLS and deleted message from source queue.")
+        raise
+    except Exception as e:
+        logger.exception(e)
         raise
 
-    chronological_files = filter_and_sort(recording_data['recording_files'])
-    if not chronological_files:
-        raise PermanentDownloadError("No files available to download.")
-    logger.info("downloading {} files".format(len(chronological_files)))
+    # send a message to the opencast uploader
+    if upload_message:
+        send_to_sqs(upload_message, UPLOAD_QUEUE_NAME)
 
-    track_sequence = 1
-    prev_file = None
+    # remove processed message from downloads queue
+    download_message.delete()
 
-    try:
-        for file in chronological_files:
+
+def process_download(download_data):
+    download = Download(download_data)
+    download.download()
+    return download.upload_message
+
+
+class Download:
+
+    def __init__(self, data):
+        self.data = data
+
+    @property
+    def uuid(self):
+        return self.data['uuid']
+
+    @property
+    def zoom_series_id(self):
+        return self.data['id']
+
+    @property
+    def start_time(self):
+        return self.data['start_time']
+
+    @property
+    def created(self):
+        utc = datetime.strptime(
+            self.start_time, '%Y-%m-%dT%H:%M:%SZ') \
+            .replace(tzinfo=timezone('UTC'))
+        return utc
+
+    @property
+    def recording_data(self):
+        if not hasattr(self, '_recording_data'):
+            # Must use string concatenation rather than urljoin because uuids may contain
+            # url unsafe characters like forward slash
+            endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(self.uuid)
+            self._recording_data = get_api_data(endpoint_url, validate_callback=verify_recording_status)
+
+        return self._recording_data
+
+    def series_id_from_schedule(self):
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
+
+        r = table.get_item(
+            Key={"zoom_series_id": str(self.zoom_series_id)}
+        )
+
+        if 'Item' not in r:
+            return None
+        else:
+            schedule = r['Item']
+            logger.info(schedule)
+
+        zoom_time = self.created.astimezone(timezone(LOCAL_TIME_ZONE))
+        weekdays = ['M', 'T', 'W', 'R', 'F']
+        if zoom_time.weekday() > 4:
+            logger.debug("Meeting occurred on a weekend.")
+            return None
+        elif weekdays[zoom_time.weekday()] not in schedule['Days']:
+            logger.debug("No opencast recording scheduled for this day of the week.")
+            return None
+
+        threshold_minutes = 30
+        for time in schedule['Time']:
+            scheduled_time = datetime.strptime(time, '%H:%M')
+            timedelta = abs(zoom_time -
+                            zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
+                            ).total_seconds()
+            if timedelta < (threshold_minutes * 60):
+                return schedule['opencast_series_id']
+
+        logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
+                     .format(threshold_minutes))
+
+        if self.ignore_schedule:
+            logger.debug("'ignore_schedule' enabled; using {} as series id."
+                        .format(schedule['opencast_series_id']))
+            return schedule['opencast_series_id']
+
+        return None
+
+    @property
+    def override_series_id(self):
+        return self.data['override_series_id']
+
+    @property
+    def opencast_series_id(self):
+
+        if not hasattr(self, '_oc_series_id'):
+
+            if self.override_series_id:
+                series_id = self.override_series_id
+                logger.info("Using override series id '{}'".format(series_id))
+            else:
+                series_id = self.series_id_from_schedule()
+
+            if series_id is not None:
+                logger.info("Matched with opencast series '{}'!".format(series_id))
+                self._oc_series_id = series_id
+            elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
+                logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
+                self._oc_series_id = DEFAULT_SERIES_ID
+            else:
+                self._oc_series_id = None
+
+        return self._oc_series_id
+
+    @property
+    def chronological_files(self):
+        return filter_and_sort(self.recording_data['recording_files'])
+
+    @property
+    def upload_message(self):
+        upload_message = {
+            "uuid": self.uuid,
+            "zoom_series_id": self.zoom_series_id,
+            "opencast_series_id": self.opencast_series_id,
+            "host_name": self.data['host'],
+            "topic": self.data['topic'],
+            "created": datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'),
+            "webhook_received_time": self.data['received_time'],
+            "correlation_id": self.data['correlation_id']
+        }
+        return upload_message
+
+    def download(self):
+
+        if not self.opencast_series_id:
+            logger.info("No opencast series match found")
+            return
+
+        if self.recording_data:
+            logger.info({'recording_data': self.recording_data})
+        else:
+            raise PermanentDownloadError("No recording data found!")
+
+        logger.info(self.recording_data)
+
+        if not self.chronological_files:
+            raise PermanentDownloadError("No files available to download.")
+        logger.info("downloading {} files".format(len(self.chronological_files)))
+
+        track_sequence = 1
+        prev_file = None
+
+        for file in self.chronological_files:
             if next_track_sequence(prev_file, file):
-                    track_sequence += 1
+                track_sequence += 1
 
             logger.debug("file {} is track sequence {}".format(file, track_sequence))
             prev_file = file
 
-            stream_file_to_s3(file, recording_data['uuid'], track_sequence)
+            stream_file_to_s3(file, self.uuid, track_sequence)
 
-        if 'meeting_number' in recording_data:
-            meeting_number = recording_data['meeting_number']
-        elif 'id' in recording_data:
-            meeting_number = recording_data['id']
-        else:
-            raise PermanentDownloadError("Missing meeting number in API response")
-
-        if not (8 < len(str(meeting_number)) < 12):
-            raise PermanentDownloadError("Invalid meeting number: {}".format(meeting_number))
-
-        upload_message = {
-            "uuid": message_body['uuid'],
-            "meeting_number": meeting_number,
-            "host_name": host_data['host_name'],
-            "host_id": message_body['host_id'],
-            "topic": recording_data['topic'],
-            "meeting_start_time": recording_data['start_time'],
-            "recording_start_time": recording_data['recording_files'][0]['recording_start'],
-            "recording_count": recording_data['recording_count'],
-            "webhook_received_time": message_body['received_time'],
-            "correlation_id": message_body['correlation_id']
-        }
-
-        send_to_sqs(upload_message, UPLOAD_QUEUE_NAME)
-    except PermanentDownloadError as e:
-        logger.error(e)
-        send_to_sqs(message_body, DEADLETTER_QUEUE_NAME, error=e)
-        download_message.delete()
-        raise
-
-    download_message.delete()
+        return self.upload_message
 
 
-def get_host_data(host_id):
+def meeting_metadata(uuid):
+    """
+    Get metadata about meeting. Metadata includes zoom meeting id,
+    host_name, host_email, topic, and start_time.
+    """
+    for meeting_type in ['past', 'pastOne', 'live']:
+        try:
+            endpoint_url = ZOOM_API_BASE_URL + 'metrics/meetings/{}?type={}' \
+                .format(uuid, meeting_type)
+            meeting_info = get_api_data(endpoint_url)
+            logger.info({'meeting_info': meeting_info})
 
-    endpoint_url = urljoin(ZOOM_API_BASE_URL, 'users/{}'.format(host_id))
-    host_data = get_api_data(endpoint_url)
-    return {
-        'host_name': "{} {}".format(host_data['first_name'], host_data['last_name']),
-        'host_email': host_data['email']
-    }
+            return meeting_info
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                continue
+            else:
+                raise
 
-
-def get_recording_data(uuid):
-    # Must use string concatenation rather than urljoin because uuids may contain
-    # url unsafe characters like forward slash
-    endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(uuid)
-    return get_api_data(endpoint_url, validate_callback=verify_recording_status)
+    raise PermanentDownloadError(
+        "No meeting metadata found for meeting uuid {}".format(self.uuid))
 
 
 def get_api_data(endpoint_url, validate_callback=None):
