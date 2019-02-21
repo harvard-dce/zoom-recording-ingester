@@ -218,7 +218,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 
 
 @task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id'})
-def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
+def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=3):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
@@ -234,7 +234,23 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
     api_resources = apig.get_resources(restApiId=api_id)
     resource_id = jmespath.search("items[?pathPart=='new_recording'].id | [0]", api_resources)
 
-    if webhook_version == 2:
+    if webhook_version == 3:
+        if status is None:
+            status = 'recording.completed'
+
+        event_body = json.dumps(
+            {'event': status,
+             'payload': {
+                 'object': {
+                     'uuid': uuid,
+                     'host_id': host_id
+                    },
+                     'delay_seconds': 0
+                 }
+             }
+        )
+
+    elif webhook_version == 2:
         if status is None:
             status = 'recording_completed'
 
@@ -244,9 +260,10 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=2):
                  'meeting': {
                      'uuid': uuid,
                      'host_id': host_id
-                 },
-             },
-             'delay_seconds': 0}
+                    },
+                 'delay_seconds': 0
+                }
+             }
         )
 
     else:
