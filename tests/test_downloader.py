@@ -160,6 +160,63 @@ def test_get_recording_data(mocker):
         downloader.get_recording_data(call[0])
 
 
+def test_remove_incomplete_metadata(mocker):
+    mp4_complete = {
+        "id": "123",
+        "meeting_id": "abc",
+        "recording_start": "2019-01-31T17:09:11Z",
+        "recording_end": "2019-01-31T17:11:21Z",
+        "file_type": "MP4",
+        "download_url": "url",
+        "status": "completed",
+        "recording_type": "shared_screen_with_speaker_view"}
+
+    mp4_incomplete = {
+        "meeting_id": "abc",
+        "recording_start": "2019-01-31T17:09:11Z",
+        "recording_end": "2019-01-31T17:11:21Z",
+        "file_type": "MP4",
+        "download_url": "url",
+        "status": "completed",
+        "recording_type": "shared_screen_with_speaker_view"}
+
+    non_mp4_complete = {
+        "id": "123",
+        "meeting_id": "abc",
+        "recording_start": "2019-01-31T17:09:11Z",
+        "recording_end": "2019-01-31T17:11:21Z",
+        "file_type": "CHAT",
+        "download_url": "url",
+        "status": "completed",
+        "recording_type": "shared_screen_with_speaker_view"}
+
+    non_mp4_incomplete = {
+        "meeting_id": "abc",
+        "recording_start": "2019-01-31T17:09:11Z",
+        "recording_end": "2019-01-31T17:11:21Z",
+        "file_type": "CHAT",
+        "download_url": "url",
+        "status": "completed",
+        "recording_type": "shared_screen_with_speaker_view"}
+
+    cases = [
+        ([mp4_complete, non_mp4_complete, non_mp4_incomplete],
+            [mp4_complete, non_mp4_complete], None),
+        ([mp4_incomplete], downloader.PermanentDownloadError,
+            "MP4 file missing required metadata. {}".format(mp4_incomplete))
+    ]
+
+    for files, expected, msg in cases:
+        param = {'recording_files': files}
+        if isinstance(expected, type):
+            with pytest.raises(expected) as exc_info:
+                downloader.remove_incomplete_metadata(param)
+            if msg is not None:
+                assert exc_info.match(msg)
+        else:
+            assert downloader.remove_incomplete_metadata(param)['recording_files'] == expected
+
+
 def test_filter_and_sort(mocker):
 
     now = datetime.now()
