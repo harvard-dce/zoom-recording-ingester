@@ -98,8 +98,7 @@ def handler(event, context):
 
 def process_download(download_data):
     download = Download(download_data)
-    download.download()
-    return download.upload_message
+    return download.download()
 
 
 class Download:
@@ -229,7 +228,7 @@ class Download:
 
         if not self.opencast_series_id:
             logger.info("No opencast series match found")
-            return
+            return None
 
         if self.recording_data:
             logger.info({'recording_data': self.recording_data})

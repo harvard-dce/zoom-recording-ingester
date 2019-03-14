@@ -255,14 +255,8 @@ def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2):
     # or it fails.
     print("\nTriggering uploader...\n")
     resp = exec_uploader(ctx)
-    wait = 1
-    while not resp:
-        resp = exec_uploader(ctx)
-        print(" waiting {} seconds to retry".format(wait))
-        time.sleep(wait)
-        wait *= 2
 
-    if 'FunctionError' in resp:
+    if resp and 'FunctionError' in resp:
         print("Uploader failed!")
         return
 
