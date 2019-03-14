@@ -17,6 +17,7 @@ from functions.common import gen_token
 import requests
 from pytz import timezone
 from multiprocessing import Process
+import difflib
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -90,7 +91,7 @@ def codebuild(ctx, revision):
            " --environment-variables-override"
            " name='STACK_NAME',value={},type=PLAINTEXT"
            " name='LAMBDA_RELEASE_ALIAS',value={},type=PLAINTEXT"
-           " name='NONINTERACTIVE',value=1" ) \
+           " name='NONINTERACTIVE',value=1") \
         .format(
             profile_arg(),
             STACK_NAME,
@@ -337,20 +338,29 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=3):
 
 
 @task
-def exec_downloader(ctx, qualifier=None):
+def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger downloader.
     """
-
+    
     if queue_is_empty(ctx, "downloads"):
         print("No downloads in queue")
         return
+    
+    payload = {'ignore_schedule': ignore_schedule}
+
+    if series_id is not None:
+        payload['override_series_id'] = series_id
 
     if qualifier is None:
         qualifier = getenv('LAMBDA_RELEASE_ALIAS')
 
     cmd = ("aws lambda invoke --function-name='{}-zoom-downloader-function' "
-            "--qualifier {} output.txt").format(STACK_NAME, qualifier)
+            "--payload='{}' --qualifier {} output.txt").format(
+        STACK_NAME,
+        json.dumps(payload),
+        qualifier
+    )
     print(cmd)
     res = json.loads(ctx.run(cmd).stdout)
 
@@ -361,29 +371,19 @@ def exec_downloader(ctx, qualifier=None):
     'series_id': 'override normal opencast series id lookup',
     'ignore_schedule': 'do opencast series id lookup but ignore if meeting times don\'t match'
 })
-def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
+def exec_uploader(ctx, qualifier=None):
     """
     Manually trigger uploader.
     """
-
     if queue_is_empty(ctx, "uploads.fifo"):
         print("No uploads in queue")
         return
-
-    payload = {'ignore_schedule': ignore_schedule}
-
-    if series_id is not None:
-        payload['override_series_id'] = series_id
 
     if qualifier is None:
         qualifier = getenv('LAMBDA_RELEASE_ALIAS')
 
     cmd = ("aws lambda invoke --function-name='{}-zoom-uploader-function' "
-           "--payload='{}' --qualifier {} outfile.txt").format(
-        STACK_NAME,
-        json.dumps(payload),
-        qualifier
-    )
+           "--qualifier {} outfile.txt").format(STACK_NAME, qualifier)
 
     print(cmd)
     res = json.loads(ctx.run(cmd).stdout)
@@ -539,13 +539,15 @@ def import_schedule(ctx, filename="classes.csv", year=None, semester=None):
     """
     Csv or json to dynamo. Optional: --filename, --year, --semester
     """
+
     if filename.endswith('.csv'):
         __schedule_csv_to_json(filename, "classes.json", year=year, semester=semester)
-        __schedule_json_to_dynamo("classes.json")
-    elif filename.endswith('.json'):
-        __schedule_json_to_dynamo(filename)
-    else:
+        filename = "classes.json"
+
+    if not filename.endswith('.json'):
         print("Invalid file type {}".format(filename))
+
+    __schedule_json_to_dynamo(ctx, filename)
 
 
 @task
@@ -1169,7 +1171,7 @@ def __schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
     json_file.close()
 
 
-def __schedule_json_to_dynamo(json_name):
+def __schedule_json_to_dynamo(ctx, json_name):
 
     dynamodb = boto3.resource('dynamodb')
 
@@ -1184,6 +1186,36 @@ def __schedule_json_to_dynamo(json_name):
         table.put_item(Item=item)
 
     file.close()
+
+    new_schedule = __get_dynamo_schedule(ctx, table_name)
+
+    print("\nSCHEDULE UPDATED TO:")
+    pprint(new_schedule)
+    print()
+
+
+def __get_dynamo_schedule(ctx, table_name):
+
+    cmd = "aws {} dynamodb scan --table-name {}".format(profile_arg(), table_name)
+
+    res = ctx.run(cmd, hide=True).stdout
+
+    res = json.loads(res)
+
+    def clean_dynamo_entry(entry):
+        result = {}
+        for key in entry:
+            value = list(entry[key].values())[0]
+            if type(value) == list:
+                value = [list(li.values())[0] for li in value]
+            result[key] = value
+        return result
+
+    current_schedule = []
+    for item in res['Items']:
+        current_schedule.append(clean_dynamo_entry(item))
+
+    return current_schedule
 
 
 def __show_stack_status(ctx):
@@ -1368,4 +1400,3 @@ def __request_ids_from_logs(ctx, log_group, filter_pattern):
         log_stream, message = line.strip().split(maxsplit=1)
         message = json.loads(message)
         yield log_stream, message['aws_request_id']
-

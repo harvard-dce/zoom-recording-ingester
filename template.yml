@@ -303,6 +303,9 @@ Resources:
           ZOOM_API_BASE_URL: !Ref ZoomApiBaseUrl
           ZOOM_API_KEY: !Ref ZoomApiKey
           ZOOM_API_SECRET: !Ref ZoomApiSecret
+          DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
+          CLASS_SCHEDULE_TABLE: !Ref ClassScheduleDynamoTable
+          LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
       Code:
         S3Bucket: !Ref LambdaCodeBucket
@@ -350,12 +353,9 @@ Resources:
           OPENCAST_BASE_URL: !Ref OpencastBaseUrl
           OPENCAST_API_USER: !Ref OpencastApiUser
           OPENCAST_API_PASSWORD: !Ref OpencastApiPassword
-          DEFAULT_SERIES_ID: !Ref DefaultOpencastSeriesId
           DEFAULT_PUBLISHER: !Ref DefaultPublisher
           OVERRIDE_PUBLISHER: !Ref OverridePublisher
           OVERRIDE_CONTRIBUTOR: !Ref OverrideContributor
-          CLASS_SCHEDULE_TABLE: !Ref ClassScheduleDynamoTable
-          LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
           OC_WORKFLOW: !Ref OCWorkflow
           OC_FLAVOR: !Ref OCFlavor

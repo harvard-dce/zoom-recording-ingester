@@ -2,7 +2,6 @@ import site
 from os.path import dirname, join
 import pytest
 from importlib import import_module
-
 import requests
 import requests_mock
 from datetime import datetime, timedelta
@@ -128,26 +127,14 @@ def test_get_recording_data_retries(mocker):
     assert resp['foo'] == 1
 
 
-def test_get_host_data(mocker):
-
-    mock_get_api_data = mocker.patch.object(downloader, 'get_api_data')
-    mock_get_api_data.return_value = {
-        'first_name': 'Testy',
-        'last_name': 'McTesterson',
-        'email': 'testy@mctesterson.com'
-    }
-
-    host_data = downloader.get_host_data('https://api.example.com/v2/tm1234')
-    assert host_data == {"host_name": "Testy McTesterson", "host_email": "testy@mctesterson.com"}
-    mock_get_api_data.called_once_with('https://api.example.com/v2/tm1234')
-
-
-def test_get_recording_data(mocker):
+def test_recording_data(mocker):
     """
     Test get_recording_data to make sure forward slashes survive url and endpoint url is correct.
     """
 
     mock_get_api_data = mocker.patch.object(downloader, 'get_api_data')
+    mocker.patch.object(downloader, 'remove_incomplete_metadata')
+    mocker.patch.object(downloader, 'verify_recording_status')
     calls = [('tCh9CNwpQ4xfRJmPpyWQ==', 'https://api.zoom.us/v2/meetings/tCh9CNwpQ4xfRJmPpyWQ==/recordings'),
              ('/Ch9CNwpQ4xfRJmPpyWQ9/', 'https://api.zoom.us/v2/meetings//Ch9CNwpQ4xfRJmPpyWQ9//recordings')]
 
@@ -157,7 +144,8 @@ def test_get_recording_data(mocker):
             assert (args[0] == call[1])
 
         mock_get_api_data.side_effect = side_effect
-        downloader.get_recording_data(call[0])
+        dl = downloader.Download({'uuid': call[0]})
+        dl.recording_data()
 
 
 def test_remove_incomplete_metadata(mocker):
