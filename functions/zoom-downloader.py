@@ -366,7 +366,8 @@ def remove_incomplete_metadata(recording_data):
             else:
                 logger.debug("Removing file from recording_data "
                              "(incomplete metadata): {}".format(file))
-                recording_data['recording_files'].remove(file)
+                recording_data['recording_files' \
+                               ''].remove(file)
 
     return recording_data
 

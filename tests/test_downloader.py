@@ -133,6 +133,8 @@ def test_recording_data(mocker):
     """
 
     mock_get_api_data = mocker.patch.object(downloader, 'get_api_data')
+    mocker.patch.object(downloader, 'remove_incomplete_metadata')
+    mocker.patch.object(downloader, 'verify_recording_status')
     calls = [('tCh9CNwpQ4xfRJmPpyWQ==', 'https://api.zoom.us/v2/meetings/tCh9CNwpQ4xfRJmPpyWQ==/recordings'),
              ('/Ch9CNwpQ4xfRJmPpyWQ9/', 'https://api.zoom.us/v2/meetings//Ch9CNwpQ4xfRJmPpyWQ9//recordings')]
 
@@ -143,7 +145,7 @@ def test_recording_data(mocker):
 
         mock_get_api_data.side_effect = side_effect
         dl = downloader.Download({'uuid': call[0]})
-        rec_data = dl.recording_data
+        dl.recording_data()
 
 
 def test_remove_incomplete_metadata(mocker):
