@@ -53,6 +53,18 @@ def get_queue_url(queue_name):
 
     return queue_url
 
+
+def queue_is_empty(ctx, queue_name):
+    queue_url = get_queue_url(queue_name)
+
+    cmd = ("aws {} sqs get-queue-attributes --queue-url {} "
+           "--attribute-names ApproximateNumberOfMessages "
+           "--query \"Attributes.ApproximateNumberOfMessages\" --output text"
+           .format(profile_arg(), queue_url))
+
+    num_queued = int(ctx.run(cmd, hide=True).stdout.strip())
+    return num_queued == 0
+
 @task
 def production_failsafe(ctx):
     """
@@ -218,6 +230,43 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 
 
 @task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id'})
+def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2):
+
+    print("\nTriggering webhook...\n")
+    exec_webhook(ctx, uuid, host_id, status, webhook_version)
+
+    # Keep retrying downloader until some messages are processed
+    # or it fails.
+    print("\nTriggering downloader...\n")
+    resp = exec_downloader(ctx)
+    wait = 1
+    while not resp:
+        resp = exec_downloader(ctx)
+        print(" waiting {} seconds to retry".format(wait))
+        time.sleep(wait)
+        wait *= 2
+
+    if 'FunctionError' in resp:
+        print("Downloader failed!")
+        return
+
+    # Keep retrying uploader until some messages are processed
+    # or it fails.
+    print("\nTriggering uploader...\n")
+    resp = exec_uploader(ctx)
+    wait = 1
+    while not resp:
+        resp = exec_uploader(ctx)
+        print(" waiting {} seconds to retry".format(wait))
+        time.sleep(wait)
+        wait *= 2
+
+    if 'FunctionError' in resp:
+        print("Uploader failed!")
+        return
+
+
+@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id'})
 def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=3):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
@@ -230,6 +279,8 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=3):
 
     apis = apig.get_rest_apis()
     api_id = jmespath.search("items[?name=='{}'].id | [0]".format(STACK_NAME), apis)
+    if not api_id:
+        raise Exit("No api found, double check that your environment variables are correct.")
 
     api_resources = apig.get_resources(restApiId=api_id)
     resource_id = jmespath.search("items[?pathPart=='new_recording'].id | [0]", api_resources)
@@ -290,13 +341,20 @@ def exec_downloader(ctx, qualifier=None):
     """
     Manually trigger downloader.
     """
+
+    if queue_is_empty(ctx, "downloads"):
+        print("No downloads in queue")
+        return
+
     if qualifier is None:
         qualifier = getenv('LAMBDA_RELEASE_ALIAS')
 
     cmd = ("aws lambda invoke --function-name='{}-zoom-downloader-function' "
             "--qualifier {} output.txt").format(STACK_NAME, qualifier)
     print(cmd)
-    ctx.run(cmd)
+    res = json.loads(ctx.run(cmd).stdout)
+
+    return res
 
 
 @task(help={
@@ -307,7 +365,12 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger uploader.
     """
-    payload = { 'ignore_schedule': ignore_schedule }
+
+    if queue_is_empty(ctx, "uploads.fifo"):
+        print("No uploads in queue")
+        return
+
+    payload = {'ignore_schedule': ignore_schedule}
 
     if series_id is not None:
         payload['override_series_id'] = series_id
@@ -323,10 +386,12 @@ def exec_uploader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     )
 
     print(cmd)
-    res = ctx.run(cmd)
+    res = json.loads(ctx.run(cmd).stdout)
 
-    if 'FunctionError' in json.loads(res.stdout):
+    if 'FunctionError' in res:
         ctx.run("cat outfile.txt && echo")
+
+    return res
 
 
 @task(pre=[production_failsafe])
@@ -548,6 +613,7 @@ exec_ns = Collection('exec')
 exec_ns.add_task(exec_webhook, 'webhook')
 exec_ns.add_task(exec_downloader, 'downloader')
 exec_ns.add_task(exec_uploader, 'uploader')
+exec_ns.add_task(exec_pipeline, 'pipeline')
 ns.add_collection(exec_ns)
 
 debug_ns = Collection('debug')
