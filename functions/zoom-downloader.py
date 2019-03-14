@@ -132,7 +132,10 @@ class Download:
             # Must use string concatenation rather than urljoin because uuids may contain
             # url unsafe characters like forward slash
             endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(self.uuid)
-            self._recording_data = get_api_data(endpoint_url, validate_callback=verify_recording_status)
+            raw_data = get_api_data(endpoint_url)
+            clean_data = remove_incomplete_metadata(raw_data)
+            verify_recording_status(clean_data)
+            self._recording_data = clean_data
 
         return self._recording_data
 
@@ -336,6 +339,36 @@ def verify_recording_status(recording_data):
 
     logger.info("All recordings ready to download")
     return True
+
+
+def remove_incomplete_metadata(recording_data):
+    """
+    Throw away any non-video file metadata objects that don't include the
+    required fields.
+    """
+
+    required_fields = {
+        'id',
+        'meeting_id',
+        'recording_start',
+        'recording_end',
+        'file_type',
+        'download_url',
+        'status',
+        'recording_type'
+    }
+    for file in recording_data['recording_files']:
+        if not required_fields.issubset(set(file.keys())):
+            if file['file_type'].lower() == 'mp4':
+                raise PermanentDownloadError(
+                    "MP4 file missing required metadata. {}".format(file)
+                )
+            else:
+                logger.debug("Removing file from recording_data "
+                             "(incomplete metadata): {}".format(file))
+                recording_data['recording_files'].remove(file)
+
+    return recording_data
 
 
 def next_track_sequence(prev_file, file):
