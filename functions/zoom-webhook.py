@@ -72,7 +72,7 @@ def handler(event, context):
 
     if payload['status'] != 'RECORDING_MEETING_COMPLETED':
         return resp_204(
-            "Handling not implement for status '{}'".format(payload['status'])
+            "Handling not implemented for status '{}'".format(payload['status'])
         )
 
     now = datetime.strftime(timezone(LOCAL_TIME_ZONE).localize(datetime.today()), '%Y-%m-%dT%H:%M:%SZ')
@@ -105,7 +105,7 @@ def parse_payload(event_body):
         raise BadWebhookData(str(e))
 
     if 'type' in payload:
-        logger.info("Got old-style payload")
+        logger.info("Got old-style payload {}".format(payload))
         payload['status'] = payload['type']
         del payload['type']
         if 'content' in payload:
@@ -124,10 +124,22 @@ def parse_payload(event_body):
     else:
         try:
             payload = json.loads(event_body)
-            if payload['event'] == 'recording_completed':
-                payload['status'] = 'RECORDING_MEETING_COMPLETED'
-                payload['uuid'] = payload['payload']['meeting']['uuid']
-                payload['host_id'] = payload['payload']['meeting']['host_id']
+            logger.info("Got new-style payload {}".format(payload))
+
+            if 'payload' in payload and 'event' in payload:
+                status = payload['event']
+                payload = payload['payload']
+
+                if 'meeting' in payload:
+                    payload['object'] = payload['meeting']
+                    del payload['meeting']
+
+                if 'recording' in status.lower() and 'completed' in status.lower():
+                    payload['status'] = 'RECORDING_MEETING_COMPLETED'
+                    payload['uuid'] = payload['object']['uuid']
+                    payload['host_id'] = payload['object']['host_id']
+                else:
+                    payload['status'] = status
             else:
                 payload['status'] = payload['event']
                 return payload
