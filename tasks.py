@@ -437,18 +437,18 @@ def delete(ctx):
         ctx.run(delete_files, echo=True)
         ctx.run(delete_stack, echo=True)
         __wait_for(ctx, 'stack-delete-complete')
+
+        files = ["zoom-webhook.zip",
+                 "zoom-downloader.zip",
+                 "zoom-uploader.zip",
+                 "zoom-log-notifications.zip"]
+
+        for file in files:
+            cmd = "aws {} s3 rm s3://{}/{}/{}" \
+                .format(profile_arg(), getenv("LAMBDA_CODE_BUCKET"), STACK_NAME, file)
+            ctx.run(cmd, echo=True)
     else:
-        print("not deleting stack")
-
-    files = ["zoom-webhook.zip",
-             "zoom-downloader.zip",
-             "zoom-uploader.zip",
-             "zoom-log-notifications.zip"]
-
-    for file in files:
-        cmd = "aws {} s3 rm s3://{}/{}/{}" \
-            .format(profile_arg(), getenv("LAMBDA_CODE_BUCKET"), STACK_NAME, file)
-        ctx.run(cmd, echo=True)
+        print("Stack deletion canceled.")
 
 
 @task

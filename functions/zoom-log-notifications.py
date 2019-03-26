@@ -23,7 +23,7 @@ def handler(event, context):
 
         # log event data comes gzipped & base64 decoded
         raw_data = event['awslogs']['data']
-        decoded = codecs.decode(raw_data, 'base64', 'strict')
+        decoded = codecs.decode(bytes(raw_data, 'utf8'), 'base64', 'strict')
         decompressed = gzip.decompress(BytesIO(decoded).read())
         log_data = json.loads(decompressed.decode())
         logger.debug({'log data': log_data})
