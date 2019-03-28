@@ -35,7 +35,7 @@ def test_log_notifications_handler(mocker, handler, monkeypatch):
     }
     """
 
-    raw_data = b'H4sIABK/KlsC/4WRb2/aMBDGv4rnV60EJIEkBVRVQhrrijZpE0ya1iDkxAe4dXyR7YyuKN99Pmi3\nF5W2d74/z+/uHh95Dc6JHax+NcCnjL+frWabz/PlcnY75z3G8WDAUiFLh8k4T0ZZnuZU0Li7tdg2\nVIvEwUVa1KUU0Rax/4xY95XZgfNgzxGlt62pvELzIl96C6Im/TBOxlGcR8kkuh+N1qKsZDIcpdTn\n2tJVVjWk+6B04LmguOcPun18Zf+Z9CNE3xqNQoL9FAa80faXi+93i+zj6svk64Kvz3vMf4LxJ+qR\nK0n70PCMpnsV7PGipiuTbDgJHiRxdpWlofZiHPUfC74HrbEIQcEPaLV8V/COdz32isyvxpP4X8j8\nDTJYdgaWwhZBSo9nymRpRyR4quB0G/UXZmVFBaWoHtlFjc4zC1W4i1VCa6aF85fTwjAWfIBAupZY\n+bDHYDC4IbZWBlgS95gy7LpG2Wq4oXbGdFuXYB8C9+Lyf4D0pP+rOBNKq3Z7v3FKwga3GwnC74l1\nZyQ8za1FO2W+bQJWUYZh6xlumRXhWwvDu3X3G2HcfOOmAgAA\n'
+    raw_data = 'H4sIABK/KlsC/4WRb2/aMBDGv4rnV60EJIEkBVRVQhrrijZpE0ya1iDkxAe4dXyR7YyuKN99Pmi3\nF5W2d74/z+/uHh95Dc6JHax+NcCnjL+frWabz/PlcnY75z3G8WDAUiFLh8k4T0ZZnuZU0Li7tdg2\nVIvEwUVa1KUU0Rax/4xY95XZgfNgzxGlt62pvELzIl96C6Im/TBOxlGcR8kkuh+N1qKsZDIcpdTn\n2tJVVjWk+6B04LmguOcPun18Zf+Z9CNE3xqNQoL9FAa80faXi+93i+zj6svk64Kvz3vMf4LxJ+qR\nK0n70PCMpnsV7PGipiuTbDgJHiRxdpWlofZiHPUfC74HrbEIQcEPaLV8V/COdz32isyvxpP4X8j8\nDTJYdgaWwhZBSo9nymRpRyR4quB0G/UXZmVFBaWoHtlFjc4zC1W4i1VCa6aF85fTwjAWfIBAupZY\n+bDHYDC4IbZWBlgS95gy7LpG2Wq4oXbGdFuXYB8C9+Lyf4D0pP+rOBNKq3Z7v3FKwga3GwnC74l1\nZyQ8za1FO2W+bQJWUYZh6xlumRXhWwvDu3X3G2HcfOOmAgAA\n'
 
     event = { 'awslogs': { 'data': raw_data } }
 
