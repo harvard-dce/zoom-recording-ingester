@@ -136,7 +136,7 @@ def test_recording_data(mocker):
     mocker.patch.object(downloader, 'remove_incomplete_metadata')
     mocker.patch.object(downloader, 'verify_recording_status')
     calls = [('tCh9CNwpQ4xfRJmPpyWQ==', 'https://api.zoom.us/v2/meetings/tCh9CNwpQ4xfRJmPpyWQ==/recordings'),
-             ('/Ch9CNwpQ4xfRJmPpyWQ9/', 'https://api.zoom.us/v2/meetings//Ch9CNwpQ4xfRJmPpyWQ9//recordings')]
+             ('/Ch9CNwpQ4xfRJmPpyWQ9/', 'https://api.zoom.us/v2/meetings/%252FCh9CNwpQ4xfRJmPpyWQ9%252F/recordings')]
 
     for call in calls:
 

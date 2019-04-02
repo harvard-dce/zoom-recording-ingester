@@ -9,6 +9,7 @@ from common import setup_logging, gen_token
 import subprocess
 from pytz import timezone
 from datetime import datetime
+from urllib.parse import quote
 
 import logging
 logger = logging.getLogger()
@@ -128,9 +129,7 @@ class Download:
     @property
     def recording_data(self):
         if not hasattr(self, '_recording_data'):
-            # Must use string concatenation rather than urljoin because uuids may contain
-            # url unsafe characters like forward slash
-            endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(self.uuid)
+            endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(url_safe(self.uuid))
             raw_data = get_api_data(endpoint_url)
             clean_data = remove_incomplete_metadata(raw_data)
             verify_recording_status(clean_data)
@@ -261,10 +260,11 @@ def meeting_metadata(uuid):
     Get metadata about meeting. Metadata includes zoom meeting id,
     host_name, host_email, topic, and start_time.
     """
+
     for meeting_type in ['past', 'pastOne', 'live']:
         try:
             endpoint_url = ZOOM_API_BASE_URL + 'metrics/meetings/{}?type={}' \
-                .format(uuid, meeting_type)
+                .format(url_safe(uuid), meeting_type)
             meeting_info = get_api_data(endpoint_url)
             logger.info({'meeting_info': meeting_info})
 
@@ -276,7 +276,18 @@ def meeting_metadata(uuid):
                 raise
 
     raise PermanentDownloadError(
-        "No meeting metadata found for meeting uuid {}".format(self.uuid))
+        "No meeting metadata found for meeting uuid {}".format(uuid))
+
+
+def url_safe(uuid):
+    """
+    Zoom API currently only accepts url unsafe characters as path parameters
+    if they are url double encoded.
+    """
+    if "/" in uuid:
+        return quote(quote(uuid, safe=''), safe='')
+    else:
+        return uuid
 
 
 def get_api_data(endpoint_url, validate_callback=None):
