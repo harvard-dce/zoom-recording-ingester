@@ -9,6 +9,7 @@ from common import setup_logging, gen_token
 import subprocess
 from pytz import timezone
 from datetime import datetime
+from urllib.parse import quote
 
 import logging
 logger = logging.getLogger()
@@ -63,7 +64,7 @@ def handler(event, context):
             VisibilityTimeout=700
         )
         download_message = messages[0]
-        logger.debug({'queue message': download_message})
+        logger.info({'queue message': download_message})
     except IndexError:
         logger.info("No download queue messages available")
         return
@@ -128,9 +129,7 @@ class Download:
     @property
     def recording_data(self):
         if not hasattr(self, '_recording_data'):
-            # Must use string concatenation rather than urljoin because uuids may contain
-            # url unsafe characters like forward slash
-            endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(self.uuid)
+            endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(url_safe(self.uuid))
             raw_data = get_api_data(endpoint_url)
             clean_data = remove_incomplete_metadata(raw_data)
             verify_recording_status(clean_data)
@@ -173,11 +172,6 @@ class Download:
         logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
                      .format(threshold_minutes))
 
-        if self.ignore_schedule:
-            logger.debug("'ignore_schedule' enabled; using {} as series id."
-                        .format(schedule['opencast_series_id']))
-            return schedule['opencast_series_id']
-
         return None
 
     @property
@@ -189,20 +183,24 @@ class Download:
 
         if not hasattr(self, '_oc_series_id'):
 
-            if self.override_series_id:
-                series_id = self.override_series_id
-                logger.info("Using override series id '{}'".format(series_id))
-            else:
-                series_id = self.series_id_from_schedule()
+            self._oc_series_id = None
 
-            if series_id is not None:
-                logger.info("Matched with opencast series '{}'!".format(series_id))
-                self._oc_series_id = series_id
-            elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
+            if self.override_series_id:
+                self._oc_series_id = self.override_series_id
+                logger.info("Using override series id '{}'".format(self._oc_series_id))
+                return self._oc_series_id
+
+            if self.data['ignore_schedule']:
+                logger.info("Ignoring schedule")
+            else:
+                self._oc_series_id = self.series_id_from_schedule()
+                if self._oc_series_id is not None:
+                    logger.info("Matched with opencast series '{}'!".format(self._oc_series_id))
+                    return self._oc_series_id
+
+            if DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
                 logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
                 self._oc_series_id = DEFAULT_SERIES_ID
-            else:
-                self._oc_series_id = None
 
         return self._oc_series_id
 
@@ -261,10 +259,11 @@ def meeting_metadata(uuid):
     Get metadata about meeting. Metadata includes zoom meeting id,
     host_name, host_email, topic, and start_time.
     """
+
     for meeting_type in ['past', 'pastOne', 'live']:
         try:
             endpoint_url = ZOOM_API_BASE_URL + 'metrics/meetings/{}?type={}' \
-                .format(uuid, meeting_type)
+                .format(url_safe(uuid), meeting_type)
             meeting_info = get_api_data(endpoint_url)
             logger.info({'meeting_info': meeting_info})
 
@@ -276,7 +275,18 @@ def meeting_metadata(uuid):
                 raise
 
     raise PermanentDownloadError(
-        "No meeting metadata found for meeting uuid {}".format(self.uuid))
+        "No meeting metadata found for meeting uuid {}".format(uuid))
+
+
+def url_safe(uuid):
+    """
+    Zoom API currently only accepts url unsafe characters as path parameters
+    if they are url double encoded.
+    """
+    if "/" in uuid:
+        return quote(quote(uuid, safe=''), safe='')
+    else:
+        return uuid
 
 
 def get_api_data(endpoint_url, validate_callback=None):

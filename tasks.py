@@ -331,7 +331,10 @@ def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=3):
     print("Returned with status code: {}. {}".format(resp['status'], resp['body']))
 
 
-@task
+@task(help={
+    'series_id': 'override normal opencast series id lookup',
+    'ignore_schedule': 'do opencast series id lookup but ignore if meeting times don\'t match'
+})
 def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger downloader.
@@ -361,10 +364,7 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     return res
 
 
-@task(help={
-    'series_id': 'override normal opencast series id lookup',
-    'ignore_schedule': 'do opencast series id lookup but ignore if meeting times don\'t match'
-})
+@task
 def exec_uploader(ctx, qualifier=None):
     """
     Manually trigger uploader.
