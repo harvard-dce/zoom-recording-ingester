@@ -64,7 +64,7 @@ def handler(event, context):
             VisibilityTimeout=700
         )
         download_message = messages[0]
-        logger.debug({'queue message': download_message})
+        logger.info({'queue message': download_message})
     except IndexError:
         logger.info("No download queue messages available")
         return
@@ -172,11 +172,6 @@ class Download:
         logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
                      .format(threshold_minutes))
 
-        if self.ignore_schedule:
-            logger.debug("'ignore_schedule' enabled; using {} as series id."
-                        .format(schedule['opencast_series_id']))
-            return schedule['opencast_series_id']
-
         return None
 
     @property
@@ -188,20 +183,24 @@ class Download:
 
         if not hasattr(self, '_oc_series_id'):
 
-            if self.override_series_id:
-                series_id = self.override_series_id
-                logger.info("Using override series id '{}'".format(series_id))
-            else:
-                series_id = self.series_id_from_schedule()
+            self._oc_series_id = None
 
-            if series_id is not None:
-                logger.info("Matched with opencast series '{}'!".format(series_id))
-                self._oc_series_id = series_id
-            elif DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
+            if self.override_series_id:
+                self._oc_series_id = self.override_series_id
+                logger.info("Using override series id '{}'".format(self._oc_series_id))
+                return self._oc_series_id
+
+            if self.data['ignore_schedule']:
+                logger.info("Ignoring schedule")
+            else:
+                self._oc_series_id = self.series_id_from_schedule()
+                if self._oc_series_id is not None:
+                    logger.info("Matched with opencast series '{}'!".format(self._oc_series_id))
+                    return self._oc_series_id
+
+            if DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
                 logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
                 self._oc_series_id = DEFAULT_SERIES_ID
-            else:
-                self._oc_series_id = None
 
         return self._oc_series_id
 
