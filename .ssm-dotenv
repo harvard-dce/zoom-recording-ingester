@@ -1,0 +1,30 @@
+project = "zoom-ingester"
+stage = "mona-zoom-ingester-5x-dev2"
+
+[schema]
+STACK_TAGS = ["String", "cloudformation stack tags"]
+STACK_NAME = ["String", "Name of the cloudformation stack / prefix for stack resources"]
+OC_CLUSTER_NAME = ["String", "Name of opencast cluster"]
+LAMBDA_CODE_BUCKET = ["String", "Name of S3 bucket to store lambda code in"]
+OC_WORKFLOW = ["String", "Opencast workflow"]
+OC_FLAVOR = ["String", "Opencast flavor"]
+DEFAULT_PUBLISHER = ["String", "Default producer username or email"]
+NOTIFICATION_EMAIL = ["String", "Where cloudwatch alarm notifications will get sent"]
+ZOOM_API_BASE_URL = ["String", "Zoom API base url"]
+ZOOM_API_KEY = ["String", "Zoom API key"]
+ZOOM_API_SECRET = ["String", "Zoom API secret"]
+ZOOM_ADMIN_EMAIL = ["String", "Zoom Admin email"]
+OPENCAST_API_USER = ["String", "Opencast API username"]
+OPENCAST_API_PASSWORD = ["String", "Opencast API password"]
+LOCAL_TIME_ZONE = ["String", "Python pytz timezone"]
+GITHUB_TOKEN = ["String", "Github token"]
+LAMBDA_RELEASE_ALIAS = ["String", "The Lambda Function alias that points to the 'live' version of the function"]
+BOTO_DEBUG = ["String", "Boto debug"]
+LOG_NOTIFICATIONS_FILTER_LOG_LEVEL = ["String", "Log level"]
+UPLOAD_MESSAGES_PER_INVOCATION = ["String", "controls how many upload queue messages will be processed (not ingested!) "]
+
+
+[tags]
+ssm-dotenv = "1"
+Project = "MH"
+OU = "DE"
