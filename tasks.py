@@ -1,5 +1,6 @@
 import json
 import boto3
+from botocore.exceptions import ClientError
 import jmespath
 import time
 import csv
@@ -17,15 +18,14 @@ from functions.common import gen_token
 import requests
 from pytz import timezone
 from multiprocessing import Process
-import difflib
 
 load_dotenv(join(dirname(__file__), '.env'))
 
 AWS_ACCOUNT_ID = None
-AWS_PROFILE = env('AWS_PROFILE')
+AWS_PROD_PROFILE = env('AWS_PROD_PROFILE')
+AWS_DEV_PROFILE = env('AWS_DEV_PROFILE')
 AWS_DEFAULT_REGION = env('AWS_DEFAULT_REGION', 'us-east-1')
 STACK_NAME = env('STACK_NAME')
-OC_CLUSTER_NAME = env('OC_CLUSTER_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
 
@@ -36,8 +36,34 @@ FUNCTION_NAMES = [
     'zoom-log-notifications'
 ]
 
+if PROD_IDENTIFIER in STACK_NAME and AWS_PROD_PROFILE is not None:
+    AWS_PROFILE = AWS_PROD_PROFILE
+elif AWS_DEV_PROFILE is not None:
+    AWS_PROFILE = AWS_DEV_PROFILE
+
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
+
+
+def getenv(var, required=True):
+
+    ssm = boto3.client('ssm')
+    param_path = '/zoom-ingester/{}/{}'.format(STACK_NAME, var)
+
+    try:
+        res = ssm.get_parameter(Name=param_path)['Parameter']
+        val = res['Value'].strip('"').strip("'")
+    except ClientError as e:
+        if e.response['Error']['Code'] == "ParameterNotFound":
+            print("Missing SSM Parameter {}".format(var))
+        raise
+
+    if required and val is None:
+        raise Exit("{} not defined".format(var))
+    return val
+
+
+OC_CLUSTER_NAME = getenv('OC_CLUSTER_NAME')
 
 
 def get_queue_url(queue_name):
@@ -646,24 +672,33 @@ ns.add_collection(logs_ns)
 ###############################################################################
 
 
-def getenv(var, required=True):
-    val = env(var)
-    if val is not None and val.strip() == '':
-        val = None
-    if required and val is None:
-        raise Exit("{} not defined".format(var))
-    return val
-
-
 def profile_arg():
     if AWS_PROFILE is not None:
         return "--profile {}".format(AWS_PROFILE)
     return ""
 
 
+def getenv(var, required=True):
+
+    ssm = boto3.client('ssm')
+    param_path = '/zoom-ingester/{}/{}'.format(STACK_NAME, var)
+
+    try:
+        res = ssm.get_parameter(Name=param_path)['Parameter']
+        val = res['Value'].strip('"').strip("'")
+    except ClientError as e:
+        if e.response['Error']['Code'] == "ParameterNotFound":
+            print("Missing SSM Parameter {}".format(var))
+        raise
+
+    if required and val is None:
+        raise Exit("{} not defined".format(var))
+    return val
+
+
 def stack_tags():
     tags = "Key=cfn-stack,Value={}".format(STACK_NAME)
-    extra_tags = getenv("STACK_TAGS")
+    extra_tags = getenv("STACK_TAGS").replace(':', '=')
     if extra_tags is not None:
         tags += " " + extra_tags
     return "--tags {}".format(tags)
@@ -729,6 +764,10 @@ def stack_exists(ctx):
 
 
 def __create_or_update(ctx, op):
+
+    res = ctx.run('ssm-dotenv sync-check').stdout.strip()
+    if res != "All good!":
+        return
 
     template_path = join(dirname(__file__), 'template.yml')
 
