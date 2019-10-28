@@ -18,6 +18,7 @@ from functions.common import gen_token
 import requests
 from pytz import timezone
 from multiprocessing import Process
+from ssm_dotenv import getenv
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -40,27 +41,29 @@ if PROD_IDENTIFIER in STACK_NAME and AWS_PROD_PROFILE is not None:
     AWS_PROFILE = AWS_PROD_PROFILE
 elif AWS_DEV_PROFILE is not None:
     AWS_PROFILE = AWS_DEV_PROFILE
+else:
+    AWS_PROFILE = None
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
 
 
-def getenv(var, required=True):
-
-    ssm = boto3.client('ssm')
-    param_path = '/zoom-ingester/{}/{}'.format(STACK_NAME, var)
-
-    try:
-        res = ssm.get_parameter(Name=param_path)['Parameter']
-        val = res['Value'].strip('"').strip("'")
-    except ClientError as e:
-        if e.response['Error']['Code'] == "ParameterNotFound":
-            print("Missing SSM Parameter {}".format(var))
-        raise
-
-    if required and val is None:
-        raise Exit("{} not defined".format(var))
-    return val
+# def getenv(var, required=True):
+#
+#     ssm = boto3.client('ssm')
+#     param_path = '/zoom-ingester/{}/{}'.format(STACK_NAME, var)
+#
+#     try:
+#         res = ssm.get_parameter(Name=param_path)['Parameter']
+#         val = res['Value'].strip('"').strip("'")
+#     except ClientError as e:
+#         if e.response['Error']['Code'] == "ParameterNotFound":
+#             print("Missing SSM Parameter {}".format(var))
+#         raise
+#
+#     if required and val is None:
+#         raise Exit("{} not defined".format(var))
+#     return val
 
 
 OC_CLUSTER_NAME = getenv('OC_CLUSTER_NAME')
