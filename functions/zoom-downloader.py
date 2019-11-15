@@ -27,6 +27,13 @@ DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
+# Recordings that happen within BUFFER_MINUTES a courses schedule
+# start time will be captured
+BUFFER_MINUTES = 30
+# Ignore recordings that are less than MINIMUM_DURATION
+MINIMUM_DURATION = 2
+
+
 
 class PermanentDownloadError(Exception):
     pass
@@ -73,6 +80,11 @@ def handler(event, context):
     download_data['ignore_schedule'] = ignore_schedule
     download_data['override_series_id'] = override_series_id
     meeting_info = meeting_metadata(download_data['uuid'])
+    if meeting_info['duration'] < MINIMUM_DURATION:
+        logger.info("Ignore recordings < {} mins long".format(MINIMUM_DURATION))
+        download_message.delete()
+        return
+
     download_data.update(meeting_info)
 
     logger.info(download_data)
@@ -120,6 +132,10 @@ class Download:
         return self.data['start_time']
 
     @property
+    def duration(self):
+        return self.data['duration']
+
+    @property
     def created(self):
         utc = datetime.strptime(
             self.start_time, '%Y-%m-%dT%H:%M:%SZ') \
@@ -160,13 +176,12 @@ class Download:
             logger.debug("No opencast recording scheduled for this day of the week.")
             return None
 
-        threshold_minutes = 30
         for time in schedule['Time']:
             scheduled_time = datetime.strptime(time, '%H:%M')
             timedelta = abs(zoom_time -
                             zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
                             ).total_seconds()
-            if timedelta < (threshold_minutes * 60):
+            if timedelta < (THRESHOLD_MINUTES * 60):
                 return schedule['opencast_series_id']
 
         logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
@@ -547,9 +562,11 @@ def is_valid_mp4(filename):
 
 
 def filter_and_sort(files):
-    """ Sort files by recording start time and filter out multiple MP4 files
+    """
+    Sort files by recording start time and filter out multiple MP4 files
     that occur during the same time segment. Choose which MP4 recording_type to
-    keep based on priority_list."""
+    keep based on priority_list.
+    """
     if not files:
         return None
 
