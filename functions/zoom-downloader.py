@@ -81,7 +81,7 @@ def handler(event, context):
     if meeting_info['duration'] < MIN_DURATION:
         logger.info("Ignoring recordings < {} mins long. "
                     "This recording is {} minutes long."
-                    .format(MIN_DURATION, meeting_info['duration'])
+                    .format(MIN_DURATION, meeting_info['duration']))
         download_message.delete()
         return
 
