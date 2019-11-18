@@ -1,15 +1,16 @@
+import boto3
 import json
 import time
+import requests
 from os import getenv as env
 from hashlib import md5
 from operator import itemgetter
-import subprocess
-from datetime import datetime
-from pytz import timezone
-from urllib.parse import quote
-import requests
-import boto3
 from common import setup_logging, gen_token
+import subprocess
+from pytz import timezone
+from datetime import datetime
+from urllib.parse import quote
+
 import logging
 logger = logging.getLogger()
 
@@ -30,7 +31,9 @@ LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 # start time will be captured
 BUFFER_MINUTES = 30
 # Ignore recordings that are less than MIN_DURATION (in minutes)
-MIN_DURATION = 2
+MINIMUM_DURATION = 2
+
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 class PermanentDownloadError(Exception):
@@ -78,13 +81,6 @@ def handler(event, context):
     download_data['ignore_schedule'] = ignore_schedule
     download_data['override_series_id'] = override_series_id
     meeting_info = meeting_metadata(download_data['uuid'])
-    if meeting_info['duration'] < MIN_DURATION:
-        logger.info("Ignoring recordings < {} mins long. "
-                    "This recording is {} minutes long."
-                    .format(MIN_DURATION, meeting_info['duration']))
-        download_message.delete()
-        return
-
     download_data.update(meeting_info)
 
     logger.info(download_data)
@@ -132,15 +128,39 @@ class Download:
         return self.data['start_time']
 
     @property
+    def end_time(self):
+        return self.data['end_time']
+
+    @property
     def duration(self):
         return self.data['duration']
 
     @property
     def created(self):
         utc = datetime.strptime(
-            self.start_time, '%Y-%m-%dT%H:%M:%SZ') \
+            self.start_time, TIMESTAMP_FORMAT) \
             .replace(tzinfo=timezone('UTC'))
         return utc
+
+    @property
+    def shorter_than_minimum_duration(self):
+        """
+        Interpret duration of meeting and determine whether duration is
+        shorter than the MINIMUM_DURATION in minutes.
+        """
+        if self.duration:
+            duration_in_mins = time.strptime(self.duration, "%H:%M:%S").tm_min
+        elif self.start_time and self.end_time:
+            s = datetime.strptime(self.start_time, TIMESTAMP_FORMAT)
+            e = datetime.strptime(self.end_time, TIMESTAMP_FORMAT)
+            delta = e - s
+            duration_in_mins = delta.seconds // 60
+        else:
+            # Default behavior
+            # do not filter out recording if duration cannot be found
+            duration_in_mins = MINIMUM_DURATION
+
+        return duration_in_mins < MINIMUM_DURATION
 
     @property
     def recording_data(self):
@@ -244,13 +264,18 @@ class Download:
             "opencast_series_id": self.opencast_series_id,
             "host_name": self.data['host'],
             "topic": self.data['topic'],
-            "created": datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'),
+            "created": datetime.strftime(self.created, TIMESTAMP_FORMAT),
             "webhook_received_time": self.data['received_time'],
             "correlation_id": self.data['correlation_id']
         }
         return upload_message
 
     def download(self):
+
+        if self.shorter_than_minimum_duration:
+            logger.info("Recording duration shorter than minimum {} minutes"
+                        .format(MINIMUM_DURATION))
+            return None
 
         if not self.opencast_series_id:
             logger.info("No opencast series match found")
@@ -282,6 +307,11 @@ class Download:
             stream_file_to_s3(file, self.uuid, track_sequence)
 
         return self.upload_message
+
+
+"""
+Helper functions
+"""
 
 
 def meeting_metadata(uuid):
@@ -483,7 +513,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
 
 def get_stream(download_url):
-
     admin_token = get_admin_token()
 
     # use zak token to get download stream

@@ -69,7 +69,7 @@ Resources:
       Environment:
         Type: "LINUX_CONTAINER"
         ComputeType: "BUILD_GENERAL1_SMALL"
-        Image: "aws/codebuild/eb-python-3.4-amazonlinux-64:2.1.6"
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:1.0"
       Artifacts:
         Type: S3
         Location: !Ref LambdaCodeBucket
@@ -231,7 +231,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-webhook.handler
-      Runtime: python3.6
+      Runtime: python3.7
       Timeout: 30
       Role: !GetAtt [ZoomIngesterRole, Arn]
       FunctionName: !Sub "${AWS::StackName}-zoom-webhook-function"
@@ -288,7 +288,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-downloader.handler
-      Runtime: python3.6
+      Runtime: python3.7
       MemorySize: 512
       Timeout: 300
       Role: !GetAtt [ZoomIngesterRole, Arn]
@@ -341,7 +341,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-uploader.handler
-      Runtime: python3.6
+      Runtime: python3.7
       MemorySize: 256
       Timeout: 300
       Role: !GetAtt [ZoomIngesterRole, Arn]
@@ -555,7 +555,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-log-notifications.handler
-      Runtime: python3.6
+      Runtime: python3.7
       MemorySize: 128
       Timeout: 5
       Role: !GetAtt [ZoomIngesterRole, Arn]
