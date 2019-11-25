@@ -2,6 +2,7 @@ import boto3
 import json
 import time
 import requests
+import re
 from os import getenv as env
 from hashlib import md5
 from operator import itemgetter
@@ -125,15 +126,47 @@ class Download:
 
     @property
     def start_time(self):
-        return self.data['start_time']
+        if 'start_time' in self.data:
+            return self.data['start_time']
+        else:
+            return None
 
     @property
     def end_time(self):
-        return self.data['end_time']
+        if 'end_time' in self.data:
+            return self.data['end_time']
+        else:
+            return None
 
     @property
     def duration(self):
-        return self.data['duration']
+        """
+        Either returns a duration in the form HH:MM:SS or None.
+        """
+        duration = self.data['duration']
+        # regular expressions
+        HHMMSS = r"\d{2}:\d{2}:\d{2}"
+        MMSS = r"\d{2}:\d{2}"
+        if duration:
+            if re.match(HHMMSS, duration) and len(duration) == len("HH:MM:SS"):
+                return duration
+            elif re.match(MMSS, duration) and len(duration) == len("MM:SS"):
+                duration = "00:" + duration
+                return duration
+
+        if self.start_time and self.end_time:
+            try:
+                s = datetime.strptime(self.start_time, TIMESTAMP_FORMAT)
+                e = datetime.strptime(self.end_time, TIMESTAMP_FORMAT)
+            except ValueError:
+                return None
+            delta = e - s
+            hours, remainder = divmod(delta.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            duration = "{:02d}:{:02d}:{:02}".format(hours, minutes, seconds)
+            return duration
+
+        return None
 
     @property
     def created(self):
@@ -150,17 +183,9 @@ class Download:
         """
         if self.duration:
             duration_in_mins = time.strptime(self.duration, "%H:%M:%S").tm_min
-        elif self.start_time and self.end_time:
-            s = datetime.strptime(self.start_time, TIMESTAMP_FORMAT)
-            e = datetime.strptime(self.end_time, TIMESTAMP_FORMAT)
-            delta = e - s
-            duration_in_mins = delta.seconds // 60
+            return duration_in_mins < MINIMUM_DURATION
         else:
-            # Default behavior
-            # do not filter out recording if duration cannot be found
-            duration_in_mins = MINIMUM_DURATION
-
-        return duration_in_mins < MINIMUM_DURATION
+            return False
 
     @property
     def recording_data(self):
