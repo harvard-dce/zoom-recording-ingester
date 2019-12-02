@@ -147,14 +147,19 @@ class Download:
         # regular expressions
         HHMMSS = r"\d{2}:\d{2}:\d{2}"
         MMSS = r"\d{2}:\d{2}"
-        if duration:
-            if re.match(HHMMSS, duration) and len(duration) == len("HH:MM:SS"):
-                return duration
-            elif re.match(MMSS, duration) and len(duration) == len("MM:SS"):
-                duration = "00:" + duration
-                return duration
 
-        if self.start_time and self.end_time:
+        if duration:
+            if re.match(MMSS, duration) and len(duration) == len("MM:SS"):
+                duration = "00:" + duration
+
+            # validate the duration format is a valid time format
+            try:
+                datetime.strptime(duration, "%H:%M:%S")
+                return duration
+            except ValueError:
+                duration = None
+
+        if not duration and self.start_time and self.end_time:
             try:
                 s = datetime.strptime(self.start_time, TIMESTAMP_FORMAT)
                 e = datetime.strptime(self.end_time, TIMESTAMP_FORMAT)

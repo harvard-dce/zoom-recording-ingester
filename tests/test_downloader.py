@@ -209,6 +209,11 @@ def test_duration(mocker):
           'end_time': 'def'},
          None,
          'Malformed data should return None for duration'),
+        ({'duration': '24:00:00',
+          'start_time': None,
+          'end_time': None},
+         None,
+         'The duration format 24:00:00 is invalid, should set duration=None')
     ]
 
     for data, expected, msg in cases:
