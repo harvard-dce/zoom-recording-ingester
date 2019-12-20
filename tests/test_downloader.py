@@ -10,18 +10,20 @@ site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 downloader = import_module('zoom-downloader')
 
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
 
 def test_overlapping_recording_segments():
 
     now = datetime.now()
-    one_minute_ago = (now - timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    two_minutes_ago = (now - timedelta(minutes=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    now = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+    one_minute_ago = (now - timedelta(minutes=1)).strftime(TIMESTAMP_FORMAT)
+    two_minutes_ago = (now - timedelta(minutes=2)).strftime(TIMESTAMP_FORMAT)
+    now = now.strftime(TIMESTAMP_FORMAT)
 
     tracks = [
         (None, {'recording_start': two_minutes_ago, 'recording_end': one_minute_ago}, False),
         ({'recording_start': one_minute_ago, 'recording_end': now},
-         {'recording_start': one_minute_ago,'recording_end': now}, False),
+         {'recording_start': one_minute_ago, 'recording_end': now}, False),
         ({'recording_start': two_minutes_ago, 'recording_end': one_minute_ago},
          {'recording_start': one_minute_ago, 'recording_end': now}, True),
         ({'recording_start': two_minutes_ago, 'recording_end': now},
@@ -148,6 +150,91 @@ def test_recording_data(mocker):
         dl.recording_data()
 
 
+def test_duration(mocker):
+
+    now = datetime.now()
+
+    short_duration_start = (
+            now - timedelta(seconds=30)
+        ).strftime(TIMESTAMP_FORMAT)
+    short_duration = "00:00:30"
+
+    long_duration_start = (
+            now - timedelta(hours=4) - timedelta(minutes=35)
+        ).strftime(TIMESTAMP_FORMAT)
+    long_duration = "04:35:00"
+
+    now = now.strftime(TIMESTAMP_FORMAT)
+
+    cases = [
+        ({'duration': '02:35:15',
+          'start_time': short_duration_start,
+          'end_time': now},
+         '02:35:15',
+         'Duration formatted HH:MM:SS should return unchanged.'),
+        ({'duration': '',
+          'start_time': long_duration_start,
+          'end_time': now},
+         long_duration,
+         'Duration calculated incorrectly from start_time - end_time'),
+        ({'duration': None,
+          'start_time': None,
+          'end_time': None},
+         None,
+         'No duration, start_time, or end_time '
+         'should return a duration of None'),
+        ({'duration': '55:08',
+          'start_time': None,
+          'end_time': None},
+         '00:55:08',
+         'Duration formatted MM:SS should return duration formatted HH:MM:SS'),
+        ({'duration': 'some invalid duration',
+          'start_time': None,
+          'end_time': None},
+         None,
+         'Invalid duration and no start or end time should return None'),
+        ({'duration': 'some invalid duration',
+          'start_time': short_duration_start,
+          'end_time': None},
+         None,
+         'Invalid duration and no start time should return None'),
+        ({'duration': 'some invalid duration',
+          'start_time': short_duration_start,
+          'end_time': now},
+         "00:00:{:02d}".format(30),
+         'Invalid duration and valid start and end time should return duration'
+         ' between start and end in the format HH:MM:SS'),
+        ({'duration': 'some invalid duration',
+          'start_time': 'abc',
+          'end_time': 'def'},
+         None,
+         'Malformed data should return None for duration'),
+        ({'duration': '24:00:00',
+          'start_time': None,
+          'end_time': None},
+         None,
+         'The duration format 24:00:00 is invalid, should set duration=None')
+    ]
+
+    for data, expected, msg in cases:
+        dl = downloader.Download(data)
+        assert (dl.duration == expected), msg
+
+
+def test_shorter_than_minimum_duration(mocker):
+    cases = [
+        ({'duration': "02:45:01"}, False),
+        ({'duration': "00:02:00"}, False),
+        ({'duration': "00:01:59"}, True),
+        ({'duration': "00:00:35"}, True),
+        ({'duration': ""}, False),
+    ]
+
+    for data, expected in cases:
+        dl = downloader.Download(data)
+        assert (dl.shorter_than_minimum_duration == expected)
+
+
 def test_remove_incomplete_metadata(mocker):
     mp4_complete = {
         "id": "123",
@@ -208,9 +295,9 @@ def test_remove_incomplete_metadata(mocker):
 def test_filter_and_sort(mocker):
 
     now = datetime.now()
-    one_minute_ago = (now - timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    two_minutes_ago = (now - timedelta(minutes=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    now = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+    one_minute_ago = (now - timedelta(minutes=1)).strftime(TIMESTAMP_FORMAT)
+    two_minutes_ago = (now - timedelta(minutes=2)).strftime(TIMESTAMP_FORMAT)
+    now = now.strftime(TIMESTAMP_FORMAT)
 
     files = [
             {'recording_start': now,

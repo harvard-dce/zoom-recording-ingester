@@ -14,6 +14,7 @@ DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
 PARALLEL_ENDPOINT = env('PARALLEL_ENDPOINT')
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 class BadWebhookData(Exception):
@@ -75,7 +76,9 @@ def handler(event, context):
             "Handling not implemented for status '{}'".format(payload['status'])
         )
 
-    now = datetime.strftime(timezone(LOCAL_TIME_ZONE).localize(datetime.today()), '%Y-%m-%dT%H:%M:%SZ')
+    now = datetime.strftime(
+                timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
+                TIMESTAMP_FORMAT)
 
     sqs_message = {
         'uuid': payload["uuid"],
@@ -168,4 +171,3 @@ def send_sqs_message(message, delay=DEFAULT_MESSAGE_DELAY):
         raise
 
     logger.debug({"Message sent": message_sent})
-

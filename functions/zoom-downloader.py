@@ -2,6 +2,7 @@ import boto3
 import json
 import time
 import requests
+import re
 from os import getenv as env
 from hashlib import md5
 from operator import itemgetter
@@ -26,6 +27,14 @@ ZOOM_ADMIN_EMAIL = env('ZOOM_ADMIN_EMAIL')
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+
+# Recordings that happen within BUFFER_MINUTES a courses schedule
+# start time will be captured
+BUFFER_MINUTES = 30
+# Ignore recordings that are less than MIN_DURATION (in minutes)
+MINIMUM_DURATION = 2
+
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 class PermanentDownloadError(Exception):
@@ -117,19 +126,78 @@ class Download:
 
     @property
     def start_time(self):
-        return self.data['start_time']
+        if 'start_time' in self.data:
+            return self.data['start_time']
+        else:
+            return None
+
+    @property
+    def end_time(self):
+        if 'end_time' in self.data:
+            return self.data['end_time']
+        else:
+            return None
+
+    @property
+    def duration(self):
+        """
+        Either returns a duration in the form HH:MM:SS or None.
+        """
+        duration = self.data['duration']
+        # regular expressions
+        HHMMSS = r"\d{2}:\d{2}:\d{2}"
+        MMSS = r"\d{2}:\d{2}"
+
+        if duration:
+            if re.match(MMSS, duration) and len(duration) == len("MM:SS"):
+                duration = "00:" + duration
+
+            # validate the duration format is a valid time format
+            try:
+                datetime.strptime(duration, "%H:%M:%S")
+                return duration
+            except ValueError:
+                duration = None
+
+        if not duration and self.start_time and self.end_time:
+            try:
+                s = datetime.strptime(self.start_time, TIMESTAMP_FORMAT)
+                e = datetime.strptime(self.end_time, TIMESTAMP_FORMAT)
+            except ValueError:
+                return None
+            delta = e - s
+            hours, remainder = divmod(delta.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            duration = "{:02d}:{:02d}:{:02}".format(hours, minutes, seconds)
+            return duration
+
+        return None
 
     @property
     def created(self):
         utc = datetime.strptime(
-            self.start_time, '%Y-%m-%dT%H:%M:%SZ') \
+            self.start_time, TIMESTAMP_FORMAT) \
             .replace(tzinfo=timezone('UTC'))
         return utc
 
     @property
+    def shorter_than_minimum_duration(self):
+        """
+        Interpret duration of meeting and determine whether duration is
+        shorter than the MINIMUM_DURATION in minutes.
+        """
+        if self.duration:
+            duration_in_mins = time.strptime(self.duration, "%H:%M:%S").tm_min
+            return duration_in_mins < MINIMUM_DURATION
+        else:
+            return False
+
+    @property
     def recording_data(self):
         if not hasattr(self, '_recording_data'):
-            endpoint_url = ZOOM_API_BASE_URL + 'meetings/{}/recordings'.format(url_safe(self.uuid))
+            endpoint_url = '{}meetings/{}/recordings'.format(
+                                                        ZOOM_API_BASE_URL,
+                                                        url_safe(self.uuid))
             raw_data = get_api_data(endpoint_url)
             clean_data = remove_incomplete_metadata(raw_data)
             verify_recording_status(clean_data)
@@ -152,25 +220,32 @@ class Download:
             logger.info(schedule)
 
         zoom_time = self.created.astimezone(timezone(LOCAL_TIME_ZONE))
-        weekdays = ['M', 'T', 'W', 'R', 'F']
+        weekdays = {'M': 'Mondays',
+                    'T': 'Tuesdays',
+                    'W': 'Wednesdays',
+                    'R': 'Thursdays',
+                    'F': 'Fridays'}
         if zoom_time.weekday() > 4:
             logger.debug("Meeting occurred on a weekend.")
             return None
-        elif weekdays[zoom_time.weekday()] not in schedule['Days']:
-            logger.debug("No opencast recording scheduled for this day of the week.")
+        letter = list(weekdays.keys())[zoom_time.weekday()]
+        if letter not in schedule['Days']:
+            logger.debug("No opencast recording scheduled on {}."
+                         .format(weekdays[letter]))
             return None
 
-        threshold_minutes = 30
-        for time in schedule['Time']:
-            scheduled_time = datetime.strptime(time, '%H:%M')
+        for t in schedule['Time']:
+            scheduled_time = datetime.strptime(t, '%H:%M')
             timedelta = abs(zoom_time -
-                            zoom_time.replace(hour=scheduled_time.hour, minute=scheduled_time.minute)
+                            zoom_time.replace(hour=scheduled_time.hour,
+                                              minute=scheduled_time.minute)
                             ).total_seconds()
-            if timedelta < (threshold_minutes * 60):
+            if timedelta < (BUFFER_MINUTES * 60):
                 return schedule['opencast_series_id']
 
-        logger.debug("Meeting started more than {} minutes before or after opencast scheduled start time."
-                     .format(threshold_minutes))
+        logger.debug("Meeting started more than {} minutes before or after "
+                     "opencast scheduled start time."
+                     .format(BUFFER_MINUTES))
 
         return None
 
@@ -187,7 +262,8 @@ class Download:
 
             if self.override_series_id:
                 self._oc_series_id = self.override_series_id
-                logger.info("Using override series id '{}'".format(self._oc_series_id))
+                logger.info("Using override series id '{}'"
+                            .format(self._oc_series_id))
                 return self._oc_series_id
 
             if self.data['ignore_schedule']:
@@ -195,11 +271,13 @@ class Download:
             else:
                 self._oc_series_id = self.series_id_from_schedule()
                 if self._oc_series_id is not None:
-                    logger.info("Matched with opencast series '{}'!".format(self._oc_series_id))
+                    logger.info("Matched with opencast series '{}'!"
+                                .format(self._oc_series_id))
                     return self._oc_series_id
 
             if DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
-                logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
+                logger.info("Using default series id {}"
+                            .format(DEFAULT_SERIES_ID))
                 self._oc_series_id = DEFAULT_SERIES_ID
 
         return self._oc_series_id
@@ -216,13 +294,18 @@ class Download:
             "opencast_series_id": self.opencast_series_id,
             "host_name": self.data['host'],
             "topic": self.data['topic'],
-            "created": datetime.strftime(self.created, '%Y-%m-%dT%H:%M:%SZ'),
+            "created": datetime.strftime(self.created, TIMESTAMP_FORMAT),
             "webhook_received_time": self.data['received_time'],
             "correlation_id": self.data['correlation_id']
         }
         return upload_message
 
     def download(self):
+
+        if self.shorter_than_minimum_duration:
+            logger.info("Recording duration shorter than minimum {} minutes"
+                        .format(MINIMUM_DURATION))
+            return None
 
         if not self.opencast_series_id:
             logger.info("No opencast series match found")
@@ -237,7 +320,8 @@ class Download:
 
         if not self.chronological_files:
             raise PermanentDownloadError("No files available to download.")
-        logger.info("downloading {} files".format(len(self.chronological_files)))
+        logger.info("downloading {} files"
+                    .format(len(self.chronological_files)))
 
         track_sequence = 1
         prev_file = None
@@ -246,12 +330,18 @@ class Download:
             if next_track_sequence(prev_file, file):
                 track_sequence += 1
 
-            logger.debug("file {} is track sequence {}".format(file, track_sequence))
+            logger.debug("file {} is track sequence {}"
+                         .format(file, track_sequence))
             prev_file = file
 
             stream_file_to_s3(file, self.uuid, track_sequence)
 
         return self.upload_message
+
+
+"""
+Helper functions
+"""
 
 
 def meeting_metadata(uuid):
@@ -290,7 +380,6 @@ def url_safe(uuid):
 
 
 def get_api_data(endpoint_url, validate_callback=None):
-
     lookup_retries = 0
     while True:
         try:
@@ -375,8 +464,7 @@ def remove_incomplete_metadata(recording_data):
             else:
                 logger.debug("Removing file from recording_data "
                              "(incomplete metadata): {}".format(file))
-                recording_data['recording_files' \
-                               ''].remove(file)
+                recording_data['recording_files'].remove(file)
 
     return recording_data
 
@@ -386,7 +474,8 @@ def next_track_sequence(prev_file, file):
     if prev_file is None:
         return False
 
-    logger.debug({'start': file['recording_start'], 'end': file['recording_end']})
+    logger.debug({'start': file['recording_start'],
+                  'end': file['recording_end']})
 
     if file['recording_start'] == prev_file['recording_start']:
         logger.debug("start matches")
@@ -420,12 +509,16 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
     logger.info("Beginning upload of {}".format(filename))
     part_info = {'Parts': []}
-    mpu = s3.create_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET, Key=filename, Metadata=metadata)
+    mpu = s3.create_multipart_upload(
+                Bucket=ZOOM_VIDEOS_BUCKET,
+                Key=filename,
+                Metadata=metadata)
 
     try:
         for part_number, chunk in enumerate(stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1):
             part = s3.upload_part(Body=chunk, Bucket=ZOOM_VIDEOS_BUCKET,
-                                  Key=filename, PartNumber=part_number, UploadId=mpu['UploadId'])
+                                  Key=filename, PartNumber=part_number,
+                                  UploadId=mpu['UploadId'])
 
             part_info['Parts'].append({
                 'PartNumber': part_number,
@@ -450,7 +543,6 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
 
 def get_stream(download_url):
-
     admin_token = get_admin_token()
 
     # use zak token to get download stream
@@ -468,19 +560,23 @@ def get_stream(download_url):
 
     logger.info("got filename {}".format(zoom_name))
 
-    r = requests.get("{}?zak={}".format(download_url, admin_token), stream=True)
+    url = "{}?zak={}".format(download_url, admin_token)
+    r = requests.get(url, stream=True)
 
     return r, zoom_name
 
 
 def get_admin_token():
+    headers = {"Authorization": "Bearer %s" % gen_token().decode()}
+
     # get admin user id from admin email
-    r = requests.get("{}users/{}".format(ZOOM_API_BASE_URL, ZOOM_ADMIN_EMAIL),
-                     headers={"Authorization": "Bearer %s" % gen_token().decode()})
+    url = "{}users/{}".format(ZOOM_API_BASE_URL, ZOOM_ADMIN_EMAIL)
+    r = requests.get(url, headers=headers)
     admin_id = r.json()['id']
+
     # get admin level zak token from admin id
-    r = requests.get("{}users/{}/token?type=zak".format(ZOOM_API_BASE_URL, admin_id),
-                     headers={"Authorization": "Bearer %s" % gen_token().decode()})
+    url = "{}users/{}/token?type=zak".format(ZOOM_API_BASE_URL, admin_id)
+    r = requests.get(url, headers=headers)
     return r.json()['token']
 
 
@@ -521,7 +617,8 @@ def send_to_sqs(message, queue_name, error=None):
                 MessageAttributes=message_attributes
             )
     except Exception as e:
-        logger.exception("Error when sending SQS message for meeting uuid {} to queue {}:{}"
+        logger.exception("Error when sending SQS message for meeting uuid {} "
+                         "to queue {}:{}"
                          .format(message['uuid'], queue_name, e))
         raise
 
@@ -539,7 +636,8 @@ def is_valid_mp4(filename):
 
     command = ['/var/task/ffprobe', '-of', 'json', url]
     if subprocess.call(command) == 1:
-        logger.warning("Corrupt MP4, need to retry download from zoom to S3. {}".format(url))
+        logger.warning("Corrupt MP4, need to retry download from zoom to S3."
+                       " {}".format(url))
         return False
     else:
         logger.debug("Successfully verified mp4 {}".format(url))
@@ -547,9 +645,11 @@ def is_valid_mp4(filename):
 
 
 def filter_and_sort(files):
-    """ Sort files by recording start time and filter out multiple MP4 files
+    """
+    Sort files by recording start time and filter out multiple MP4 files
     that occur during the same time segment. Choose which MP4 recording_type to
-    keep based on priority_list."""
+    keep based on priority_list.
+    """
     if not files:
         return None
 
@@ -571,8 +671,8 @@ def filter_and_sort(files):
         added_mp4 = False
         for mp4_type in priority_list:
             if mp4_type in recordings:
-                logger.debug("Selected MP4 recording type '{}' for start time {}."
-                             .format(mp4_type, start_time))
+                logger.debug("Selected MP4 recording type '{}' "
+                             "for start time {}.".format(mp4_type, start_time))
                 added_mp4 = True
                 mp4_files.append(recordings[mp4_type])
                 break
