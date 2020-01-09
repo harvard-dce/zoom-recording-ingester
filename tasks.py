@@ -1,5 +1,6 @@
 import json
 import boto3
+from botocore.exceptions import ClientError
 import jmespath
 import time
 import csv
@@ -230,8 +231,16 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         print("Done!")
 
 
-@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id'})
-def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2):
+@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id',
+            'ignore_schedule': ('do opencast series id lookup but ignore if '
+                                'meeting times don\'t match')})
+def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2,
+                  ignore_schedule=False):
+    """
+    Manually trigger the webhook handler, downloader, and uploader.
+    Positional arguments: uuid, host_id, series-id
+    Options: --ignore-schedule
+    """
 
     print("\nTriggering webhook...\n")
     exec_webhook(ctx, uuid, host_id, status, webhook_version)
@@ -239,7 +248,7 @@ def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2):
     # Keep retrying downloader until some messages are processed
     # or it fails.
     print("\nTriggering downloader...\n")
-    resp = exec_downloader(ctx)
+    resp = exec_downloader(ctx, ignore_schedule=ignore_schedule)
     wait = 1
     while not resp:
         resp = exec_downloader(ctx)
@@ -339,11 +348,11 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger downloader.
     """
-    
+
     if queue_is_empty(ctx, "downloads"):
         print("No downloads in queue")
         return
-    
+
     payload = {'ignore_schedule': ignore_schedule}
 
     if series_id is not None:
@@ -688,7 +697,7 @@ def vpc_components(ctx):
 
     cmd = ("aws {} ec2 describe-subnets --filters "
            "'Name=vpc-id,Values={}' "
-           "'Name=tag:aws:cloudformation:logical-id,Values=Private*' " 
+           "'Name=tag:aws:cloudformation:logical-id,Values=Private*' "
            "--query \"Subnets[0].SubnetId\" --output text") \
         .format(profile_arg(), vpc_id)
     res = ctx.run(cmd, hide=1)
@@ -708,7 +717,7 @@ def vpc_components(ctx):
 def oc_base_url(ctx):
 
     cmd = ("aws {} ec2 describe-instances "
-           "--filters \"Name=tag:opsworks:stack,Values={}\" " 
+           "--filters \"Name=tag:opsworks:stack,Values={}\" "
            "\"Name=tag:opsworks:layer:admin,Values=Admin\" --query \"Reservations[].Instances[].PublicDnsName\" "
            "--output text")\
         .format(profile_arg(), OC_CLUSTER_NAME)
@@ -1176,8 +1185,16 @@ def __schedule_json_to_dynamo(ctx, json_name):
 
     classes = json.load(file)
 
-    for item in classes.values():
-        table.put_item(Item=item)
+    try:
+        for item in classes.values():
+            table.put_item(Item=item)
+    except ClientError as e:
+        error = e.response['Error']
+        print("{}: {}".format(error['Code'], error['Message']))
+        print("Modify {} and try again."
+              .format(json_name))
+        file.close()
+        return
 
     file.close()
 
@@ -1278,7 +1295,7 @@ def __show_function_status(ctx):
 
     print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
 
-    
+
 def __show_sqs_status(ctx):
 
     status_table = [
@@ -1319,8 +1336,8 @@ def __show_sqs_status(ctx):
 
     print()
     print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
-    
-    
+
+
 def __get_meetings(date):
     page_size = 300
     key = getenv('ZOOM_API_KEY')

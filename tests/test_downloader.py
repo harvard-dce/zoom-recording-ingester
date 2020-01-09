@@ -5,6 +5,8 @@ from importlib import import_module
 import requests
 import requests_mock
 from datetime import datetime, timedelta
+from unittest.mock import PropertyMock
+from mock import patch
 
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
@@ -221,18 +223,47 @@ def test_duration(mocker):
         assert (dl.duration == expected), msg
 
 
-def test_shorter_than_minimum_duration(mocker):
+def test_shorter_than_minimum_duration():
     cases = [
-        ({'duration': "02:45:01"}, False),
-        ({'duration': "00:02:00"}, False),
-        ({'duration': "00:01:59"}, True),
-        ({'duration': "00:00:35"}, True),
-        ({'duration': ""}, False),
+        ({"duration": "02:45:01"}, False),
+        ({"duration": "00:02:00"}, False),
+        ({"duration": "00:01:59"}, True),
+        ({"duration": "00:00:35"}, True),
+        ({"duration": ""}, False),
     ]
 
     for data, expected in cases:
         dl = downloader.Download(data)
         assert (dl.shorter_than_minimum_duration == expected)
+
+
+def test_series_id_from_schedule(mocker):
+    # mock a dynamo table?
+    # monday = "2019-12-30T16:00:05Z"
+    # tuesday = "2019-12-31T16:00:05Z"
+    # wednesday = "2020-01-01T16:00:05Z"
+    # thursday = "2020-01-02T16:00:05Z"
+    # friday = "2020-01-03T16:00:05Z"
+    saturday = "2020-01-04T16:00:05Z"
+    # sunday = "2020-01-05T16:00:05Z"
+
+    saturday_schedule = {
+        "Days": [
+            "Sa"
+        ],
+        "Time": [
+            "16:00"
+        ],
+        "opencast_series_id": "sample_series_id",
+    }
+
+    cases = [
+        ({"start_time": saturday}, "sample_series_id")
+    ]
+
+    with patch.object(downloader.Download, "class_schedule", return_value=saturday_schedule):
+        dl = downloader.Download(cases[0][0])
+        assert(dl.series_id_from_schedule() == cases[0][1])
 
 
 def test_remove_incomplete_metadata(mocker):
