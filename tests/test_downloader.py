@@ -1,18 +1,20 @@
 import site
+import os
 from os.path import dirname, join
 import pytest
 from importlib import import_module
 import requests
 import requests_mock
 from datetime import datetime, timedelta
-from unittest.mock import PropertyMock
+from pytz import timezone
 from mock import patch
 
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 downloader = import_module('zoom-downloader')
 
-TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
+TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 
 
 def test_overlapping_recording_segments():
@@ -237,33 +239,79 @@ def test_shorter_than_minimum_duration():
         assert (dl.shorter_than_minimum_duration == expected)
 
 
-def test_series_id_from_schedule(mocker):
-    # mock a dynamo table?
-    # monday = "2019-12-30T16:00:05Z"
-    # tuesday = "2019-12-31T16:00:05Z"
-    # wednesday = "2020-01-01T16:00:05Z"
-    # thursday = "2020-01-02T16:00:05Z"
-    # friday = "2020-01-03T16:00:05Z"
-    saturday = "2020-01-04T16:00:05Z"
-    # sunday = "2020-01-05T16:00:05Z"
+def local_hour(utc_timestamp):
+    utc = datetime.strptime(
+        utc_timestamp, TIMESTAMP_FORMAT) \
+        .replace(tzinfo=timezone('UTC'))
+    hour = utc.astimezone(timezone(LOCAL_TIME_ZONE)).hour
+    return "{:02}:00".format(hour)
 
+
+def test_series_id_from_schedule(mocker):
+    # all times in GMT but schedule times are local
+    monday = "2019-12-30T10:00:05Z"
+    wednesday = "2020-01-01T16:00:05Z"
+    thursday = "2020-01-02T16:00:05Z"
+    saturday = "2020-01-04T16:00:05Z"
+
+    monday_schedule = {
+            "Days": ["M"],
+            "Time": [local_hour(monday)],
+            "opencast_series_id": "monday_good",
+        }
+    bad_monday_schedule = {
+            "Days": ["M"],
+            "Time": [],
+            "opencast_series_id": "monday_bad",
+        }
+    thursday_schedule = {
+            "Days": ["R"],
+            "Time": [local_hour(thursday)],
+            "opencast_series_id": "thursday_good",
+        }
+    bad_thursday_schedule = {
+            "Days": ["Th"],
+            "Time": ["11:00"],
+            "opencast_series_id": "thursday_bad",
+        }
     saturday_schedule = {
-        "Days": [
-            "Sa"
-        ],
-        "Time": [
-            "16:00"
-        ],
-        "opencast_series_id": "sample_series_id",
-    }
+            "Days": ["Sa"],
+            "Time": [local_hour(saturday)],
+            "opencast_series_id": "saturday_good",
+        }
+    bad_saturday_schedule = {
+            "Days": ["Sa"],
+            "Time": ["20:00"],
+            "opencast_series_id": "saturday_bad",
+        }
+    multiple_day_schedule = {
+            "Days": ["M", "W"],
+            "Time": [local_hour(wednesday)],
+            "opencast_series_id": "multiple_days",
+        }
 
     cases = [
-        ({"start_time": saturday}, "sample_series_id")
+        # Mondays
+        ({"start_time": monday}, monday_schedule,
+            monday_schedule["opencast_series_id"]),
+        ({"start_time": monday}, bad_monday_schedule, None),
+        # Thursdays
+        ({"start_time": thursday}, thursday_schedule,
+            thursday_schedule["opencast_series_id"]),
+        ({"start_time": thursday}, bad_thursday_schedule, None),
+        # Saturdays
+        ({"start_time": saturday}, saturday_schedule,
+            saturday_schedule["opencast_series_id"]),
+        ({"start_time": saturday}, bad_saturday_schedule, None),
+        # Multiple days
+        ({"start_time": wednesday}, multiple_day_schedule,
+            multiple_day_schedule["opencast_series_id"])
     ]
 
-    with patch.object(downloader.Download, "class_schedule", return_value=saturday_schedule):
-        dl = downloader.Download(cases[0][0])
-        assert(dl.series_id_from_schedule() == cases[0][1])
+    for data, schedule, expected in cases:
+        with patch.object(downloader.Download, "class_schedule", schedule):
+            dl = downloader.Download(data)
+            assert(dl.series_id_from_schedule == expected)
 
 
 def test_remove_incomplete_metadata(mocker):

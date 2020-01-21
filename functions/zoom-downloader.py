@@ -222,6 +222,7 @@ class Download:
             self._class_schedule = schedule
         return self._class_schedule
 
+    @property
     def series_id_from_schedule(self):
         """
         Check that the recording's start_time matches the schedule and
@@ -237,7 +238,7 @@ class Download:
         days = {"M": "Mondays",
                 "T": "Tuesdays",
                 "W": "Wednesdays",
-                "Th": "Thursdays",
+                "R": "Thursdays",
                 "F": "Fridays",
                 "Sa": "Saturdays",
                 "Sn": "Sundays"}
@@ -282,7 +283,7 @@ class Download:
             if self.data['ignore_schedule']:
                 logger.info("Ignoring schedule")
             else:
-                self._oc_series_id = self.series_id_from_schedule()
+                self._oc_series_id = self.series_id_from_schedule
                 if self._oc_series_id is not None:
                     logger.info("Matched with opencast series '{}'!"
                                 .format(self._oc_series_id))
