@@ -8,7 +8,7 @@ phases:
       - yum install -y python37 python37-devel python37-pip python37-setuptools python37-virtualenv zip unzip
   pre_build:
     commands:
-      - pythongit -m virtualenv venv
+      - python -m virtualenv venv
       - source venv/bin/activate
       - pip install -U pip
       - pip install -r requirements.txt
