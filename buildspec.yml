@@ -2,11 +2,13 @@ version: 0.2
 
 phases:
   install:
+    runtime-versions:
+      python: 3.7
     commands:
-      - yum install -y python36 python36-devel python36-pip python36-setuptools python36-virtualenv zip unzip
+      - yum install -y python37 python37-devel python37-pip python37-setuptools python37-virtualenv zip unzip
   pre_build:
     commands:
-      - python36 -m virtualenv venv
+      - python37 -m virtualenv venv
       - source venv/bin/activate
       - pip install -U pip
       - pip install -r requirements.txt
