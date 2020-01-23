@@ -11,6 +11,7 @@ import subprocess
 from pytz import timezone
 from datetime import datetime
 from urllib.parse import quote
+from collections import OrderedDict
 
 import logging
 logger = logging.getLogger()
@@ -205,7 +206,7 @@ class Download:
 
         return self._recording_data
 
-    def series_id_from_schedule(self):
+    def class_schedule(self):
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
 
@@ -218,20 +219,34 @@ class Download:
         else:
             schedule = r['Item']
             logger.info(schedule)
+            return schedule
+
+    @property
+    def series_id_from_schedule(self):
+        """
+        Check that the recording's start_time matches the schedule and
+        extract the opencast series id.
+        """
+
+        schedule = self.class_schedule
+
+        if not schedule:
+            return None
 
         zoom_time = self.created.astimezone(timezone(LOCAL_TIME_ZONE))
-        weekdays = {'M': 'Mondays',
-                    'T': 'Tuesdays',
-                    'W': 'Wednesdays',
-                    'R': 'Thursdays',
-                    'F': 'Fridays'}
-        if zoom_time.weekday() > 4:
-            logger.debug("Meeting occurred on a weekend.")
-            return None
-        letter = list(weekdays.keys())[zoom_time.weekday()]
-        if letter not in schedule['Days']:
+        days = OrderedDict([
+            ("M", "Mondays"),
+            ("T", "Tuesdays"),
+            ("W", "Wednesdays"),
+            ("R", "Thursdays"),
+            ("F", "Fridays"),
+            ("Sa", "Saturday"),
+            ("Sn", "Sunday")
+        ])
+        day_code = list(days.keys())[zoom_time.weekday()]
+        if day_code not in schedule['Days']:
             logger.debug("No opencast recording scheduled on {}."
-                         .format(weekdays[letter]))
+                         .format(days[day_code]))
             return None
 
         for t in schedule['Time']:
@@ -269,7 +284,7 @@ class Download:
             if self.data['ignore_schedule']:
                 logger.info("Ignoring schedule")
             else:
-                self._oc_series_id = self.series_id_from_schedule()
+                self._oc_series_id = self.series_id_from_schedule
                 if self._oc_series_id is not None:
                     logger.info("Matched with opencast series '{}'!"
                                 .format(self._oc_series_id))
