@@ -11,6 +11,7 @@ import subprocess
 from pytz import timezone
 from datetime import datetime
 from urllib.parse import quote
+from collections import OrderedDict
 
 import logging
 logger = logging.getLogger()
@@ -205,7 +206,6 @@ class Download:
 
         return self._recording_data
 
-    @property
     def class_schedule(self):
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
@@ -215,12 +215,11 @@ class Download:
         )
 
         if 'Item' not in r:
-            self._class_schedule = None
+            return None
         else:
             schedule = r['Item']
             logger.info(schedule)
-            self._class_schedule = schedule
-        return self._class_schedule
+            return schedule
 
     @property
     def series_id_from_schedule(self):
@@ -235,13 +234,15 @@ class Download:
             return None
 
         zoom_time = self.created.astimezone(timezone(LOCAL_TIME_ZONE))
-        days = {"M": "Mondays",
-                "T": "Tuesdays",
-                "W": "Wednesdays",
-                "R": "Thursdays",
-                "F": "Fridays",
-                "Sa": "Saturdays",
-                "Sn": "Sundays"}
+        days = OrderedDict([
+            ("M", "Mondays"),
+            ("T", "Tuesdays"),
+            ("W", "Wednesdays"),
+            ("R", "Thursdays"),
+            ("F", "Fridays"),
+            ("Sa", "Saturday"),
+            ("Sn", "Sunday")
+        ])
         day_code = list(days.keys())[zoom_time.weekday()]
         if day_code not in schedule['Days']:
             logger.debug("No opencast recording scheduled on {}."

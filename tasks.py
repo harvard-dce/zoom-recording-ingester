@@ -1181,22 +1181,17 @@ def __schedule_json_to_dynamo(ctx, json_name):
     table_name = STACK_NAME + '-schedule'
     table = dynamodb.Table(table_name)
 
-    file = open(json_name, "r")
-
-    classes = json.load(file)
-
-    try:
-        for item in classes.values():
-            table.put_item(Item=item)
-    except ClientError as e:
-        error = e.response['Error']
-        print("{}: {}".format(error['Code'], error['Message']))
-        print("Modify {} and try again."
-              .format(json_name))
-        file.close()
-        return
-
-    file.close()
+    with open(json_name, "r") as file:
+        try:
+            classes = json.load(file)
+            for item in classes.values():
+                table.put_item(Item=item)
+        except ClientError as e:
+            error = e.response['Error']
+            print("{}: {}".format(error['Code'], error['Message']))
+            print("Modify {} and try again."
+                  .format(json_name))
+            return
 
     new_schedule = __get_dynamo_schedule(ctx, table_name)
 
