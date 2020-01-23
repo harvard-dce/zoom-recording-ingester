@@ -22,6 +22,7 @@ idna==2.8                 # via requests
 importlib-metadata==0.23  # via pluggy, pytest, tox
 invoke==1.3.0
 jmespath==0.9.4           # via awslogs, boto3, botocore
+mock==3.0.5
 more-itertools==7.2.0     # via pytest, zipp
 packaging==19.2           # via pytest, tox
 pluggy==0.13.0            # via pytest, tox
@@ -41,7 +42,7 @@ requests-mock==1.7.0
 requests==2.22.0
 rsa==3.4.2                # via awscli
 s3transfer==0.2.1         # via awscli, boto3
-six==1.13.0               # via freezegun, packaging, python-dateutil, requests-mock, tox
+six==1.13.0               # via freezegun, mock, packaging, python-dateutil, requests-mock, tox
 tabulate==0.8.6
 termcolor==1.1.0          # via awslogs
 toml==0.10.0              # via tox

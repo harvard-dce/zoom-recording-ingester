@@ -1,6 +1,7 @@
 invoke
 python-dotenv
 awscli
+mock
 pytest
 pytest-env
 pytest-mock
