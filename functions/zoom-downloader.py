@@ -206,6 +206,7 @@ class Download:
 
         return self._recording_data
 
+    @property
     def class_schedule(self):
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(CLASS_SCHEDULE_TABLE)

@@ -3,9 +3,9 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      python: 3.7
+      python: 3.8
     commands:
-      - yum install -y python37 python37-devel python37-pip python37-setuptools python37-virtualenv zip unzip
+      - yum install -y python38 python38-devel python38-pip python38-setuptools python38-virtualenv zip unzip
   pre_build:
     commands:
       - python -m virtualenv venv
