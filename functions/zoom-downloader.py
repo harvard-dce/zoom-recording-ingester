@@ -561,9 +561,10 @@ def stream_file_to_s3(file, uuid, track_sequence):
 def get_stream(download_url):
     admin_token = get_admin_token()
 
-    # use zak token to get download stream url
+    # Use zak token to get download stream
     logger.info("requesting {}".format(download_url))
 
+    # First request is for retrieving the filename
     url = "{}?zak={}".format(download_url, admin_token)
     r = requests.get(url, allow_redirects=False)
     r.raise_for_status
@@ -596,6 +597,7 @@ def get_stream(download_url):
         )
     logger.info("got filename {}".format(zoom_name))
 
+    # Second request is for getting the actual stream
     url = "{}?zak={}".format(download_url, admin_token)
     r = requests.get(url, stream=True)
 
