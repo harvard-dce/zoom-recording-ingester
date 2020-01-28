@@ -314,6 +314,61 @@ def test_series_id_from_schedule(mocker):
             assert(dl.series_id_from_schedule == expected)
 
 
+def test_get_stream(mocker):
+    # patch get_admin_tocken
+    mocker.patch.object(downloader, "get_admin_token", return_value="1234")
+    # patch request example
+    # test that auth token gets in the headers properly
+    # with requests_mock.mock() as req_mock:
+    #     req_mock.get(requests_mock.ANY, status_code=200, json={})
+    #     api_data = downloader.api_request('https://api.example.com/v2/abcd-1234')
+    #     assert api_data == {}
+    #     assert 'Authorization' in req_mock.last_request.headers
+    #     assert req_mock.last_request.headers['Authorization'] == 'Bearer foobarbaz'
+
+    mp4_file = "zoom_file.mp4"
+    location_header = {
+        "Location": "https://zoom.us/{}?123456".format(mp4_file)
+    }
+    content_disposition_header = {
+        "Content-Disposition": "key={}".format(mp4_file)
+    }
+    html_content = {
+        "Content-Type": "text/html"
+    }
+
+    cases = [
+        ({"header": location_header}, mp4_file, None),
+        ({"header": content_disposition_header}, mp4_file, None),
+        ({}, downloader.PermanentDownloadError,
+         "Zoom name not found in headers"),
+        ({"header": html_content}, downloader.PermanentDownloadError,
+         "Zoom returned stream with content type text/html"),
+        ({"header": html_content, "content": b'Error'},
+         downloader.PermanentDownloadError, "Zoom returned an HTML error page")
+    ]
+
+    for input, expected, msg in cases:
+        url = "https://example.com/stream"
+        header = input["header"] if "header" in input else {}
+        content = input["content"] if "content" in input else b''
+        with requests_mock.mock() as req_mock:
+            req_mock.get(
+                requests_mock.ANY,
+                status_code=200,
+                headers=header,
+                content=content
+            )
+            if isinstance(expected, type) and expected.__base__ == Exception:
+                with pytest.raises(expected) as exc_info:
+                    downloader.get_stream(url)
+                if msg is not None:
+                    assert exc_info.match(msg)
+            else:
+                stream, zoom_name = downloader.get_stream(url)
+                assert(zoom_name == expected)
+
+
 def test_remove_incomplete_metadata(mocker):
     mp4_complete = {
         "id": "123",
