@@ -561,23 +561,46 @@ def stream_file_to_s3(file, uuid, track_sequence):
 def get_stream(download_url):
     admin_token = get_admin_token()
 
-    # use zak token to get download stream
+    # Use zak token to get download stream
     logger.info("requesting {}".format(download_url))
 
-    r = requests.get("{}?zak={}".format(download_url, admin_token), allow_redirects=False)
+    # First request is for retrieving the filename
+    url = "{}?zak={}".format(download_url, admin_token)
+    r = requests.get(url, allow_redirects=False)
+    r.raise_for_status
+
+    # If the request is not authorized, Zoom will return 200 and an HTML
+    # error page
+    if 'Content-Type' in r.headers and r.headers['Content-Type'] == "text/html":
+        error_message = "Request for download stream not authorized.\n"
+        if 'Error' in str(r.content):
+            raise PermanentDownloadError(
+                "{} Zoom returned an HTML error page.".format(error_message)
+            )
+        else:
+            raise PermanentDownloadError(
+                "{} Zoom returned stream with content type text/html."
+                .format(error_message)
+            )
+
+    # Filename that zoom uses should be found in the response headers
     if 'Location' in r.headers:
         location = r.headers['Location']
         zoom_name = location.split('?')[0].split('/')[-1]
-    else:
+    elif 'Content-Disposition' in r.headers:
         zoom_name = r.headers['Content-Disposition'].split("=")[-1]
-
-    if zoom_name == '':
-        raise PermanentDownloadError("Failed to get file name from download header.")
-
+    else:
+        raise PermanentDownloadError(
+            "Request for download stream from Zoom failed.\n"
+            "Zoom name not found in headers\n"
+            "request: {} response headers: {}".format(url, r.headers)
+        )
     logger.info("got filename {}".format(zoom_name))
 
+    # Second request is for getting the actual stream
     url = "{}?zak={}".format(download_url, admin_token)
     r = requests.get(url, stream=True)
+    r.raise_for_status
 
     return r, zoom_name
 
