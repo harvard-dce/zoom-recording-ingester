@@ -315,16 +315,7 @@ def test_series_id_from_schedule(mocker):
 
 
 def test_get_stream(mocker):
-    # patch get_admin_tocken
     mocker.patch.object(downloader, "get_admin_token", return_value="1234")
-    # patch request example
-    # test that auth token gets in the headers properly
-    # with requests_mock.mock() as req_mock:
-    #     req_mock.get(requests_mock.ANY, status_code=200, json={})
-    #     api_data = downloader.api_request('https://api.example.com/v2/abcd-1234')
-    #     assert api_data == {}
-    #     assert 'Authorization' in req_mock.last_request.headers
-    #     assert req_mock.last_request.headers['Authorization'] == 'Bearer foobarbaz'
 
     mp4_file = "zoom_file.mp4"
     location_header = {
