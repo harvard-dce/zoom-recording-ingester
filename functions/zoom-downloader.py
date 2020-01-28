@@ -600,6 +600,7 @@ def get_stream(download_url):
     # Second request is for getting the actual stream
     url = "{}?zak={}".format(download_url, admin_token)
     r = requests.get(url, stream=True)
+    r.raise_for_status
 
     return r, zoom_name
 
