@@ -74,12 +74,12 @@ def handler(event, context):
             VisibilityTimeout=700
         )
         download_message = messages[0]
-        logger.info({'queue message': download_message})
+        download_data = json.loads(download_message.body)
+        logger.info({'queue message': download_data})
     except IndexError:
         logger.info("No download queue messages available")
         return
 
-    download_data = json.loads(download_message.body)
     download_data['ignore_schedule'] = ignore_schedule
     download_data['override_series_id'] = override_series_id
     meeting_info = meeting_metadata(download_data['uuid'])
@@ -466,7 +466,6 @@ def remove_incomplete_metadata(recording_data):
 
     required_fields = {
         'id',
-        'meeting_id',
         'recording_start',
         'recording_end',
         'file_type',
@@ -523,7 +522,7 @@ def stream_file_to_s3(file, uuid, track_sequence):
 
     metadata['file_type'] = zoom_name.split('.')[-1]
     filename = create_filename("{:03d}-{}".format(track_sequence, file['id']),
-                               file['meeting_id'],
+                               self.uuid,
                                zoom_name)
 
     logger.info("Beginning upload of {}".format(filename))
