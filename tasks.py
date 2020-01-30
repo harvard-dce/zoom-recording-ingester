@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import gen_token
+from functions.common import gen_token, api_request
 import requests
 from pytz import timezone
 from multiprocessing import Process
@@ -29,6 +29,9 @@ STACK_NAME = env('STACK_NAME')
 OC_CLUSTER_NAME = env('OC_CLUSTER_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
+ZOOM_API_BASE_URL = env("ZOOM_API_BASE_URL")
+ZOOM_API_KEY = env('ZOOM_API_KEY')
+ZOOM_API_SECRET = env('ZOOM_API_SECRET')
 
 FUNCTION_NAMES = [
     'zoom-webhook',
@@ -66,6 +69,7 @@ def queue_is_empty(ctx, queue_name):
 
     num_queued = int(ctx.run(cmd, hide=True).stdout.strip())
     return num_queued == 0
+
 
 @task
 def production_failsafe(ctx):
@@ -177,15 +181,13 @@ def list_recordings(ctx, date=str(datetime.date.today())):
     Optional: --date='YYYY-MM-DD'
     """
     base_url = getenv('ZOOM_API_BASE_URL')
-    key = getenv('ZOOM_API_KEY')
-    secret = getenv('ZOOM_API_SECRET')
     meetings = __get_meetings(date)
 
     recordings_found = 0
 
     for meeting in meetings:
-        time.sleep(0.1)
-        token = gen_token(key=key, secret=secret)
+        time.sleep(0.01)
+        token = gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET)
         uuid = meeting['uuid']
         series_id = meeting['id']
 
@@ -231,11 +233,10 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         print("Done!")
 
 
-@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id',
+@task(help={'uuid': 'meeting instance uuid',
             'ignore_schedule': ('do opencast series id lookup but ignore if '
                                 'meeting times don\'t match')})
-def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2,
-                  ignore_schedule=False):
+def exec_pipeline(ctx, uuid, ignore_schedule=False):
     """
     Manually trigger the webhook handler, downloader, and uploader.
     Positional arguments: uuid, host_id, series-id
@@ -243,7 +244,7 @@ def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2,
     """
 
     print("\nTriggering webhook...\n")
-    exec_webhook(ctx, uuid, host_id, status, webhook_version)
+    exec_webhook(ctx, uuid)
 
     # Keep retrying downloader until some messages are processed
     # or it fails.
@@ -270,74 +271,75 @@ def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2,
         return
 
 
-@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id'})
-def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=3):
+@task(help={'uuid': 'meeting instance uuid'})
+def exec_webhook(ctx, uuid):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
 
-    if None in (uuid, host_id):
-        raise Exit("You must provide both a --uuid and a --host-id value")
+    if not uuid:
+        raise Exit("You must provide a recording uuid")
 
     apig = boto3.client('apigateway')
 
     apis = apig.get_rest_apis()
-    api_id = jmespath.search("items[?name=='{}'].id | [0]".format(STACK_NAME), apis)
+    api_id = jmespath.search(
+        "items[?name=='{}'].id | [0]".format(STACK_NAME),
+        apis
+    )
     if not api_id:
-        raise Exit("No api found, double check that your environment variables are correct.")
+        raise Exit(
+            "No api found, double check that your environment variables "
+            "are correct."
+        )
 
     api_resources = apig.get_resources(restApiId=api_id)
-    resource_id = jmespath.search("items[?pathPart=='new_recording'].id | [0]", api_resources)
+    resource_id = jmespath.search(
+        "items[?pathPart=='new_recording'].id | [0]",
+        api_resources
+    )
 
-    if webhook_version == 3:
-        if status is None:
-            status = 'recording.completed'
+    data = api_request(
+        ZOOM_API_KEY,
+        ZOOM_API_SECRET,
+        "{}/meetings/{}/recordings".format(ZOOM_API_BASE_URL, uuid)
+    )
 
-        event_body = json.dumps(
-            {'event': status,
-             'payload': {
-                 'object': {
-                     'uuid': uuid,
-                     'host_id': host_id
-                    },
-                     'delay_seconds': 0
-                 }
-             }
-        )
+    required_fields = ["host_id", "recording_files"]
+    for field in required_fields:
+        if field not in data:
+            pprint(data)
+            raise Exception(
+                "No {} found in response.\n".format(field)
+            )
 
-    elif webhook_version == 2:
-        if status is None:
-            status = 'recording_completed'
+    for file in data["recording_files"]:
+        if "status" in file and file["status"] != "completed":
+            raise Exception("Not all recordings have completed processing.")
+        if "id" not in file and file["file_type"].lower() != "mp4":
+            data["recording_files"].remove(file)
 
-        event_body = json.dumps(
-            {'event': status,
-             'payload': {
-                 'meeting': {
-                     'uuid': uuid,
-                     'host_id': host_id
-                    },
-                 'delay_seconds': 0
-                }
-             }
-        )
-
-    else:
-        if status is None:
-            status = 'RECORDING_MEETING_COMPLETED'
-
-        content = json.dumps({'uuid': uuid, 'host_id': host_id})
-        event_body = "type={}&{}".format(status,  urlencode({'content': content}))
+    event_body = {
+        "payload": {
+            "status": "RECORDING_MEETING_COMPLETED",
+            "uuid": uuid,
+            "object": data
+        }
+    }
 
     resp = apig.test_invoke_method(
         restApiId=api_id,
         resourceId=resource_id,
-        httpMethod='POST',
-        body=event_body
+        httpMethod="POST",
+        body=json.dumps(event_body)
     )
 
-    print(event_body)
+    pprint(event_body)
 
-    print("Returned with status code: {}. {}".format(resp['status'], resp['body']))
+    print("Returned with status code: {}. {}".format(
+        resp["status"],
+        resp["body"])
+    )
 
 
 @task(help={

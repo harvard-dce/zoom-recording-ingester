@@ -1,6 +1,7 @@
 import jwt
 import time
 import logging
+import requests
 import aws_lambda_logging
 from functools import wraps
 from os import getenv as env
@@ -50,3 +51,9 @@ def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
     return jwt.encode(payload, secret, headers=header)
 
 
+def api_request(endpoint_url, token):
+    headers = {"Authorization": "Bearer %s" % token.decode()}
+    r = requests.get(endpoint_url, headers=headers)
+    r.raise_for_status()
+    resp_data = r.json()
+    return resp_data
