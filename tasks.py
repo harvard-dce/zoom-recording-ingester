@@ -6,7 +6,6 @@ import time
 import csv
 import shutil
 import datetime
-from urllib.parse import urlencode
 from invoke import task, Collection
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
@@ -14,11 +13,9 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import gen_token, api_request
-import requests
+from functions.common import ZoomAPIRequests
 from pytz import timezone
 from multiprocessing import Process
-import difflib
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -29,9 +26,8 @@ STACK_NAME = env('STACK_NAME')
 OC_CLUSTER_NAME = env('OC_CLUSTER_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
-ZOOM_API_BASE_URL = env("ZOOM_API_BASE_URL")
-ZOOM_API_KEY = env('ZOOM_API_KEY')
-ZOOM_API_SECRET = env('ZOOM_API_SECRET')
+
+ZOOM_API = ZoomAPIRequests(env('ZOOM_API_KEY'), env('ZOOM_API_SECRET'))
 
 FUNCTION_NAMES = [
     'zoom-webhook',
@@ -175,38 +171,33 @@ def release(ctx, function=None, description=None):
         new_version = __publish_version(ctx, func, description)
         __update_release_alias(ctx, func, new_version, description)
 
+
 @task
 def list_recordings(ctx, date=str(datetime.date.today())):
     """
     Optional: --date='YYYY-MM-DD'
     """
-    base_url = getenv('ZOOM_API_BASE_URL')
     meetings = __get_meetings(date)
 
     recordings_found = 0
 
     for meeting in meetings:
         time.sleep(0.01)
-        token = gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET)
         uuid = meeting['uuid']
         series_id = meeting['id']
 
-        r = requests.get("{}meetings/{}".format(base_url, series_id),
-                         headers={"Authorization": "Bearer %s" % token.decode()})
-
+        r = ZOOM_API.get(
+            "meetings/{}".format(series_id), ignore_failure=True
+        )
         if r.status_code == 404:
             continue
-
         r.raise_for_status()
 
-        host_id = r.json()['host_id']
-
-        r = requests.get("{}meetings/{}/recordings".format(base_url, uuid),
-                         headers={"Authorization": "Bearer %s" % token.decode()})
-
+        r = ZOOM_API.get(
+            "meetings/{}/recordings".format(uuid), ignore_failure=True
+        )
         if r.status_code == 404:
             continue
-
         r.raise_for_status()
 
         # sometimes this zoom endpoint sends an empty list of recording files
@@ -221,7 +212,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         start_time = utc.localize(datetime.datetime.strptime(utc_start_time,
                                   "%Y-%m-%dT%H:%M:%SZ")).astimezone(local_tz)
 
-        print("\n\tuuid, host_id: {} {}".format(uuid, host_id))
+        print("\n\tuuid: {}".format(uuid))
         print("\tSeries id: {}".format(r.json()["id"]))
         print("\tTopic: {}".format(r.json()["topic"]))
         print("\tStart time: {}".format(start_time))
@@ -299,11 +290,7 @@ def exec_webhook(ctx, uuid):
         api_resources
     )
 
-    data = api_request(
-        ZOOM_API_KEY,
-        ZOOM_API_SECRET,
-        "{}/meetings/{}/recordings".format(ZOOM_API_BASE_URL, uuid)
-    )
+    data = ZOOM_API.get("meetings/{}/recordings".format(uuid)).json()
 
     required_fields = ["host_id", "recording_files"]
     for field in required_fields:
@@ -320,9 +307,8 @@ def exec_webhook(ctx, uuid):
             data["recording_files"].remove(file)
 
     event_body = {
+        "event": "recording.completed",
         "payload": {
-            "status": "RECORDING_MEETING_COMPLETED",
-            "uuid": uuid,
             "object": data
         }
     }
@@ -333,8 +319,6 @@ def exec_webhook(ctx, uuid):
         httpMethod="POST",
         body=json.dumps(event_body)
     )
-
-    pprint(event_body)
 
     print("Returned with status code: {}. {}".format(
         resp["status"],
@@ -1337,33 +1321,35 @@ def __show_sqs_status(ctx):
 
 def __get_meetings(date):
     page_size = 300
-    key = getenv('ZOOM_API_KEY')
-    secret = getenv('ZOOM_API_SECRET')
     meetings = []
 
     for mtg_type in ["past", "pastOne"]:
-        url = "{}metrics/meetings/".format(getenv('ZOOM_API_BASE_URL'))
-        url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
+        base_path = ("metrics/meetings/?page_size={}&type={}&from={}&to={}"
+                     .format(page_size, mtg_type, date, date))
 
-        token = gen_token(key=key, secret=secret)
-
+        next_page_token = None
         while True:
-            r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
-            if r.status_code != 429:
-                break
+            if next_page_token:
+                path = ("{}&next_page_token={}"
+                        .format(base_path, next_page_token))
             else:
+                path = base_path
+
+            r = ZOOM_API.get(path, ignore_failure=True)
+            if r.status_code == 429:
                 print("API rate limited, waiting 10 seconds to retry...")
                 time.sleep(10)
+                continue
+            else:
+                r.raise_for_status
 
-        r.raise_for_status()
-        response = r.json()
-        meetings.extend(response['meetings'])
+            resp_data = r.json()
+            if 'next_page_token' not in resp_data:
+                break
+            next_page_token = resp_data['next_page_token'].strip()
+            if not next_page_token:
+                break
 
-        while 'next_page_token' in response and response['next_page_token'].strip() is True:
-            token = gen_token(key=key, secret=secret)
-            r = requests.get(url + "&next_page_token=" + response['next_page_token'],
-                             headers={"Authorization": "Bearer %s" % token.decode()})
-            r.raise_for_status()
             meetings.extend(r.json()['meetings'])
             time.sleep(60)
 
@@ -1402,7 +1388,8 @@ def __request_ids_from_logs(ctx, log_group, filter_pattern):
 
     cmd = ("aws logs filter-log-events {} --log-group-name {} "
            "--output text --query 'events[][logStreamName,message]' "
-           "--filter-pattern '{}'").format(profile_arg(), log_group, filter_pattern)
+           "--filter-pattern '{}'"
+           .format(profile_arg(), log_group, filter_pattern))
 
     for line in ctx.run(cmd, hide=True).stdout.splitlines():
         log_stream, message = line.strip().split(maxsplit=1)

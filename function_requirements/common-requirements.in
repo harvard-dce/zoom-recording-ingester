@@ -3,3 +3,4 @@ aws-lambda-logging
 requests
 PyJWT
 pytz
+python-dotenv
