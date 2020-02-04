@@ -238,10 +238,10 @@ Resources:
       Environment:
         Variables:
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
-          ZOOM_API_BASE_URL: !Ref ZoomApiBaseUrl
+          ZOOM_API_KEY: !Ref ZoomApiKey
+          ZOOM_API_SECRET: !Ref ZoomApiSecret
           LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
-          PARALLEL_ENDPOINT: !Join ['/', !Split ['!', !Ref ParallelEndpoint]]
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-webhook.zip"

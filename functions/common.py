@@ -6,10 +6,9 @@ import aws_lambda_logging
 from functools import wraps
 from os import getenv as env
 
-ZOOM_API_KEY = env('ZOOM_API_KEY')
-ZOOM_API_SECRET = env('ZOOM_API_SECRET')
 LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
 BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'
+ZOOM_API_BASE_URL = "https://api.zoom.us/v2/"
 
 
 def setup_logging(handler_func):
@@ -34,7 +33,7 @@ def setup_logging(handler_func):
 
         try:
             retval = handler_func(event, context)
-        except Exception as e:
+        except Exception:
             logger.exception("handler failed!")
             raise
 
@@ -45,15 +44,32 @@ def setup_logging(handler_func):
     return wrapped_func
 
 
-def gen_token(key=ZOOM_API_KEY, secret=ZOOM_API_SECRET, seconds_valid=60):
-    header = {"alg": "HS256", "typ": "JWT"}
-    payload = {"iss": key, "exp": int(time.time() + seconds_valid)}
-    return jwt.encode(payload, secret, headers=header)
+class ZoomAPIRequests:
 
+    def __init__(self, zoom_api_key, zoom_api_secret):
+        self.key = zoom_api_key
+        self.secret = zoom_api_secret
+        self.base_url = ZOOM_API_BASE_URL
 
-def api_request(endpoint_url, token):
-    headers = {"Authorization": "Bearer %s" % token.decode()}
-    r = requests.get(endpoint_url, headers=headers)
-    r.raise_for_status()
-    resp_data = r.json()
-    return resp_data
+    def __gen_token(self, seconds_valid=60):
+        header = {"alg": "HS256", "typ": "JWT"}
+        payload = {"iss": self.key, "exp": int(time.time() + seconds_valid)}
+        return jwt.encode(payload, self.secret, headers=header)
+
+    def get(self, path, seconds_valid=60, ignore_failure=False):
+        if not path:
+            raise Exception(
+                "Call to ZoomAPIRequests.get "
+                "missing required param 'path'"
+            )
+
+        url = "{}{}".format(self.base_url, path)
+        headers = {
+            "Authorization": "Bearer {}"
+            .format(self.__gen_token(seconds_valid).decode())}
+        r = requests.get(url, headers=headers)
+
+        if not ignore_failure:
+            r.raise_for_status()
+
+        return r
