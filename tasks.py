@@ -156,6 +156,21 @@ def deploy(ctx, function=None, do_release=False):
             release(ctx, func)
 
 
+@task(pre=[production_failsafe])
+def deploy_webhook(ctx, do_release=False):
+    deploy(ctx, "zoom-webhook", do_release)
+
+
+@task(pre=[production_failsafe])
+def deploy_downloader(ctx, do_release=False):
+    deploy(ctx, "zoom-downloader", do_release)
+
+
+@task(pre=[production_failsafe])
+def deploy_uploader(ctx, do_release=False):
+    deploy(ctx, "zoom-uploader", do_release)
+
+
 @task(pre=[production_failsafe],
       help={'function': 'name of specific function'})
 def release(ctx, function=None, description=None):
@@ -309,7 +324,8 @@ def exec_webhook(ctx, uuid):
     event_body = {
         "event": "recording.completed",
         "payload": {
-            "object": data
+            "object": data,
+            "delay_seconds": 0
         }
     }
 
@@ -596,9 +612,15 @@ ns = Collection()
 ns.add_task(test)
 ns.add_task(codebuild)
 ns.add_task(package)
-ns.add_task(deploy)
 ns.add_task(release)
 ns.add_task(list_recordings)
+
+deploy_ns = Collection('deploy')
+deploy_ns.add_task(deploy, 'all')
+deploy_ns.add_task(deploy_webhook, 'webhook')
+deploy_ns.add_task(deploy_downloader, 'downloader')
+deploy_ns.add_task(deploy_uploader, 'uploader')
+ns.add_collection(deploy_ns)
 
 exec_ns = Collection('exec')
 exec_ns.add_task(exec_webhook, 'webhook')
@@ -758,7 +780,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OCWorkflow,ParameterValue='{}' "
            "ParameterKey=OCFlavor,ParameterValue='{}' "
            "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
-           "ParameterKey=UploadMessagesPerInvocation,ParameterValue='{}' "
+           "ParameterKey=DownloadMessagesPerInvocation,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -786,7 +808,7 @@ def __create_or_update(ctx, op):
                 getenv("OC_WORKFLOW"),
                 getenv("OC_FLAVOR"),
                 getenv("PARALLEL_ENDPOINT", required=False),
-                getenv('UPLOAD_MESSAGES_PER_INVOCATION')
+                getenv('DOWNLOAD_MESSAGES_PER_INVOCATION')
                 )
 
     if op == 'create-change-set':
@@ -1320,14 +1342,17 @@ def __show_sqs_status(ctx):
 
 
 def __get_meetings(date):
-    page_size = 300
+    print("Requesting meeting data for {}...".format(date))
+    requested_page_size = 300
+    meeting_metrics_rate_limit = 60
     meetings = []
 
     for mtg_type in ["past", "pastOne"]:
         base_path = ("metrics/meetings/?page_size={}&type={}&from={}&to={}"
-                     .format(page_size, mtg_type, date, date))
+                     .format(requested_page_size, mtg_type, date, date))
 
         next_page_token = None
+        count = 0
         while True:
             if next_page_token:
                 path = ("{}&next_page_token={}"
@@ -1349,9 +1374,15 @@ def __get_meetings(date):
             next_page_token = resp_data['next_page_token'].strip()
             if not next_page_token:
                 break
-
             meetings.extend(r.json()['meetings'])
-            time.sleep(60)
+
+            count += min(requested_page_size, resp_data["page_size"])
+            print("Retrieved {} of {} meetings."
+                  .format(count, resp_data["total_records"]))
+            print("Waiting {} seconds for next request "
+                  "to avoid Zoom API rate limit..."
+                  .format(meeting_metrics_rate_limit))
+            time.sleep(meeting_metrics_rate_limit)
 
         time.sleep(1)
 

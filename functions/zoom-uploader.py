@@ -24,7 +24,6 @@ ZOOM_OPENCAST_FLAVOR = env('OC_FLAVOR')
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
 OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
-UPLOAD_MESSAGES_PER_INVOCATION = env('UPLOAD_MESSAGES_PER_INVOCATION')
 
 s3 = boto3.resource('s3')
 
@@ -59,37 +58,35 @@ def handler(event, context):
     sqs = sqs_resource()
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
-    for i in range(int(UPLOAD_MESSAGES_PER_INVOCATION)):
-        try:
-            messages = upload_queue.receive_messages(
-                MaxNumberOfMessages=1,
-                VisibilityTimeout=300
-            )
-            upload_message = messages[0]
-            logger.debug({
-                'queue_message': {
-                    'attributes': upload_message.attributes,
-                    'body': upload_message.body
-                }
-            })
+    try:
+        messages = upload_queue.receive_messages(
+            MaxNumberOfMessages=1,
+            VisibilityTimeout=300
+        )
+        upload_message = messages[0]
+        logger.debug({
+            'queue_message': {
+                'attributes': upload_message.attributes,
+                'body': upload_message.body
+            }
+        })
 
-        except IndexError:
-            logger.warning("No upload queue messages available")
-            return
-        try:
-            upload_data = json.loads(upload_message.body)
-            logger.info(upload_data)
-            wf_id = process_upload(upload_data)
-            upload_message.delete()
-            if wf_id:
-                logger.info("Workflow id {} initiated".format(wf_id))
-                # only ingest one per invocation
-                break
-            else:
-                logger.info("No workflow initiated.")
-        except Exception as e:
-            logger.exception(e)
-            raise
+    except IndexError:
+        logger.warning("No upload queue messages available")
+        return
+    try:
+        upload_data = json.loads(upload_message.body)
+        logger.info(upload_data)
+        wf_id = process_upload(upload_data)
+        upload_message.delete()
+        if wf_id:
+            logger.info("Workflow id {} initiated".format(wf_id))
+            # only ingest one per invocation
+        else:
+            logger.info("No workflow initiated.")
+    except Exception as e:
+        logger.exception(e)
+        raise
 
 
 def process_upload(upload_data):
