@@ -50,7 +50,7 @@ Parameters:
     Type: String
   ParallelEndpoint:
     Type: String
-  UploadMessagesPerInvocation:
+  DownloadMessagesPerInvocation:
     Type: String
 
 Conditions:
@@ -308,6 +308,7 @@ Resources:
           CLASS_SCHEDULE_TABLE: !Ref ClassScheduleDynamoTable
           LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
+          DOWNLOAD_MESSAGES_PER_INVOCATION: !Ref DownloadMessagesPerInvocation
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-downloader.zip"
@@ -360,7 +361,6 @@ Resources:
           DEBUG: 0
           OC_WORKFLOW: !Ref OCWorkflow
           OC_FLAVOR: !Ref OCFlavor
-          UPLOAD_MESSAGES_PER_INVOCATION: !Ref UploadMessagesPerInvocation
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-uploader.zip"
