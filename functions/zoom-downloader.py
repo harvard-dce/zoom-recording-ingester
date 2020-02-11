@@ -116,6 +116,7 @@ class Download:
 
     def __init__(self, data):
         self.data = data
+        logger.info({"download_data": data})
 
     @property
     def uuid(self):
@@ -188,10 +189,12 @@ class Download:
         shorter than the MINIMUM_DURATION in minutes.
         """
         if self.duration:
-            duration_in_mins = time.strptime(self.duration, "%H:%M:%S").tm_min
-            return duration_in_mins < MINIMUM_DURATION
-        else:
-            return False
+            duration_object = time.strptime(self.duration, "%H:%M:%S")
+            hours = duration_object.tm_hour
+            min = duration_object.tm_min
+            return (hours == 0) and (min < MINIMUM_DURATION)
+
+        return False
 
     @property
     def recording_data(self):

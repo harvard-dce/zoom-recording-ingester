@@ -158,28 +158,37 @@ def test_duration(mocker):
 
     now = datetime.now()
 
-    short_duration_start = (
+    thirty_seconds_ago = (
             now - timedelta(seconds=30)
         ).strftime(TIMESTAMP_FORMAT)
-    short_duration = "00:00:30"
 
-    long_duration_start = (
+    one_hour_ago = (
+            now - timedelta(hours=1) - timedelta(minutes=1)
+        ).strftime(TIMESTAMP_FORMAT)
+    one_hour = "1:01:00"
+
+    four_hours_ago = (
             now - timedelta(hours=4) - timedelta(minutes=35)
         ).strftime(TIMESTAMP_FORMAT)
-    long_duration = "04:35:00"
+    four_hours = "04:35:00"
 
     now = now.strftime(TIMESTAMP_FORMAT)
 
     cases = [
-        ({'duration': '02:35:15',
-          'start_time': short_duration_start,
+        ({'duration': one_hour,
+          'start_time': thirty_seconds_ago,
           'end_time': now},
-         '02:35:15',
+         one_hour,
          'Duration formatted HH:MM:SS should return unchanged.'),
-        ({'duration': '',
-          'start_time': long_duration_start,
+        ({'duration': one_hour,
+          'start_time': one_hour_ago,
           'end_time': now},
-         long_duration,
+         one_hour,
+         'Duration formatted HH:MM:SS should return unchanged'),
+        ({'duration': '',
+          'start_time': four_hours_ago,
+          'end_time': now},
+         four_hours,
          'Duration calculated incorrectly from start_time - end_time'),
         ({'duration': None,
           'start_time': None,
@@ -198,12 +207,12 @@ def test_duration(mocker):
          None,
          'Invalid duration and no start or end time should return None'),
         ({'duration': 'some invalid duration',
-          'start_time': short_duration_start,
+          'start_time': thirty_seconds_ago,
           'end_time': None},
          None,
          'Invalid duration and no start time should return None'),
         ({'duration': 'some invalid duration',
-          'start_time': short_duration_start,
+          'start_time': thirty_seconds_ago,
           'end_time': now},
          "00:00:{:02d}".format(30),
          'Invalid duration and valid start and end time should return duration'
@@ -228,6 +237,7 @@ def test_duration(mocker):
 def test_shorter_than_minimum_duration():
     cases = [
         ({"duration": "02:45:01"}, False),
+        ({"duration": "02:01:21"}, False),
         ({"duration": "00:02:00"}, False),
         ({"duration": "00:01:59"}, True),
         ({"duration": "00:00:35"}, True),
