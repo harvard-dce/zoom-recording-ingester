@@ -92,29 +92,35 @@ class DownloadMessage:
     def __init__(self, sqs, ignore_schedule, override_series_id):
         self.ignore_schedule = ignore_schedule
         self.override_series_id = override_series_id
-        self.queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
-
-        self._retrieve_message()
+        self.sqs = sqs
+        self._message = self._retrieve_message()
 
     def _retrieve_message(self):
-        messages = self.queue.receive_messages(
+        download_queue = self.sqs.get_queue_by_name(
+                                    QueueName=DOWNLOAD_QUEUE_NAME)
+        messages = download_queue.receive_messages(
             MaxNumberOfMessages=1,
             VisibilityTimeout=700
         )
         if (len(messages) == 0):
             self.body = None
-            return
+            return None
 
-        self.body = json.loads(messages[0].body)
-        logger.info({"type of body": type(self.body),
-                     "Retrieved download message": self.body})
+        message = messages[0]
+        self.body = json.loads(message.body)
+        logger.info({"Retrieved download message": self.body})
 
+        self._uuid = self.body["uuid"]
         self._zoom_series_id = self.body["zoom_series_id"]
         self._host = self.body["host_name"]
         self._topic = self.body["topic"]
+        self._duration = self.body["duration"]
         self._received_time = self.body["received_time"]
         self._correlation_id = self.body["correlation_id"]
-        self._files = ZoomRecordingFiles(self.body["recording_files"])
+        self._recording_files = ZoomRecordingFiles(
+                                    self._uuid,
+                                    self.body["recording_files"])
+        return message
 
     @property
     def _created_utc(self):
@@ -129,28 +135,6 @@ class DownloadMessage:
     @property
     def _created_local(self):
         return self._created_utc.astimezone(timezone(LOCAL_TIME_ZONE))
-
-    @property
-    def _duration(self):
-        """
-        Either returns a duration in the form HH:MM:SS or None.
-        """
-        duration = self.body["duration"]
-        # regular expression
-        MMSS = r"\d{2}:\d{2}"
-
-        if duration:
-            if re.match(MMSS, duration) and len(duration) == len("MM:SS"):
-                duration = "00:" + duration
-
-            # validate the duration format is a valid time format
-            try:
-                datetime.strptime(duration, "%H:%M:%S")
-                return duration
-            except ValueError:
-                duration = None
-
-        return None
 
     @property
     def _class_schedule(self):
@@ -243,79 +227,76 @@ class DownloadMessage:
 
         return self._oc_series_id
 
+    @property
     def upload_message(self):
-        upload_message = {
-            "uuid": self.uuid,
-            "zoom_series_id": self._zoom_series_id,
-            "opencast_series_id": self.opencast_series_id,
-            "host_name": self._host,
-            "topic": self._topic,
-            "created": datetime.strftime(self._created_utc, TIMESTAMP_FORMAT),
-            "created_local": datetime.strftime(
-                self._created_local, TIMESTAMP_FORMAT
-            ),
-            "webhook_received_time": self._received_time,
-            "correlation_id": self._correlation_id
-        }
-        return upload_message
+        if not hasattr(self, "self._upload_message"):
+            self._upload_message = {
+                "uuid": self._uuid,
+                "zoom_series_id": self._zoom_series_id,
+                "opencast_series_id": self.opencast_series_id,
+                "host_name": self._host,
+                "topic": self._topic,
+                "created": datetime.strftime(
+                    self._created_utc, TIMESTAMP_FORMAT
+                ),
+                "created_local": datetime.strftime(
+                    self._created_local, TIMESTAMP_FORMAT
+                ),
+                "webhook_received_time": self._received_time,
+                "correlation_id": self._correlation_id
+            }
+        return self._upload_message
 
     def upload_to_s3(self):
 
-        if self.duration:
-            duration_in_mins = time.strptime(self.duration, "%H:%M:%S").tm_min
-            if duration_in_mins < MINIMUM_DURATION:
-                logger.info("Recording duration shorter than {} minutes"
-                            .format(MINIMUM_DURATION))
-                return None
+        if self._duration and self._duration < MINIMUM_DURATION:
+            logger.info("Recording duration shorter than {} minutes"
+                        .format(MINIMUM_DURATION))
+            return None
 
         if not self.opencast_series_id:
             logger.info("No opencast series match found")
             return None
 
-        logger.info("downloading {} files".format(len(self._files.count)))
+        logger.info("downloading {} files".format(self._recording_files.count))
 
-        track_sequence = 1
-        prev_file = None
-
-        for file in self.recording_files:
-            if self.recording_files.next_track_sequence(prev_file, file):
-                track_sequence += 1
-
-            logger.debug("file {} is track sequence {}"
-                         .format(file, track_sequence))
-            prev_file = file
-
-            file.stream_file_to_s3(track_sequence)
+        self._recording_files.stream_files_to_s3()
 
         return self.upload_message
 
     def send_to_deadletter_queue(self, error):
-        message = SQSMessage(self.sqs, DEADLETTER_QUEUE_NAME, self.body)
+        deadletter_queue = self.sqs.get_queue_by_name(
+                                        QueueName=DEADLETTER_QUEUE_NAME)
+        message = SQSMessage(deadletter_queue, self.body)
         message.send(error=error)
         self.delete()
-        return message.body
+        return self.body
 
     def send_to_uploader_queue(self):
-        message = SQSMessage(self.sqs, UPLOAD_QUEUE_NAME, self.upload_message)
+        upload_queue = self.sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
+        message = SQSMessage(upload_queue, self.upload_message)
         message.send()
         self.delete()
-        return message.body
+        return self.upload_message
 
     def delete(self):
         """
         Delete the message from the queue.
         """
-        self.message.delete()
+        self._message.delete()
 
 
 class SQSMessage():
 
-    def __init__(self, sqs, queue_name, message):
-        self.queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
+    def __init__(self, queue, message):
+        self.queue = queue
         self.message = message
 
     def send(self, error=None):
-        logger.debug("Sending SQS message to {}...".format(self.queue_name))
+        logger.info({
+            "Sending SQS message to ": self.queue.url,
+            "message": self.message
+        })
 
         if error is None:
             message_attributes = {}
@@ -341,73 +322,81 @@ class SQSMessage():
                     MessageAttributes=message_attributes
                 )
         except Exception as e:
-            logger.exception("Error when sending SQS message "
-                             "for meeting uuid {} to queue {}:{}"
-                             .format(self.message["uuid"],
-                                     UPLOAD_QUEUE_NAME, e))
+            logger.exception("Error when sending SQS message to queue {}:{}"
+                             .format(self.queue.url, e))
             raise
 
-        logger.debug({"Queue": UPLOAD_QUEUE_NAME,
+        logger.debug({"Queue": self.queue.url,
                       "Message sent": message_sent,
                       "FailedReason": error})
 
 
 class ZoomFile:
 
-    def __init__(self, file_data):
+    def __init__(self, meeting_uuid, admin_token, file_data):
         # TODO each file should be assigned a track sequence
-        self._file_id = file_data["id"]
+        self._admin_token = admin_token
+        self._meeting_uuid = meeting_uuid
+        self._file_id = file_data["recording_id"]
         self._download_url = file_data["download_url"]
         self.zoom_file_type = file_data["file_type"].lower()
-        self.recording_start = file_data["recording_start"]
+        self.start = file_data["recording_start"]
+        self.end = file_data["recording_end"]
+        self.view_type = file_data["view_type"]
 
     @property
     def zoom_filename(self):
-        # First request is for retrieving the filename
-        url = "{}?zak={}".format(self._download_url, self._admin_token)
-        r = requests.get(url, allow_redirects=False)
-        r.raise_for_status
+        if not hasattr(self, "_zoom_filename"):
+            # First request is for retrieving the filename
+            url = "{}?zak={}".format(self._download_url, self._admin_token)
+            r = requests.get(url, allow_redirects=False)
+            r.raise_for_status
 
-        # If the request is not authorized, Zoom will return 200 and an HTML
-        # error page
-        if "Content-Type" in r.headers and r.headers["Content-Type"] == "text/html":
-            error_message = "Request for download stream not authorized.\n"
-            if "Error" in str(r.content):
-                raise PermanentDownloadError(
-                    "{} Zoom returned an HTML error page."
-                    .format(error_message)
-                )
+            # If the request is not authorized, Zoom will return 200
+            # and an HTML error page
+            if "Content-Type" in r.headers and r.headers["Content-Type"] == "text/html":
+                error_message = "Request for download stream not authorized.\n"
+                if "Error" in str(r.content):
+                    raise PermanentDownloadError(
+                        "{} Zoom returned an HTML error page."
+                        .format(error_message)
+                    )
+                else:
+                    raise PermanentDownloadError(
+                        "{} Zoom returned stream with content type text/html."
+                        .format(error_message)
+                    )
+
+            # Filename that zoom uses should be found in the response headers
+            if "Location" in r.headers:
+                location = r.headers["Location"]
+                zoom_name = location.split("?")[0].split("/")[-1]
+            elif "Content-Disposition" in r.headers:
+                zoom_name = r.headers["Content-Disposition"].split("=")[-1]
             else:
                 raise PermanentDownloadError(
-                    "{} Zoom returned stream with content type text/html."
-                    .format(error_message)
+                    "Request for download stream from Zoom failed.\n"
+                    "Zoom name not found in headers\n"
+                    "request: {} response headers: {}".format(url, r.headers)
                 )
+            self._zoom_filename = zoom_name.lower()
+            logger.info("got filename {}".format(zoom_name))
 
-        # Filename that zoom uses should be found in the response headers
-        if "Location" in r.headers:
-            location = r.headers["Location"]
-            zoom_name = location.split("?")[0].split("/")[-1]
-        elif "Content-Disposition" in r.headers:
-            zoom_name = r.headers["Content-Disposition"].split("=")[-1]
-        else:
-            raise PermanentDownloadError(
-                "Request for download stream from Zoom failed.\n"
-                "Zoom name not found in headers\n"
-                "request: {} response headers: {}".format(url, r.headers)
-            )
-        logger.info("got filename {}".format(zoom_name))
-        return zoom_name
+        return self._zoom_filename
 
     @property
-    def s3_filename(self, file_id, meeting_id, track_sequence):
-        md5_meeting_id = md5(meeting_id.encode()).hexdigest()
-        filename = "{}/{:03d}-{}.{}".format(
-                        md5_meeting_id,
-                        track_sequence,
-                        self._file_id,
-                        self.file_extension
-                    )
-        return filename
+    def s3_filename(self):
+        if not hasattr(self, "_track_sequence"):
+            return None
+        if not hasattr(self, "_s3_filename"):
+            md5_meeting_id = md5(self._meeting_uuid.encode()).hexdigest()
+            self._s3_filename = "{}/{:03d}-{}.{}".format(
+                                    md5_meeting_id,
+                                    self._track_sequence,
+                                    self._file_id,
+                                    self.file_extension
+                                )
+        return self._s3_filename
 
     def valid_mp4_file(self):
         # TODO: if file not found, add appropriate error
@@ -439,27 +428,23 @@ class ZoomFile:
         return self._stream
 
     @property
-    def view_type(self):
-        if "gallery" in self.zoom_name.lower():
-            self._view_type = "gallery"
-        elif self.zoom_file_type == "mp4":
-            self._view_type = "speaker"
-        return self._view_type
-
-    @property
     def file_extension(self):
-        return self._zoom_name.split(".")[-1]
+        return self.zoom_filename.split(".")[-1]
 
     def stream_file_to_s3(self, track_sequence):
         s3 = boto3.client("s3")
+        self._track_sequence = track_sequence
 
         metadata = {
-            "uuid": self.uuid,
+            "uuid": self._meeting_uuid,
             "view": self.view_type,
             "file_type": self.file_extension
         }
 
-        logger.info("Beginning upload of {}".format(self.s3_filename))
+        logger.info(
+            {"uploading file to S3": self.s3_filename,
+             "metadata": metadata}
+        )
         part_info = {"Parts": []}
         mpu = s3.create_multipart_upload(
                     Bucket=ZOOM_VIDEOS_BUCKET,
@@ -496,7 +481,7 @@ class ZoomFile:
                                       Key=self.s3_filename,
                                       UploadId=mpu["UploadId"])
 
-        if self.file_type == "mp4":
+        if self.file_extension == "mp4":
             if not self.valid_mp4_file:
                 self.stream.close()
                 raise Exception("MP4 failed to transfer.")
@@ -506,10 +491,11 @@ class ZoomFile:
 
 class ZoomRecordingFiles:
 
-    def __init__(self, files):
-        self._files = [
-            ZoomFile(file) for file in self.__filter_and_sort(files)
-        ]
+    def __init__(self, meeting_uuid, recording_list):
+        self._files = []
+        admin_token = self.__admin_token
+        for file in self.__filter_and_sort(recording_list):
+            self._files.append(ZoomFile(meeting_uuid, admin_token, file))
 
     @property
     def count(self):
@@ -525,17 +511,17 @@ class ZoomRecordingFiles:
         r = ZOOM_API.get("users/{}/token?type=zak".format(admin_id))
         return r.json()["token"]
 
-    def __filter_and_sort(self, files):
+    def __filter_and_sort(self, recording_list):
         """
         Sort files by recording start time and filter out multiple MP4 files
         that occur during the same time segment. Choose which MP4
         recording_type to keep based on priority_list.
         """
-        if not files:
+        if not recording_list:
             return None
 
-        non_mp4_files = [file for file in files
-                         if file["file_type"].lower() != "mp4"]
+        non_mp4_files = [file_data for file_data in recording_list
+                         if file_data["file_type"].lower() != "mp4"]
 
         mp4_files = []
 
@@ -543,11 +529,13 @@ class ZoomRecordingFiles:
             "shared_screen_with_speaker_view",
             "shared_screen",
             "active_speaker"]
-        start_times = set([file["recording_start"] for file in files])
+        start_times = set([file_data["recording_start"]
+                           for file_data in recording_list])
         for start_time in start_times:
-            recordings = {file["view_type"]: file for file in files
-                          if file["file_type"].lower() == "mp4"
-                          and file["recording_start"] == start_time}
+            recordings = {file_data["view_type"]: file_data
+                          for file_data in recording_list
+                          if file_data["file_type"].lower() == "mp4"
+                          and file_data["recording_start"] == start_time}
 
             added_mp4 = False
             for mp4_type in priority_list:
@@ -572,22 +560,36 @@ class ZoomRecordingFiles:
 
         return sorted_files
 
-    def next_track_sequence(prev_file, file):
+    def __next_track_sequence(self, prev_file, file):
 
         if prev_file is None:
             return False
 
-        logger.debug({"start": file["recording_start"],
-                      "end": file["recording_end"]})
+        logger.debug({"start": file.start,
+                      "end": file.end})
 
-        if file["recording_start"] == prev_file["recording_start"]:
+        if file.start == prev_file.start:
             logger.debug("start matches")
-            if file["recording_end"] == prev_file["recording_end"]:
+            if file.end == prev_file.end:
                 logger.debug("end matches")
                 return False
 
-        if file["recording_start"] >= prev_file["recording_end"]:
+        if file.start >= prev_file.end:
             logger.debug("start >= end")
             return True
 
         raise PermanentDownloadError("Recording segments overlap.")
+
+    def stream_files_to_s3(self):
+        track_sequence = 1
+        prev_file = None
+
+        for file in self._files:
+            if self.__next_track_sequence(prev_file, file):
+                track_sequence += 1
+
+            logger.debug("file {} is track sequence {}"
+                         .format(file, track_sequence))
+            prev_file = file
+
+            file.stream_file_to_s3(track_sequence)

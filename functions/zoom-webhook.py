@@ -155,7 +155,7 @@ def construct_sqs_message(payload, context):
             "recording_end": file["recording_end"],
             "download_url": file["download_url"],
             "file_type": file["file_type"],
-            "view_type": file["recording_type"],
+            "recording_type": file["recording_type"],
             "status": file["status"]
         })
 
