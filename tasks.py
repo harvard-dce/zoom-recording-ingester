@@ -494,7 +494,7 @@ def test(ctx):
     """
     Execute the pytest tests
     """
-    ctx.run('py.test --cov-report term-missing --cov=functions tests')
+    ctx.run('py.test --cov-report term-missing --cov=functions tests -vv')
 
 
 @task(pre=[production_failsafe])
