@@ -183,7 +183,7 @@ class Upload:
 
     def upload(self):
         if not self.opencast_series_id:
-           raise Exception("No opencast series id found!")
+            raise Exception("No opencast series id found!")
         self.create_mediapackage_id()
         if self.already_ingested():
             logger.warning("Episode with mediapackage id {} already ingested"

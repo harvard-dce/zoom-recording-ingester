@@ -35,6 +35,15 @@ TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 ZOOM_API = ZoomAPIRequests(env("ZOOM_API_KEY"), env("ZOOM_API_SECRET"))
 
+recording_types = [
+    "shared_screen_with_speaker_view",
+    "shared_screen_with_gallery_view",
+    "shared_screen",
+    "active_speaker",
+    "audio_only",
+    "audio_transcript"
+]
+
 
 class PermanentDownloadError(Exception):
     pass
@@ -71,6 +80,9 @@ def handler(event, context):
         logger.info("No available recordings match the class schedule.")
         return
 
+    global ADMIN_TOKEN
+    ADMIN_TOKEN = get_admin_token()
+
     try:
         # upload matched recording to S3 and verify MP4 integrity
         download_message.upload_to_s3()
@@ -83,6 +95,16 @@ def handler(event, context):
     # send a message to the opencast uploader
     message = download_message.send_to_uploader_queue()
     logger.info({"Sent to uploader": message})
+
+
+def get_admin_token(self):
+    # get admin user id from admin email
+    r = ZOOM_API.get("users/{}".format(ZOOM_ADMIN_EMAIL))
+    admin_id = r.json()["id"]
+
+    # get admin level zak token from admin id
+    r = ZOOM_API.get("users/{}/token?type=zak".format(admin_id))
+    return r.json()["token"]
 
 
 class Download:
@@ -220,7 +242,8 @@ class Download:
                 logger.info("Ignoring schedule")
             else:
                 self._oc_series_id = self._series_id_from_schedule
-                print("series_id_from_schedule returned {}".format(self._oc_series_id))
+                print("series_id_from_schedule returned {}"
+                      .format(self._oc_series_id))
                 if self._oc_series_id is not None:
                     logger.info("Matched with opencast series '{}'!"
                                 .format(self._oc_series_id))
@@ -341,23 +364,12 @@ class ZoomRecordingFiles:
 
     def __init__(self, meeting_uuid, recording_list):
         self._files = []
-        admin_token = self.__admin_token
         for file in self.__filter_and_sort(recording_list):
-            self._files.append(ZoomFile(meeting_uuid, admin_token, file))
+            self._files.append(ZoomFile(meeting_uuid, file))
 
     @property
     def count(self):
         return len(self._files)
-
-    @property
-    def __admin_token(self):
-        # get admin user id from admin email
-        r = ZOOM_API.get("users/{}".format(ZOOM_ADMIN_EMAIL))
-        admin_id = r.json()["id"]
-
-        # get admin level zak token from admin id
-        r = ZOOM_API.get("users/{}/token?type=zak".format(admin_id))
-        return r.json()["token"]
 
     def __filter_and_sort(self, recording_list):
         """
@@ -380,7 +392,7 @@ class ZoomRecordingFiles:
         start_times = set([file_data["recording_start"]
                            for file_data in recording_list])
         for start_time in start_times:
-            recordings = {file_data["view_type"]: file_data
+            recordings = {file_data["recording_type"]: file_data
                           for file_data in recording_list
                           if file_data["file_type"].lower() == "mp4"
                           and file_data["recording_start"] == start_time}
@@ -445,22 +457,21 @@ class ZoomRecordingFiles:
 
 class ZoomFile:
 
-    def __init__(self, meeting_uuid, admin_token, file_data):
+    def __init__(self, meeting_uuid, file_data):
         # TODO each file should be assigned a track sequence
-        self._admin_token = admin_token
         self._meeting_uuid = meeting_uuid
         self._file_id = file_data["recording_id"]
         self._download_url = file_data["download_url"]
         self.zoom_file_type = file_data["file_type"].lower()
         self.start = file_data["recording_start"]
         self.end = file_data["recording_end"]
-        self.view_type = file_data["view_type"]
+        self.recording_type = file_data["recording_type"]
 
     @property
     def zoom_filename(self):
         if not hasattr(self, "_zoom_filename"):
             # First request is for retrieving the filename
-            url = "{}?zak={}".format(self._download_url, self._admin_token)
+            url = "{}?zak={}".format(self._download_url, ADMIN_TOKEN)
             r = requests.get(url, allow_redirects=False)
             r.raise_for_status
 
@@ -531,7 +542,7 @@ class ZoomFile:
     def stream(self):
         if not hasattr(self, "_stream"):
             logger.info("requesting {}".format(self._download_url))
-            url = "{}?zak={}".format(self._download_url, self._admin_token)
+            url = "{}?zak={}".format(self._download_url, ADMIN_TOKEN)
             r = requests.get(url, stream=True)
             r.raise_for_status
 
@@ -549,7 +560,7 @@ class ZoomFile:
 
         metadata = {
             "uuid": self._meeting_uuid,
-            "view": self.view_type,
+            "view": self.recording_type,
             "file_type": self.file_extension
         }
 
