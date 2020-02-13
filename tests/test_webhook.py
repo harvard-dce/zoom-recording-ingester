@@ -1,6 +1,5 @@
 import site
 from os.path import dirname, join
-
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 import pytest
@@ -13,12 +12,11 @@ import copy
 import json
 
 LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
+TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 webhook = import_module('zoom-webhook')
 
 tz = timezone(LOCAL_TIME_ZONE)
-FROZEN_TIME = datetime.strftime(
-    tz.localize(datetime(2018, 1, 20, 3, 44, 00, 000000)),
-    '%Y-%m-%dT%H:%M:%SZ')
+FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 
 SAMPLE_NOTIFICATION = {
     "payload": {
@@ -48,7 +46,9 @@ MOCK_CORRELATION_ID = "12345-abcde"
 MOCK_HOST_NAME = "host name"
 
 # file id renamed for sqs message
-files = copy.deepcopy(SAMPLE_NOTIFICATION["payload"]["object"]["recording_files"])
+files = copy.deepcopy(
+    SAMPLE_NOTIFICATION["payload"]["object"]["recording_files"]
+)
 files[0]["recording_id"] = files[0].pop("id")
 
 SAMPLE_SQS_MESSAGE_BODY = {
