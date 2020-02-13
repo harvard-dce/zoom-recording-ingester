@@ -12,7 +12,6 @@ DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-
 ZOOM_API = ZoomAPIRequests(env("ZOOM_API_KEY"), env("ZOOM_API_SECRET"))
 
 
@@ -106,8 +105,7 @@ def validate_payload(payload):
         "recording_end",
         "download_url",
         "file_type",
-        "recording_type",
-        "status"
+        "recording_type"
     ]
 
     try:
@@ -126,10 +124,18 @@ def validate_payload(payload):
 
         files = obj["recording_files"]
         for file in files:
+            if "file_type" not in file:
+                raise BadWebhookData("Missing required file field 'file_type'")
+            if file["file_type"].lower() != "mp4":
+                continue
             for field in required_file_fields:
                 if field not in file.keys():
                     raise BadWebhookData(
                         "Missing required file field '{}'".format(field))
+            if "status" in file and file["status"].lower() != "completed":
+                raise BadWebhookData(
+                    "File with incomplete status {}".format(file["status"])
+                )
 
     except Exception as e:
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
@@ -149,15 +155,16 @@ def construct_sqs_message(payload, context):
 
     recording_files = []
     for file in payload["object"]["recording_files"]:
-        recording_files.append({
-            "recording_id": file["id"],
-            "recording_start": file["recording_start"],
-            "recording_end": file["recording_end"],
-            "download_url": file["download_url"],
-            "file_type": file["file_type"],
-            "recording_type": file["recording_type"],
-            "status": file["status"]
-        })
+        if file["file_type"].lower() == "mp4":
+            recording_files.append({
+                "recording_id": file["id"],
+                "recording_start": file["recording_start"],
+                "recording_end": file["recording_end"],
+                "download_url": file["download_url"],
+                "file_type": file["file_type"],
+                "recording_type": file["recording_type"],
+                "status": file["status"]
+            })
 
     host = host_name(payload["object"]["host_id"])
 
