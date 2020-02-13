@@ -5,6 +5,8 @@ site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 import pytest
 import jwt
 import time
+import requests
+import requests_mock
 from common import ZoomAPIRequests
 
 
@@ -22,3 +24,42 @@ def test_gen_token(key, secret, seconds_valid):
     # should be within a second
     now = int(time.time())
     assert payload['exp'] - (now + seconds_valid) in [0, -1]
+
+
+def test_zoom_api_get_request():
+    # test missing api endpoint
+    zoom_api = ZoomAPIRequests("key", "secret")
+    with pytest.raises(Exception) as exc_info:
+        zoom_api.get(endpoint=None)
+    assert exc_info.match("missing required param 'path'")
+
+    # test successful call
+    with requests_mock.mock() as req_mock:
+        req_mock.get(
+            requests_mock.ANY,
+            status_code=200,
+            json={"mock_payload": 123}
+        )
+        r = zoom_api.get(endpoint="meetings")
+        assert "mock_payload" in r.json()
+
+    # test failed call that returns
+    with requests_mock.mock() as req_mock:
+        req_mock.get(
+            requests_mock.ANY,
+            status_code=400,
+            json={"mock_payload": 123}
+        )
+        r = zoom_api.get(endpoint="meetings", ignore_failure=True)
+        assert r.status_code == 400
+
+    # test failed call that raises
+    with requests_mock.mock() as req_mock:
+        req_mock.get(
+            requests_mock.ANY,
+            status_code=400,
+            json={"mock_payload": 123}
+        )
+        with pytest.raises(requests.exceptions.HTTPError) as exc_info:
+            zoom_api.get(endpoint="meetings", ignore_failure=False)
+            assert exc_info.match("400 Client Error")

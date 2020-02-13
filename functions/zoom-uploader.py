@@ -58,22 +58,22 @@ def handler(event, context):
     sqs = sqs_resource()
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
-    try:
-        messages = upload_queue.receive_messages(
-            MaxNumberOfMessages=1,
-            VisibilityTimeout=300
-        )
-        upload_message = messages[0]
-        logger.debug({
-            'queue_message': {
-                'attributes': upload_message.attributes,
-                'body': upload_message.body
-            }
-        })
-
-    except IndexError:
+    messages = upload_queue.receive_messages(
+        MaxNumberOfMessages=1,
+        VisibilityTimeout=300
+    )
+    if len(messages) == 0:
         logger.warning("No upload queue messages available")
         return
+
+    upload_message = messages[0]
+    logger.debug({
+        'queue_message': {
+            'attributes': upload_message.attributes,
+            'body': upload_message.body
+        }
+    })
+
     try:
         upload_data = json.loads(upload_message.body)
         logger.info(upload_data)

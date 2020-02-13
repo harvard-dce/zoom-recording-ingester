@@ -1,8 +1,6 @@
 import boto3
 import json
-import time
 import requests
-import re
 from os import getenv as env
 from hashlib import md5
 from operator import itemgetter
@@ -57,7 +55,7 @@ def handler(event, context):
     # a recoreding that matches the class schedule
     download_message = None
     for _ in range(int(DOWNLOAD_MESSAGES_PER_INVOCATION)):
-        download_message = DownloadMessage(
+        download_message = Download(
             sqs, ignore_schedule, override_series_id
         )
         if not download_message.body:
@@ -87,15 +85,30 @@ def handler(event, context):
     logger.info({"Sent to uploader": message})
 
 
-class DownloadMessage:
+class Download:
 
     def __init__(self, sqs, ignore_schedule, override_series_id):
         self.ignore_schedule = ignore_schedule
         self.override_series_id = override_series_id
         self.sqs = sqs
-        self._message = self._retrieve_message()
+        self._message = self.__retrieve_message()
 
-    def _retrieve_message(self):
+        if self._message:
+            self.body = json.loads(self._message.body)
+            logger.info({"Retrieved download message": self.body})
+
+            self._uuid = self.body["uuid"]
+            self._zoom_series_id = self.body["zoom_series_id"]
+            self._host = self.body["host_name"]
+            self._topic = self.body["topic"]
+            self._duration = self.body["duration"]
+            self._received_time = self.body["received_time"]
+            self._correlation_id = self.body["correlation_id"]
+            self._recording_files = ZoomRecordingFiles(
+                                        self._uuid,
+                                        self.body["recording_files"])
+
+    def __retrieve_message(self):
         download_queue = self.sqs.get_queue_by_name(
                                     QueueName=DOWNLOAD_QUEUE_NAME)
         messages = download_queue.receive_messages(
@@ -106,26 +119,12 @@ class DownloadMessage:
             self.body = None
             return None
 
-        message = messages[0]
-        self.body = json.loads(message.body)
-        logger.info({"Retrieved download message": self.body})
-
-        self._uuid = self.body["uuid"]
-        self._zoom_series_id = self.body["zoom_series_id"]
-        self._host = self.body["host_name"]
-        self._topic = self.body["topic"]
-        self._duration = self.body["duration"]
-        self._received_time = self.body["received_time"]
-        self._correlation_id = self.body["correlation_id"]
-        self._recording_files = ZoomRecordingFiles(
-                                    self._uuid,
-                                    self.body["recording_files"])
-        return message
+        return messages[0]
 
     @property
     def _created_utc(self):
         """
-        Time that the recording started in UTC.
+        UTC time object for recording start.
         """
         utc = datetime.strptime(
             self.body["start_time"], TIMESTAMP_FORMAT) \
@@ -134,6 +133,9 @@ class DownloadMessage:
 
     @property
     def _created_local(self):
+        """
+        Local time object for recording start.
+        """
         return self._created_utc.astimezone(timezone(LOCAL_TIME_ZONE))
 
     @property
@@ -163,11 +165,13 @@ class DownloadMessage:
         """
 
         schedule = self._class_schedule
+        print("got class schedule {}".format(schedule))
 
         if not schedule:
             return None
 
         zoom_time = self._created_local
+        print(zoom_time.strftime(TIMESTAMP_FORMAT))
         days = OrderedDict([
             ("M", "Mondays"),
             ("T", "Tuesdays"),
@@ -196,6 +200,7 @@ class DownloadMessage:
                      "opencast scheduled start time."
                      .format(BUFFER_MINUTES))
 
+        print("reached end of function")
         return None
 
     @property
@@ -215,6 +220,7 @@ class DownloadMessage:
                 logger.info("Ignoring schedule")
             else:
                 self._oc_series_id = self._series_id_from_schedule
+                print("series_id_from_schedule returned {}".format(self._oc_series_id))
                 if self._oc_series_id is not None:
                     logger.info("Matched with opencast series '{}'!"
                                 .format(self._oc_series_id))
@@ -329,6 +335,112 @@ class SQSMessage():
         logger.debug({"Queue": self.queue.url,
                       "Message sent": message_sent,
                       "FailedReason": error})
+
+
+class ZoomRecordingFiles:
+
+    def __init__(self, meeting_uuid, recording_list):
+        self._files = []
+        admin_token = self.__admin_token
+        for file in self.__filter_and_sort(recording_list):
+            self._files.append(ZoomFile(meeting_uuid, admin_token, file))
+
+    @property
+    def count(self):
+        return len(self._files)
+
+    @property
+    def __admin_token(self):
+        # get admin user id from admin email
+        r = ZOOM_API.get("users/{}".format(ZOOM_ADMIN_EMAIL))
+        admin_id = r.json()["id"]
+
+        # get admin level zak token from admin id
+        r = ZOOM_API.get("users/{}/token?type=zak".format(admin_id))
+        return r.json()["token"]
+
+    def __filter_and_sort(self, recording_list):
+        """
+        Sort files by recording start time and filter out multiple MP4 files
+        that occur during the same time segment. Choose which MP4
+        recording_type to keep based on priority_list.
+        """
+        if not recording_list:
+            return None
+
+        non_mp4_files = [file_data for file_data in recording_list
+                         if file_data["file_type"].lower() != "mp4"]
+
+        mp4_files = []
+
+        priority_list = [
+            "shared_screen_with_speaker_view",
+            "shared_screen",
+            "active_speaker"]
+        start_times = set([file_data["recording_start"]
+                           for file_data in recording_list])
+        for start_time in start_times:
+            recordings = {file_data["view_type"]: file_data
+                          for file_data in recording_list
+                          if file_data["file_type"].lower() == "mp4"
+                          and file_data["recording_start"] == start_time}
+
+            added_mp4 = False
+            for mp4_type in priority_list:
+                if mp4_type in recordings:
+                    logger.debug("Selected MP4 recording type '{}' "
+                                 "for start time {}."
+                                 .format(mp4_type, start_time))
+                    added_mp4 = True
+                    mp4_files.append(recordings[mp4_type])
+                    break
+
+            # make sure at least one mp4 is added, in case the zoom api changes
+            if not added_mp4 and recordings:
+                logger.warning("No MP4 found with the 'recording_type'"
+                               "shared_screen_with_speaker_view, "
+                               "shared_screen, or"
+                               "active_speaker.")
+                mp4_files.append(recordings.values()[0])
+
+        sorted_files = sorted(mp4_files + non_mp4_files,
+                              key=itemgetter("recording_start"))
+
+        return sorted_files
+
+    def __next_track_sequence(self, prev_file, file):
+
+        if not prev_file:
+            return False
+
+        logger.debug({"start": file.start,
+                      "end": file.end})
+
+        if file.start == prev_file.start:
+            logger.debug("start matches")
+            if file.end == prev_file.end:
+                logger.debug("end matches")
+                return False
+
+        if file.start >= prev_file.end:
+            logger.debug("start >= end")
+            return True
+
+        raise PermanentDownloadError("Recording segments overlap.")
+
+    def stream_files_to_s3(self):
+        track_sequence = 1
+        prev_file = None
+
+        for file in self._files:
+            if self.__next_track_sequence(prev_file, file):
+                track_sequence += 1
+
+            logger.debug("file {} is track sequence {}"
+                         .format(file, track_sequence))
+            prev_file = file
+
+            file.stream_file_to_s3(track_sequence)
 
 
 class ZoomFile:
@@ -487,109 +599,3 @@ class ZoomFile:
                 raise Exception("MP4 failed to transfer.")
 
         self.stream.close()
-
-
-class ZoomRecordingFiles:
-
-    def __init__(self, meeting_uuid, recording_list):
-        self._files = []
-        admin_token = self.__admin_token
-        for file in self.__filter_and_sort(recording_list):
-            self._files.append(ZoomFile(meeting_uuid, admin_token, file))
-
-    @property
-    def count(self):
-        return len(self._files)
-
-    @property
-    def __admin_token(self):
-        # get admin user id from admin email
-        r = ZOOM_API.get("users/{}".format(ZOOM_ADMIN_EMAIL))
-        admin_id = r.json()["id"]
-
-        # get admin level zak token from admin id
-        r = ZOOM_API.get("users/{}/token?type=zak".format(admin_id))
-        return r.json()["token"]
-
-    def __filter_and_sort(self, recording_list):
-        """
-        Sort files by recording start time and filter out multiple MP4 files
-        that occur during the same time segment. Choose which MP4
-        recording_type to keep based on priority_list.
-        """
-        if not recording_list:
-            return None
-
-        non_mp4_files = [file_data for file_data in recording_list
-                         if file_data["file_type"].lower() != "mp4"]
-
-        mp4_files = []
-
-        priority_list = [
-            "shared_screen_with_speaker_view",
-            "shared_screen",
-            "active_speaker"]
-        start_times = set([file_data["recording_start"]
-                           for file_data in recording_list])
-        for start_time in start_times:
-            recordings = {file_data["view_type"]: file_data
-                          for file_data in recording_list
-                          if file_data["file_type"].lower() == "mp4"
-                          and file_data["recording_start"] == start_time}
-
-            added_mp4 = False
-            for mp4_type in priority_list:
-                if mp4_type in recordings:
-                    logger.debug("Selected MP4 recording type '{}' "
-                                 "for start time {}."
-                                 .format(mp4_type, start_time))
-                    added_mp4 = True
-                    mp4_files.append(recordings[mp4_type])
-                    break
-
-            # make sure at least one mp4 is added, in case the zoom api changes
-            if not added_mp4 and recordings:
-                logger.warning("No MP4 found with the 'recording_type'"
-                               "shared_screen_with_speaker_view, "
-                               "shared_screen, or"
-                               "active_speaker.")
-                mp4_files.append(recordings.values()[0])
-
-        sorted_files = sorted(mp4_files + non_mp4_files,
-                              key=itemgetter("recording_start"))
-
-        return sorted_files
-
-    def __next_track_sequence(self, prev_file, file):
-
-        if prev_file is None:
-            return False
-
-        logger.debug({"start": file.start,
-                      "end": file.end})
-
-        if file.start == prev_file.start:
-            logger.debug("start matches")
-            if file.end == prev_file.end:
-                logger.debug("end matches")
-                return False
-
-        if file.start >= prev_file.end:
-            logger.debug("start >= end")
-            return True
-
-        raise PermanentDownloadError("Recording segments overlap.")
-
-    def stream_files_to_s3(self):
-        track_sequence = 1
-        prev_file = None
-
-        for file in self._files:
-            if self.__next_track_sequence(prev_file, file):
-                track_sequence += 1
-
-            logger.debug("file {} is track sequence {}"
-                         .format(file, track_sequence))
-            prev_file = file
-
-            file.stream_file_to_s3(track_sequence)

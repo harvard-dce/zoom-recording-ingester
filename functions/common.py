@@ -51,22 +51,22 @@ class ZoomAPIRequests:
         self.secret = zoom_api_secret
         self.base_url = ZOOM_API_BASE_URL
 
-    def __gen_token(self, seconds_valid=60):
+    def gen_token(self, seconds_valid=60):
         header = {"alg": "HS256", "typ": "JWT"}
         payload = {"iss": self.key, "exp": int(time.time() + seconds_valid)}
         return jwt.encode(payload, self.secret, headers=header)
 
-    def get(self, path, seconds_valid=60, ignore_failure=False):
-        if not path:
+    def get(self, endpoint, seconds_valid=60, ignore_failure=False):
+        if not endpoint:
             raise Exception(
                 "Call to ZoomAPIRequests.get "
                 "missing required param 'path'"
             )
 
-        url = "{}{}".format(self.base_url, path)
+        url = "{}{}".format(self.base_url, endpoint)
         headers = {
             "Authorization": "Bearer {}"
-            .format(self.__gen_token(seconds_valid).decode())}
+            .format(self.gen_token(seconds_valid).decode())}
         r = requests.get(url, headers=headers)
 
         if not ignore_failure:
