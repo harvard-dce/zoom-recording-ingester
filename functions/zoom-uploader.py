@@ -3,11 +3,13 @@ import boto3
 import requests
 from requests.auth import HTTPDigestAuth
 from urllib.parse import urljoin
-from hashlib import md5
 from os import getenv as env
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
+from datetime import datetime
+from hashlib import md5
 from uuid import UUID
+
 
 import logging
 from common import setup_logging
@@ -24,6 +26,7 @@ ZOOM_OPENCAST_FLAVOR = env('OC_FLAVOR')
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
 OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 s3 = boto3.resource('s3')
 
@@ -34,6 +37,14 @@ session.headers.update({
     'X-Opencast-Matterhorn-Authentication': 'true',
 
 })
+
+MP4_VIEW_PRIORITY_LIST = [
+    "active_speaker",
+    "shared_screen_with_speaker_view",
+    "shared_screen",
+    "shared_screen_with_gallery_view",
+    "gallery_view"
+]
 
 
 def oc_api_request(method, endpoint, **kwargs):
@@ -92,6 +103,7 @@ def handler(event, context):
 def process_upload(upload_data):
     upload = Upload(upload_data)
     upload.upload()
+    logger.info({"minutes in pipeline": upload.minutes_in_pipeline})
     return upload.workflow_id
 
 
@@ -113,12 +125,21 @@ class Upload:
         return self.data['uuid']
 
     @property
-    def s3_prefix(self):
-        return md5(self.meeting_uuid.encode()).hexdigest()
+    def mediapackage_id(self):
+        if not hasattr(self, "_opencast_mpid"):
+            mpid = str(UUID(md5(self._uuid.encode()).hexdigest()))
+            logger.debug("Created mediapackage id {} from uuid {}"
+                         .format(mpid, self._uuid))
+            self._opencast_mpid = mpid
+        return self._opencast_mpid
 
     @property
     def zoom_series_id(self):
         return self.data['zoom_series_id']
+
+    @property
+    def created_local(self):
+        return self.data["created_local"]
 
     @property
     def override_series_id(self):
@@ -127,6 +148,16 @@ class Upload:
     @property
     def opencast_series_id(self):
         return self.data['opencast_series_id']
+
+    @property
+    def minutes_in_pipeline(self):
+        webhook_received_time = datetime.strptime(
+                                    self.data["webhook_received_time"],
+                                    TIMESTAMP_FORMAT
+                                )
+        ingest_time = datetime.utcnow()
+        duration = ingest_time - webhook_received_time
+        return duration.total_seconds() // 60
 
     @property
     def type_num(self):
@@ -152,24 +183,24 @@ class Upload:
     def s3_files(self):
         if not hasattr(self, '_s3_files'):
             bucket = s3.Bucket(ZOOM_VIDEOS_BUCKET)
+            prefix = "{}/{}".format(self.zoom_series_id, self.created_local)
             logger.info("Looking for files in {} with prefix {}"
-                        .format(ZOOM_VIDEOS_BUCKET, self.s3_prefix))
-            objs = [
-                x.Object() for x in bucket.objects.filter(Prefix=self.s3_prefix)
-            ]
-            self._s3_files = [
-                x for x in objs if 'directory' not in x.content_type
-            ]
+                        .format(ZOOM_VIDEOS_BUCKET, prefix))
+            objs = []
+            for x in bucket.objects.filter(Prefix=prefix):
+                objs.append(x.Object())
+            self._s3_files = {}
+
+            for x in objs:
+                if 'directory' in x.content_type:
+                    continue
+                s3_filename = x.key.split("/")[-1]
+                recording_type = s3_filename.split("-")[1].split(".")[0]
+                if recording_type not in self._s3_files:
+                    self._s3_files[recording_type] = []
+                self._s3_files[recording_type].append(x)
             logger.debug({'s3_files': self._s3_files})
         return self._s3_files
-
-    @property
-    def speaker_videos(self):
-        return self._get_video_files('speaker')
-
-    @property
-    def gallery_videos(self):
-        return self._get_video_files('gallery')
 
     @property
     def workflow_id(self):
@@ -184,7 +215,6 @@ class Upload:
     def upload(self):
         if not self.opencast_series_id:
             raise Exception("No opencast series id found!")
-        self.create_mediapackage_id()
         if self.already_ingested():
             logger.warning("Episode with mediapackage id {} already ingested"
                            .format(self.mediapackage_id))
@@ -204,12 +234,6 @@ class Upload:
             if e.response.status_code == '404':
                 return False
 
-    def create_mediapackage_id(self):
-        mpid = str(UUID(md5(self.meeting_uuid.encode()).hexdigest()))
-        logger.debug("Created mediapackage id {} from uuid {}"
-                     .format(mpid, self.meeting_uuid))
-        self.mediapackage_id = mpid
-
     def get_series_catalog(self):
 
         logger.info("Getting series catalog for series: {}"
@@ -223,17 +247,21 @@ class Upload:
         self.series_catalog = resp.text
 
     def ingest(self):
+        logger.info("Adding mediapackage and ingesting.")
 
-        logger.info("Adding mediapackage and ingesting")
+        found_mp4 = False
+        for view_type in MP4_VIEW_PRIORITY_LIST:
+            if view_type in self.s3_files:
+                logger.info("Found {} in files")
+                video_files = self.s3_files[view_type]
+                found_mp4 = True
+                break
 
-        if self.speaker_videos is not None:
-            videos = self.speaker_videos
-        elif self.gallery_videos is not None:
-            videos = self.gallery_videos
-        else:
+        if not found_mp4:
             raise Exception("No mp4 files available for upload.")
 
-        endpoint = "/ingest/addMediaPackage/{}".format(self.workflow_definition_id)
+        endpoint = ("/ingest/addMediaPackage/{}"
+                    .format(self.workflow_definition_id))
 
         params = [
             ('creator', (None, escape(self.creator))),
@@ -241,7 +269,10 @@ class Upload:
             ('title', (None, "Lecture")),
             ('type', (None, self.type_num)),
             ('isPartOf', (None, self.opencast_series_id)),
-            ('license', (None, 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')),
+            ('license',
+                (None,
+                 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')
+             ),
             ('publisher', (None, escape(self.publisher))),
             ('created', (None, self.created)),
             ('language', (None, 'en')),
@@ -250,8 +281,8 @@ class Upload:
             ('spatial', (None, "Zoom"))
         ]
 
-        for video in videos:
-            url = self._generate_presigned_url(video)
+        for file in video_files:
+            url = self._generate_presigned_url(file)
             params.extend([
                 ('flavor', (None, escape(ZOOM_OPENCAST_FLAVOR))),
                 ('mediaUri', (None, url))
@@ -269,13 +300,3 @@ class Upload:
             Params={'Bucket': video.bucket_name, 'Key': video.key}
         )
         return url
-
-    def _get_video_files(self, view):
-        files = [
-            x for x in self.s3_files
-            if x.metadata['file_type'].lower() == 'mp4'
-               and x.metadata.get('view') == view
-        ]
-        if len(files) == 0:
-            return None
-        return files
