@@ -14,6 +14,7 @@ idna==2.8                 # via requests
 jmespath==0.9.4           # via boto3, botocore
 pyjwt==1.7.1
 python-dateutil==2.8.0    # via botocore
+python-dotenv==0.11.0
 pytz==2019.3
 requests==2.22.0
 s3transfer==0.2.1         # via boto3
