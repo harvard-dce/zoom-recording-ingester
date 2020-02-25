@@ -2,7 +2,7 @@ import boto3
 import json
 import requests
 from os import getenv as env
-from common import setup_logging, ZoomAPIRequests
+from common import setup_logging, ZoomApiRequest, TIMESTAMP_FORMAT
 import subprocess
 from pytz import timezone
 from datetime import datetime
@@ -16,7 +16,7 @@ logger = logging.getLogger()
 warnings.filterwarnings(
     action='ignore',
     category=SyntaxWarning,
-    module=r'jmespath\.visitor'
+    module=r'jmespath/visitor'
 )
 
 ZOOM_VIDEOS_BUCKET = env("ZOOM_VIDEOS_BUCKET")
@@ -36,10 +36,6 @@ DOWNLOAD_MESSAGES_PER_INVOCATION = env('DOWNLOAD_MESSAGES_PER_INVOCATION')
 BUFFER_MINUTES = 30
 # Ignore recordings that are less than MIN_DURATION (in minutes)
 MINIMUM_DURATION = 2
-
-TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-
-ZOOM_API = ZoomAPIRequests(env("ZOOM_API_KEY"), env("ZOOM_API_SECRET"))
 
 
 class PermanentDownloadError(Exception):
@@ -96,27 +92,15 @@ def handler(event, context):
 
 def get_admin_token():
     # get admin user id from admin email
-    r = ZOOM_API.get("users/{}".format(ZOOM_ADMIN_EMAIL))
+    r = ZoomApiRequest().get("users/{}".format(ZOOM_ADMIN_EMAIL))
     admin_id = r.json()["id"]
 
     # get admin level zak token from admin id
-    r = ZOOM_API.get("users/{}/token?type=zak".format(admin_id))
+    r = ZoomApiRequest().get("users/{}/token?type=zak".format(admin_id))
     return r.json()["token"]
 
 
 class Download:
-
-    def __new__(self, sqs=None, ignore_schedule=None, override_series_id=None):
-        """
-        Override default __new__ function which runs before __init__.
-        Create a singleton.
-        """
-        if not hasattr(self, "_instance"):
-            if not sqs:
-                raise Exception("Missing required Download() param sqs")
-            self._instance = super(Download, self).__new__(self)
-            self._instance.__init__(self, sqs, ignore_schedule, override_series_id)
-        return self._instance
 
     def __init__(self, sqs, ignore_schedule, override_series_id):
         self.ignore_schedule = ignore_schedule
@@ -136,7 +120,10 @@ class Download:
             self._received_time = self.body["received_time"]
             self._correlation_id = self.body["correlation_id"]
             self._recording_files = ZoomRecordingFiles(
-                                        self.body["recording_files"])
+                                        self.body["recording_files"],
+                                        self._uuid,
+                                        self._zoom_series_id,
+                                        self.created_local)
 
     def __retrieve_message(self):
         download_queue = self.sqs.get_queue_by_name(
@@ -180,7 +167,7 @@ class Download:
     @property
     def created_local(self):
         return datetime.strftime(
-            self._created_local_object_object, TIMESTAMP_FORMAT
+            self._created_local_object, TIMESTAMP_FORMAT
         )
 
     @property
@@ -383,14 +370,17 @@ class SQSMessage():
 
 class ZoomRecordingFiles:
 
-    def __init__(self, recording_list):
+    def __init__(self, recording_list, uuid, zoom_series_id, created_local_ts):
         self._files = []
 
         self.tracks = self.__organize_by_track(recording_list)
         for track_sequence in range(len(self.tracks)):
-            for file in self.tracks[track_sequence].values():
+            for file_data in self.tracks[track_sequence].values():
+                file_data["meeting_uuid"] = uuid
+                file_data["zoom_series_id"] = zoom_series_id
+                file_data["created_local_ts"] = created_local_ts
                 self._files.append(
-                    ZoomFile(file, track_sequence)
+                    ZoomFile(file_data, track_sequence)
                 )
 
     @property
@@ -419,8 +409,10 @@ class ZoomFile:
     def __init__(self, file_data, track_sequence):
         # TODO each file should be assigned a track sequence
         self._track_sequence = track_sequence
-        self._meeting_uuid = Download().uuid
+        self._meeting_uuid = file_data["meeting_uuid"]
         self._file_id = file_data["recording_id"]
+        self._zoom_series_id = file_data["zoom_series_id"]
+        self._created_local_ts = file_data["created_local_ts"]
         self._download_url = file_data["download_url"]
         self.zoom_file_type = file_data["file_type"].lower()
         self.start = file_data["recording_start"]
@@ -473,8 +465,8 @@ class ZoomFile:
             return None
         if not hasattr(self, "_s3_filename"):
             self._s3_filename = "{}/{}/{:03d}-{}.{}".format(
-                                    Download().zoom_series_id,
-                                    Download().created_local_timestamp,
+                                    self._zoom_series_id,
+                                    self._created_local_ts,
                                     self._track_sequence,
                                     self.recording_type,
                                     self.file_extension

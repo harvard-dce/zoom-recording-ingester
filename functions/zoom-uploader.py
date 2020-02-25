@@ -9,6 +9,7 @@ from xml.sax.saxutils import escape
 from datetime import datetime
 from hashlib import md5
 from uuid import UUID
+from common import TIMESTAMP_FORMAT
 
 
 import logging
@@ -19,22 +20,21 @@ UPLOAD_QUEUE_NAME = env("UPLOAD_QUEUE_NAME")
 OPENCAST_BASE_URL = env("OPENCAST_BASE_URL")
 OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
-ZOOM_VIDEOS_BUCKET = env('ZOOM_VIDEOS_BUCKET')
-ZOOM_RECORDING_TYPE_NUM = 'L01'
-ZOOM_OPENCAST_WORKFLOW = env('OC_WORKFLOW')
-ZOOM_OPENCAST_FLAVOR = env('OC_FLAVOR')
+ZOOM_VIDEOS_BUCKET = env("ZOOM_VIDEOS_BUCKET")
+ZOOM_RECORDING_TYPE_NUM = "L01"
+ZOOM_OPENCAST_WORKFLOW = env("OC_WORKFLOW")
+ZOOM_OPENCAST_FLAVOR = env("OC_FLAVOR")
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
 OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
-TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-s3 = boto3.resource('s3')
+s3 = boto3.resource("s3")
 
 session = requests.Session()
 session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
 session.headers.update({
-    'X-REQUESTED-AUTH': 'Digest',
-    'X-Opencast-Matterhorn-Authentication': 'true',
+    "X-REQUESTED-AUTH": "Digest",
+    "X-Opencast-Matterhorn-Authentication": "true",
 
 })
 
@@ -49,7 +49,7 @@ MP4_VIEW_PRIORITY_LIST = [
 
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
-    logger.info({'url': url, 'kwargs': kwargs})
+    logger.info({"url": url, "kwargs": kwargs})
     try:
         resp = session.request(method, url, **kwargs)
     except requests.RequestException:
@@ -60,7 +60,7 @@ def oc_api_request(method, endpoint, **kwargs):
 
 # boto resource/client setup must be wrapped for unit testing
 def sqs_resource():
-    return boto3.resource('sqs')
+    return boto3.resource("sqs")
 
 
 @setup_logging
@@ -79,9 +79,9 @@ def handler(event, context):
 
     upload_message = messages[0]
     logger.debug({
-        'queue_message': {
-            'attributes': upload_message.attributes,
-            'body': upload_message.body
+        "queue_message": {
+            "attributes": upload_message.attributes,
+            "body": upload_message.body
         }
     })
 
@@ -114,28 +114,28 @@ class Upload:
 
     @property
     def creator(self):
-        return self.data['host_name']
+        return self.data["host_name"]
 
     @property
     def created(self):
-        return self.data['created']
+        return self.data["created"]
 
     @property
     def meeting_uuid(self):
-        return self.data['uuid']
+        return self.data["uuid"]
 
     @property
     def mediapackage_id(self):
         if not hasattr(self, "_opencast_mpid"):
-            mpid = str(UUID(md5(self._uuid.encode()).hexdigest()))
+            mpid = str(UUID(md5(self.meeting_uuid.encode()).hexdigest()))
             logger.debug("Created mediapackage id {} from uuid {}"
-                         .format(mpid, self._uuid))
+                         .format(mpid, self.meeting_uuid))
             self._opencast_mpid = mpid
         return self._opencast_mpid
 
     @property
     def zoom_series_id(self):
-        return self.data['zoom_series_id']
+        return self.data["zoom_series_id"]
 
     @property
     def created_local(self):
@@ -143,11 +143,11 @@ class Upload:
 
     @property
     def override_series_id(self):
-        return self.data.get('override_series_id')
+        return self.data.get("override_series_id")
 
     @property
     def opencast_series_id(self):
-        return self.data['opencast_series_id']
+        return self.data["opencast_series_id"]
 
     @property
     def minutes_in_pipeline(self):
@@ -165,13 +165,13 @@ class Upload:
 
     @property
     def publisher(self):
-        series_data = {k: v[0]['value'] for k, v in
-                       json.loads(self.series_catalog)['http://purl.org/dc/terms/'].items()}
+        series_data = {k: v[0]["value"] for k, v in
+                       json.loads(self.series_catalog)["http://purl.org/dc/terms/"].items()}
 
         if OVERRIDE_PUBLISHER and OVERRIDE_PUBLISHER != "None":
             return OVERRIDE_PUBLISHER
-        elif 'publisher' in series_data:
-            return series_data['publisher']
+        elif "publisher" in series_data:
+            return series_data["publisher"]
         elif DEFAULT_PUBLISHER:
             return DEFAULT_PUBLISHER
 
@@ -181,7 +181,7 @@ class Upload:
 
     @property
     def s3_files(self):
-        if not hasattr(self, '_s3_files'):
+        if not hasattr(self, "_s3_files"):
             bucket = s3.Bucket(ZOOM_VIDEOS_BUCKET)
             prefix = "{}/{}".format(self.zoom_series_id, self.created_local)
             logger.info("Looking for files in {} with prefix {}"
@@ -192,24 +192,24 @@ class Upload:
             self._s3_files = {}
 
             for x in objs:
-                if 'directory' in x.content_type:
+                if "directory" in x.content_type:
                     continue
                 s3_filename = x.key.split("/")[-1]
                 recording_type = s3_filename.split("-")[1].split(".")[0]
                 if recording_type not in self._s3_files:
                     self._s3_files[recording_type] = []
                 self._s3_files[recording_type].append(x)
-            logger.debug({'s3_files': self._s3_files})
+            logger.debug({"s3_files": self._s3_files})
         return self._s3_files
 
     @property
     def workflow_id(self):
-        if not hasattr(self, 'workflow_xml'):
+        if not hasattr(self, "workflow_xml"):
             logger.warning("No workflow xml yet!")
             return None
-        if not hasattr(self, '_workflow_id'):
+        if not hasattr(self, "_workflow_id"):
             root = ET.fromstring(self.workflow_xml)
-            self._workflow_id = root.attrib['id']
+            self._workflow_id = root.attrib["id"]
         return self._workflow_id
 
     def upload(self):
@@ -224,14 +224,14 @@ class Upload:
         return self.workflow_id
 
     def already_ingested(self):
-        endpoint = '/workflow/instances.json?mp={}'.format(self.mediapackage_id)
+        endpoint = "/workflow/instances.json?mp={}".format(self.mediapackage_id)
         try:
-            resp = oc_api_request('GET', endpoint)
+            resp = oc_api_request("GET", endpoint)
             logger.debug("Lookup for mpid: {}, {}"
                          .format(self.mediapackage_id, resp.json()))
             return int(resp.json()["workflows"]["totalCount"]) > 0
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == '404':
+            if e.response.status_code == "404":
                 return False
 
     def get_series_catalog(self):
@@ -240,63 +240,62 @@ class Upload:
                     .format(self.opencast_series_id))
 
         endpoint = "/series/{}.json".format(self.opencast_series_id)
-        resp = oc_api_request('GET', endpoint)
+        resp = oc_api_request("GET", endpoint)
 
-        logger.debug({'series_catalog': resp.text})
+        logger.debug({"series_catalog": resp.text})
 
         self.series_catalog = resp.text
 
     def ingest(self):
         logger.info("Adding mediapackage and ingesting.")
 
-        found_mp4 = False
+        video_files = None
         for view_type in MP4_VIEW_PRIORITY_LIST:
             if view_type in self.s3_files:
-                logger.info("Found {} in files")
                 video_files = self.s3_files[view_type]
-                found_mp4 = True
+                logger.info("Found '{}' view in files".format(view_type))
                 break
 
-        if not found_mp4:
+        if not video_files:
             raise Exception("No mp4 files available for upload.")
 
         endpoint = ("/ingest/addMediaPackage/{}"
                     .format(self.workflow_definition_id))
 
         params = [
-            ('creator', (None, escape(self.creator))),
-            ('identifier', (None, self.mediapackage_id)),
-            ('title', (None, "Lecture")),
-            ('type', (None, self.type_num)),
-            ('isPartOf', (None, self.opencast_series_id)),
-            ('license',
+            ("creator", (None, escape(self.creator))),
+            ("identifier", (None, self.mediapackage_id)),
+            ("title", (None, "Lecture")),
+            ("type", (None, self.type_num)),
+            ("isPartOf", (None, self.opencast_series_id)),
+            ("license",
                 (None,
-                 'Creative Commons 3.0: Attribution-NonCommercial-NoDerivs')
+                 "Creative Commons 3.0: Attribution-NonCommercial-NoDerivs")
              ),
-            ('publisher', (None, escape(self.publisher))),
-            ('created', (None, self.created)),
-            ('language', (None, 'en')),
-            ('seriesDCCatalog', (None, self.series_catalog)),
-            ('source', (None, "Zoom")),
-            ('spatial', (None, "Zoom"))
+            ("publisher", (None, escape(self.publisher))),
+            ("created", (None, self.created)),
+            ("language", (None, "en")),
+            ("seriesDCCatalog", (None, self.series_catalog)),
+            ("source", (None, "Zoom")),
+            ("spatial", (None, "Zoom"))
         ]
 
         for file in video_files:
             url = self._generate_presigned_url(file)
             params.extend([
-                ('flavor', (None, escape(ZOOM_OPENCAST_FLAVOR))),
-                ('mediaUri', (None, url))
+                ("flavor", (None, escape(ZOOM_OPENCAST_FLAVOR))),
+                ("mediaUri", (None, url))
             ])
 
-        resp = oc_api_request('POST', endpoint, files=params)
+        resp = oc_api_request("POST", endpoint, files=params)
 
-        logger.debug({'addMediaPackage': resp.text})
+        logger.debug({"addMediaPackage": resp.text})
 
         self.workflow_xml = resp.text
 
     def _generate_presigned_url(self, video):
         url = s3.meta.client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': video.bucket_name, 'Key': video.key}
+            "get_object",
+            Params={"Bucket": video.bucket_name, "Key": video.key}
         )
         return url

@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import ZoomAPIRequests
+from functions.common import ZoomApiRequest
 from pytz import timezone
 from multiprocessing import Process
 
@@ -27,14 +27,14 @@ OC_CLUSTER_NAME = env('OC_CLUSTER_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
 
-ZOOM_API = ZoomAPIRequests(env('ZOOM_API_KEY'), env('ZOOM_API_SECRET'))
-
 FUNCTION_NAMES = [
     'zoom-webhook',
     'zoom-downloader',
     'zoom-uploader',
     'zoom-log-notifications'
 ]
+
+zoom_api_request = ZoomApiRequest(env("ZOOM_API_KEY"), env("ZOOM_API_SECRET"))
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
@@ -201,14 +201,14 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         uuid = meeting['uuid']
         series_id = meeting['id']
 
-        r = ZOOM_API.get(
+        r = zoom_api_request.get(
             "meetings/{}".format(series_id), ignore_failure=True
         )
         if r.status_code == 404:
             continue
         r.raise_for_status()
 
-        r = ZOOM_API.get(
+        r = zoom_api_request.get(
             "meetings/{}/recordings".format(uuid), ignore_failure=True
         )
         if r.status_code == 404:
@@ -305,7 +305,7 @@ def exec_webhook(ctx, uuid):
         api_resources
     )
 
-    data = ZOOM_API.get("meetings/{}/recordings".format(uuid)).json()
+    data = zoom_api_request.get("meetings/{}/recordings".format(uuid)).json()
 
     required_fields = ["host_id", "recording_files"]
     for field in required_fields:
@@ -1360,7 +1360,7 @@ def __get_meetings(date):
             else:
                 path = base_path
 
-            r = ZOOM_API.get(path, ignore_failure=True)
+            r = zoom_api_request.get(path, ignore_failure=True)
             if r.status_code == 429:
                 print("API rate limited, waiting 10 seconds to retry...")
                 time.sleep(10)

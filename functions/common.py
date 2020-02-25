@@ -9,6 +9,9 @@ from os import getenv as env
 LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
 BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'
 ZOOM_API_BASE_URL = "https://api.zoom.us/v2/"
+ZOOM_API_KEY = env("ZOOM_API_KEY")
+ZOOM_API_SECRET = env("ZOOM_API_SECRET")
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def setup_logging(handler_func):
@@ -44,11 +47,11 @@ def setup_logging(handler_func):
     return wrapped_func
 
 
-class ZoomAPIRequests:
+class ZoomApiRequest:
 
-    def __init__(self, zoom_api_key, zoom_api_secret):
-        self.key = zoom_api_key
-        self.secret = zoom_api_secret
+    def __init__(self, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET):
+        self.key = key
+        self.secret = secret
         self.base_url = ZOOM_API_BASE_URL
 
     def gen_token(self, seconds_valid=60):
