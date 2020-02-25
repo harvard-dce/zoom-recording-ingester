@@ -1,6 +1,6 @@
 import json
 from os import getenv as env
-from common import setup_logging, ZoomAPIRequests
+from common import setup_logging, ZoomApiRequest, TIMESTAMP_FORMAT
 from datetime import datetime
 from pytz import timezone
 import boto3
@@ -11,8 +11,6 @@ logger = logging.getLogger()
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
-TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-ZOOM_API = ZoomAPIRequests(env("ZOOM_API_KEY"), env("ZOOM_API_SECRET"))
 
 
 class BadWebhookData(Exception):
@@ -142,7 +140,7 @@ def validate_payload(payload):
 
 
 def host_name(host_id):
-    resp = ZOOM_API.get("users/{}".format(host_id)).json()
+    resp = ZoomApiRequest().get("users/{}".format(host_id)).json()
     logger.info({"Host details": resp})
     name = "{} {}".format(resp["first_name"], resp["last_name"])
     return name
