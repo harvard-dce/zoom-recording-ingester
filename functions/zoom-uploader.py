@@ -294,8 +294,10 @@ class Upload:
         self.workflow_xml = resp.text
 
     def _generate_presigned_url(self, video):
+        logger.info("Generate presigned url bucket {} key {}".format(video.bucket_name, video.key))
         url = s3.meta.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": video.bucket_name, "Key": video.key}
         )
+        logger.info("Got presigned url {}".format(url))
         return url

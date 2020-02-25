@@ -8,16 +8,8 @@ from pytz import timezone
 from datetime import datetime
 from collections import OrderedDict
 import logging
-import warnings
 
 logger = logging.getLogger()
-
-# ignore syntax warning in current version of jmespath
-warnings.filterwarnings(
-    action='ignore',
-    category=SyntaxWarning,
-    module=r'jmespath/visitor'
-)
 
 ZOOM_VIDEOS_BUCKET = env("ZOOM_VIDEOS_BUCKET")
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
