@@ -143,7 +143,7 @@ class Download:
                 for file_data in tracks[track_sequence].values():
                     file_data["meeting_uuid"] = self._uuid
                     file_data["zoom_series_id"] = self._zoom_series_id
-                    file_data["created_local_ts"] = self.created_local
+                    file_data["created_local"] = self._created_local
                     self._recording_files.append(
                         ZoomFile(file_data, track_sequence)
                     )
@@ -158,7 +158,7 @@ class Download:
         return self._zoom_series_id
 
     @property
-    def _created_utc_object(self):
+    def _created_utc(self):
         """
         UTC time object for recording start.
         """
@@ -168,18 +168,12 @@ class Download:
         return utc
 
     @property
-    def _created_local_object(self):
+    def _created_local(self):
         """
         Local time object for recording start.
         """
         tz = timezone(LOCAL_TIME_ZONE)
-        return self._created_utc_object.astimezone(tz)
-
-    @property
-    def created_local(self):
-        return datetime.strftime(
-            self._created_local_object, TIMESTAMP_FORMAT
-        )
+        return self._created_utc.astimezone(tz)
 
     @property
     def _class_schedule(self):
@@ -212,7 +206,7 @@ class Download:
         if not schedule:
             return None
 
-        zoom_time = self._created_local_object
+        zoom_time = self._created_local
         logger.info({"meeting creation time": zoom_time,
                      "course schedule": schedule})
         days = OrderedDict([
@@ -294,9 +288,11 @@ class Download:
                 "host_name": self._host,
                 "topic": self._topic,
                 "created": datetime.strftime(
-                    self._created_utc_object, TIMESTAMP_FORMAT
+                    self._created_utc, TIMESTAMP_FORMAT
                 ),
-                "created_local": self.created_local,
+                "created_local": datetime.strftime(
+                    self._created_local, TIMESTAMP_FORMAT
+                ),
                 "webhook_received_time": self._received_time,
                 "correlation_id": self._correlation_id,
                 "s3_filenames": s3_filenames
@@ -396,7 +392,7 @@ class ZoomFile:
         self._meeting_uuid = file_data["meeting_uuid"]
         self._file_id = file_data["recording_id"]
         self._zoom_series_id = file_data["zoom_series_id"]
-        self._created_local_ts = file_data["created_local_ts"]
+        self._created_local = file_data["created_local"]
         self._download_url = file_data["download_url"]
         self.zoom_file_type = file_data["file_type"].lower()
         self.start = file_data["recording_start"]
@@ -450,7 +446,7 @@ class ZoomFile:
         if not hasattr(self, "_s3_filename"):
             self._s3_filename = "{}/{}/{:03d}-{}.{}".format(
                                     self._zoom_series_id,
-                                    self._created_local_ts,
+                                    self._created_local.toordinal(),
                                     self._track_sequence,
                                     self.recording_type,
                                     self.file_extension
