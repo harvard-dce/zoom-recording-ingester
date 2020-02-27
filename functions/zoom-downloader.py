@@ -29,6 +29,7 @@ BUFFER_MINUTES = 30
 # Ignore recordings that are less than MIN_DURATION (in minutes)
 MINIMUM_DURATION = 2
 
+
 class PermanentDownloadError(Exception):
     pass
 
@@ -397,7 +398,22 @@ class ZoomFile:
         self.zoom_file_type = file_data["file_type"].lower()
         self.start = file_data["recording_start"]
         self.end = file_data["recording_end"]
-        self.recording_type = file_data["recording_type"]
+        self.recording_type = self.__standardized_recording_type(
+            file_data["recording_type"]
+        )
+
+    def __standardized_recording_type(self, name):
+        if "screen" in name.lower():
+            if "speaker" in name.lower():
+                return "shared_screen_with_speaker_view"
+            if "gallery" in name.lower():
+                return "shared_screen_with_gallery_view"
+            return "shared_screen"
+        elif "speaker" in name.lower():
+            return "active_speaker"
+        elif "gallery" in name.lower():
+            return "gallery_view"
+        return "unrecognized_type_{}".format(name)
 
     @property
     def zoom_filename(self):
@@ -446,7 +462,7 @@ class ZoomFile:
         if not hasattr(self, "_s3_filename"):
             self._s3_filename = "{}/{}/{:03d}-{}.{}".format(
                                     self._zoom_series_id,
-                                    self._created_local.toordinal(),
+                                    int(self._created_local.timestamp()),
                                     self._track_sequence,
                                     self.recording_type,
                                     self.file_extension
