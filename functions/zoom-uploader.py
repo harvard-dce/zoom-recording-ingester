@@ -87,7 +87,11 @@ def handler(event, context):
 
     try:
         upload_data = json.loads(upload_message.body)
-        logger.info(upload_data)
+        logger.info({
+            "minutes_in_pipeline": minutes_in_pipeline(
+                                    upload_data["webhook_received_time"]),
+            "body": upload_data
+        })
         wf_id = process_upload(upload_data)
         upload_message.delete()
         if wf_id:
@@ -100,10 +104,16 @@ def handler(event, context):
         raise
 
 
+def minutes_in_pipeline(webhook_received_time):
+    start_time = datetime.strptime(webhook_received_time, TIMESTAMP_FORMAT)
+    ingest_time = datetime.utcnow()
+    duration = ingest_time - start_time
+    return duration.total_seconds() // 60
+
+
 def process_upload(upload_data):
     upload = Upload(upload_data)
     upload.upload()
-    logger.info({"minutes in pipeline": upload.minutes_in_pipeline})
     return upload.workflow_id
 
 
@@ -148,16 +158,6 @@ class Upload:
     @property
     def opencast_series_id(self):
         return self.data["opencast_series_id"]
-
-    @property
-    def minutes_in_pipeline(self):
-        webhook_received_time = datetime.strptime(
-                                    self.data["webhook_received_time"],
-                                    TIMESTAMP_FORMAT
-                                )
-        ingest_time = datetime.utcnow()
-        duration = ingest_time - webhook_received_time
-        return duration.total_seconds() // 60
 
     @property
     def type_num(self):

@@ -4,13 +4,13 @@ import logging
 import requests
 import aws_lambda_logging
 from functools import wraps
-from os import getenv as env
+from os import getenv, putenv
 
-LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
-BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'
+LOG_LEVEL = getenv('DEBUG') and 'DEBUG' or 'INFO'
+BOTO_LOG_LEVEL = getenv('BOTO_DEBUG') and 'DEBUG' or 'INFO'
 ZOOM_API_BASE_URL = "https://api.zoom.us/v2/"
-ZOOM_API_KEY = env("ZOOM_API_KEY")
-ZOOM_API_SECRET = env("ZOOM_API_SECRET")
+ZOOM_API_KEY = getenv("ZOOM_API_KEY")
+ZOOM_API_SECRET = getenv("ZOOM_API_SECRET")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
