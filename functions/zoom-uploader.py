@@ -180,27 +180,8 @@ class Upload:
         return ZOOM_OPENCAST_WORKFLOW
 
     @property
-    def s3_files(self):
-        if not hasattr(self, "_s3_files"):
-            bucket = s3.Bucket(ZOOM_VIDEOS_BUCKET)
-            prefix = "{}/{}".format(self.zoom_series_id, self.created_local)
-            logger.info("Looking for files in {} with prefix {}"
-                        .format(ZOOM_VIDEOS_BUCKET, prefix))
-            objs = []
-            for x in bucket.objects.filter(Prefix=prefix):
-                objs.append(x.Object())
-            self._s3_files = {}
-
-            for x in objs:
-                if "directory" in x.content_type:
-                    continue
-                s3_filename = x.key.split("/")[-1]
-                recording_type = s3_filename.split("-")[1].split(".")[0]
-                if recording_type not in self._s3_files:
-                    self._s3_files[recording_type] = []
-                self._s3_files[recording_type].append(x)
-            logger.debug({"s3_files": self._s3_files})
-        return self._s3_files
+    def s3_filenames(self):
+        return self.data["s3_filenames"]
 
     @property
     def workflow_id(self):
@@ -251,8 +232,8 @@ class Upload:
 
         video_files = None
         for view_type in MP4_VIEW_PRIORITY_LIST:
-            if view_type in self.s3_files:
-                video_files = self.s3_files[view_type]
+            if view_type in self.s3_filenames:
+                video_files = self.s3_filenames[view_type]
                 logger.info("Found '{}' view in files".format(view_type))
                 break
 
@@ -280,8 +261,8 @@ class Upload:
             ("spatial", (None, "Zoom"))
         ]
 
-        for file in video_files:
-            url = self._generate_presigned_url(file)
+        for s3_filename in video_files:
+            url = self._generate_presigned_url(s3_filename)
             params.extend([
                 ("flavor", (None, escape(ZOOM_OPENCAST_FLAVOR))),
                 ("mediaUri", (None, url))
@@ -293,11 +274,12 @@ class Upload:
 
         self.workflow_xml = resp.text
 
-    def _generate_presigned_url(self, video):
-        logger.info("Generate presigned url bucket {} key {}".format(video.bucket_name, video.key))
+    def _generate_presigned_url(self, s3_filename):
+        logger.info("Generate presigned url bucket {} key {}"
+                    .format(ZOOM_VIDEOS_BUCKET, s3_filename))
         url = s3.meta.client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": video.bucket_name, "Key": video.key}
+            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": s3_filename}
         )
         logger.info("Got presigned url {}".format(url))
         return url

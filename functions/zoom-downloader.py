@@ -29,7 +29,6 @@ BUFFER_MINUTES = 30
 # Ignore recordings that are less than MIN_DURATION (in minutes)
 MINIMUM_DURATION = 2
 
-
 class PermanentDownloadError(Exception):
     pass
 
@@ -111,11 +110,6 @@ class Download:
             self._duration = self.body["duration"]
             self._received_time = self.body["received_time"]
             self._correlation_id = self.body["correlation_id"]
-            self._recording_files = ZoomRecordingFiles(
-                                        self.body["recording_files"],
-                                        self._uuid,
-                                        self._zoom_series_id,
-                                        self.created_local)
 
     def __retrieve_message(self):
         download_queue = self.sqs.get_queue_by_name(
@@ -129,6 +123,31 @@ class Download:
             return None
 
         return messages[0]
+
+    @property
+    def recording_files(self):
+        if not hasattr(self, "_recording_files"):
+            files = self.body["recording_files"]
+            start_times = sorted(set([file["recording_start"] for file in files]))
+            track_numbers = {start_times[i]: i for i in range(len(start_times))}
+
+            tracks = [{}] * len(start_times)
+            for file in files:
+                track_number = track_numbers[file["recording_start"]]
+                tracks[track_number][file["recording_type"]] = file
+
+            logger.info({"tracks": tracks})
+
+            self._recording_files = []
+            for track_sequence in range(len(tracks)):
+                for file_data in tracks[track_sequence].values():
+                    file_data["meeting_uuid"] = self._uuid
+                    file_data["zoom_series_id"] = self._zoom_series_id
+                    file_data["created_local_ts"] = self.created_local
+                    self._recording_files.append(
+                        ZoomFile(file_data, track_sequence)
+                    )
+        return self._recording_files
 
     @property
     def uuid(self):
@@ -261,6 +280,13 @@ class Download:
     @property
     def upload_message(self):
         if not hasattr(self, "self._upload_message"):
+            s3_filenames = {}
+            for file in self.recording_files:
+                if file.recording_type in s3_filenames:
+                    s3_filenames[file.recording_type].append(file.s3_filename)
+                else:
+                    s3_filenames[file.recording_type] = [file.s3_filename]
+
             self._upload_message = {
                 "uuid": self._uuid,
                 "zoom_series_id": self._zoom_series_id,
@@ -272,7 +298,8 @@ class Download:
                 ),
                 "created_local": self.created_local,
                 "webhook_received_time": self._received_time,
-                "correlation_id": self._correlation_id
+                "correlation_id": self._correlation_id,
+                "s3_filenames": s3_filenames
             }
         return self._upload_message
 
@@ -287,9 +314,10 @@ class Download:
             logger.info("No opencast series match found")
             return None
 
-        logger.info("downloading {} files".format(self._recording_files.count))
+        logger.info("downloading {} files".format(len(self.recording_files)))
 
-        self._recording_files.stream_files_to_s3()
+        for file in self.recording_files:
+            file.stream_file_to_s3()
 
         return self.upload_message
 
@@ -358,42 +386,6 @@ class SQSMessage():
         logger.debug({"Queue": self.queue.url,
                       "Message sent": message_sent,
                       "FailedReason": error})
-
-
-class ZoomRecordingFiles:
-
-    def __init__(self, recording_list, uuid, zoom_series_id, created_local_ts):
-        self._files = []
-
-        self.tracks = self.__organize_by_track(recording_list)
-        for track_sequence in range(len(self.tracks)):
-            for file_data in self.tracks[track_sequence].values():
-                file_data["meeting_uuid"] = uuid
-                file_data["zoom_series_id"] = zoom_series_id
-                file_data["created_local_ts"] = created_local_ts
-                self._files.append(
-                    ZoomFile(file_data, track_sequence)
-                )
-
-    @property
-    def count(self):
-        return len(self._files)
-
-    def __organize_by_track(self, files):
-        start_times = sorted(set([file["recording_start"] for file in files]))
-        track_numbers = {start_times[i]: i for i in range(len(start_times))}
-
-        tracks = [{}] * len(start_times)
-        for file in files:
-            track_number = track_numbers[file["recording_start"]]
-            tracks[track_number][file["recording_type"]] = file
-
-        logger.info({"tracks": tracks})
-        return tracks
-
-    def stream_files_to_s3(self):
-        for file in self._files:
-            file.stream_file_to_s3()
 
 
 class ZoomFile:
