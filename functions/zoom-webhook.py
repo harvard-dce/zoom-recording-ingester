@@ -49,7 +49,7 @@ def handler(event, context):
 
     try:
         body = json.loads(event["body"])
-        logger.info({"Webhook notification body": body})
+        logger.info({"webhook_notification": body})
     except json.JSONDecodeError:
         return resp_400("Webhook notification body is not valid json.")
 

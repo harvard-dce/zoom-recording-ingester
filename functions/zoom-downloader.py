@@ -102,7 +102,7 @@ class Download:
 
         if self._message:
             self.body = json.loads(self._message.body)
-            logger.info({"Retrieved download message": self.body})
+            logger.info({"download_message": self.body})
 
             self._uuid = self.body["uuid"]
             self._zoom_series_id = self.body["zoom_series_id"]
@@ -348,8 +348,8 @@ class SQSMessage():
 
     def send(self, error=None):
         logger.info({
-            "Sending SQS message to ": self.queue.url,
-            "message": self.message
+            "sqs_destination_queue": self.queue.url,
+            "sqs_message": self.message
         })
 
         if error is None:
