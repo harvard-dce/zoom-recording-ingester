@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import ZoomApiRequest
+from functions.common import zoom_api_request
 from pytz import timezone
 from multiprocessing import Process
 
@@ -33,8 +33,6 @@ FUNCTION_NAMES = [
     'zoom-uploader',
     'zoom-log-notifications'
 ]
-
-zoom_api_request = ZoomApiRequest(env("ZOOM_API_KEY"), env("ZOOM_API_SECRET"))
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
@@ -201,14 +199,14 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         uuid = meeting['uuid']
         series_id = meeting['id']
 
-        r = zoom_api_request.get(
-            "meetings/{}".format(series_id), ignore_failure=True
+        r = zoom_api_request(
+            "meetings/{}".format(series_id), ignore_failure=True,
         )
         if r.status_code == 404:
             continue
         r.raise_for_status()
 
-        r = zoom_api_request.get(
+        r = zoom_api_request(
             "meetings/{}/recordings".format(uuid), ignore_failure=True
         )
         if r.status_code == 404:
@@ -305,7 +303,7 @@ def exec_webhook(ctx, uuid):
         api_resources
     )
 
-    data = zoom_api_request.get("meetings/{}/recordings".format(uuid)).json()
+    data = zoom_api_request("meetings/{}/recordings".format(uuid)).json()
 
     required_fields = ["host_id", "recording_files"]
     for field in required_fields:
@@ -1360,7 +1358,7 @@ def __get_meetings(date):
             else:
                 path = base_path
 
-            r = zoom_api_request.get(path, ignore_failure=True)
+            r = zoom_api_request(path, ignore_failure=True)
             if r.status_code == 429:
                 print("API rate limited, waiting 10 seconds to retry...")
                 time.sleep(10)

@@ -5,6 +5,10 @@ import requests
 import aws_lambda_logging
 from functools import wraps
 from os import getenv as env
+from dotenv import load_dotenv
+from os.path import join, dirname
+
+load_dotenv(join(dirname(__file__), '../.env'))
 
 LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
 BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'
@@ -47,32 +51,33 @@ def setup_logging(handler_func):
     return wrapped_func
 
 
-class ZoomApiRequest:
+def gen_token(key, secret, seconds_valid=60):
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {"iss": key, "exp": int(time.time() + seconds_valid)}
+    return jwt.encode(payload, secret, headers=header)
 
-    def __init__(self, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET):
-        self.key = key
-        self.secret = secret
-        self.base_url = ZOOM_API_BASE_URL
 
-    def gen_token(self, seconds_valid=60):
-        header = {"alg": "HS256", "typ": "JWT"}
-        payload = {"iss": self.key, "exp": int(time.time() + seconds_valid)}
-        return jwt.encode(payload, self.secret, headers=header)
-
-    def get(self, endpoint, seconds_valid=60, ignore_failure=False):
-        if not endpoint:
+def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
+                     seconds_valid=60, ignore_failure=False):
+    required_params = [("endpoint", endpoint),
+                       ("zoom api key", key),
+                       ("zoom api secret", secret)]
+    for name, param in required_params:
+        if not param:
             raise Exception(
-                "Call to ZoomAPIRequests.get "
-                "missing required param 'path'"
+                "Call to zoom_api_request "
+                "missing required param '{}'".format(name)
             )
 
-        url = "{}{}".format(self.base_url, endpoint)
-        headers = {
-            "Authorization": "Bearer {}"
-            .format(self.gen_token(seconds_valid).decode())}
-        r = requests.get(url, headers=headers)
+    url = "{}{}".format(ZOOM_API_BASE_URL, endpoint)
+    headers = {
+        "Authorization": "Bearer {}"
+        .format(gen_token(key, secret, seconds_valid).decode())
+    }
 
-        if not ignore_failure:
-            r.raise_for_status()
+    r = requests.get(url, headers=headers)
 
-        return r
+    if not ignore_failure:
+        r.raise_for_status()
+
+    return r
