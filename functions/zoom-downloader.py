@@ -73,7 +73,7 @@ def handler(event, context):
         download_message.upload_to_s3()
     except PermanentDownloadError as e:
         # push message to deadletter queue, add error reason to message
-        message = download_message.send_to_deadletter_queue()
+        message = download_message.send_to_deadletter_queue(e)
         logger.error({"Error": e, "Sent to deadletter": message})
         raise
 
