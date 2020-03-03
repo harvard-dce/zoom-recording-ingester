@@ -1,6 +1,6 @@
 import json
 from os import getenv as env
-from common import setup_logging, ZoomApiRequest, TIMESTAMP_FORMAT
+from common import setup_logging, zoom_api_request, TIMESTAMP_FORMAT
 from datetime import datetime
 from pytz import timezone
 import boto3
@@ -140,7 +140,7 @@ def validate_payload(payload):
 
 
 def host_name(host_id):
-    resp = ZoomApiRequest().get("users/{}".format(host_id)).json()
+    resp = zoom_api_request("users/{}".format(host_id)).json()
     logger.info({"Host details": resp})
     name = "{} {}".format(resp["first_name"], resp["last_name"])
     return name

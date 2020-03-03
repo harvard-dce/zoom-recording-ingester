@@ -2,7 +2,7 @@ import boto3
 import json
 import requests
 from os import getenv as env
-from common import setup_logging, ZoomApiRequest, TIMESTAMP_FORMAT
+from common import setup_logging, zoom_api_request, TIMESTAMP_FORMAT
 import subprocess
 from pytz import timezone
 from datetime import datetime
@@ -47,21 +47,23 @@ def handler(event, context):
 
     # try DOWNLOAD_MESSAGES_PER_INVOCATION number of times to retrieve
     # a recoreding that matches the class schedule
-    download_message = None
+    dl = None
     for _ in range(int(DOWNLOAD_MESSAGES_PER_INVOCATION)):
-        download_message = Download(
-            sqs, ignore_schedule, override_series_id
-        )
-        if not download_message.body:
+        download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
+        download_message = retrieve_message(download_queue)
+        if not download_message:
             logger.info("No messages available in downloads queue.")
             return
-        if download_message.opencast_series_id:
+
+        dl = Download(sqs, download_message)
+        if dl.oc_series_found(ignore_schedule, override_series_id):
+            # process matched recording, don't discared message until after
             break
-        # discard and keep checking messges for schedule match
-        download_message.delete()
+        # discard and keep checking messages for schedule match
+        dl.delete()
         download_message = None
 
-    if not download_message:
+    if not dl:
         logger.info("No available recordings match the class schedule.")
         return
 
@@ -70,67 +72,61 @@ def handler(event, context):
 
     try:
         # upload matched recording to S3 and verify MP4 integrity
-        download_message.upload_to_s3()
+        dl.upload_to_s3()
     except PermanentDownloadError as e:
         # push message to deadletter queue, add error reason to message
-        message = download_message.send_to_deadletter_queue(e)
+        message = dl.send_to_deadletter_queue(e)
+        dl.delete()
         logger.error({"Error": e, "Sent to deadletter": message})
         raise
 
     # send a message to the opencast uploader
-    message = download_message.send_to_uploader_queue()
+    message = dl.send_to_uploader_queue()
+    dl.delete()
     logger.info({"Sent to uploader": message})
+
+
+def retrieve_message(queue):
+    messages = queue.receive_messages(
+        MaxNumberOfMessages=1,
+        VisibilityTimeout=700
+    )
+    if (len(messages) == 0):
+        return None
+
+    return messages[0]
 
 
 def get_admin_token():
     # get admin user id from admin email
-    r = ZoomApiRequest().get("users/{}".format(ZOOM_ADMIN_EMAIL))
+    r = zoom_api_request("users/{}".format(ZOOM_ADMIN_EMAIL))
     admin_id = r.json()["id"]
 
     # get admin level zak token from admin id
-    r = ZoomApiRequest().get("users/{}/token?type=zak".format(admin_id))
+    r = zoom_api_request("users/{}/token?type=zak".format(admin_id))
     return r.json()["token"]
 
 
 class Download:
 
-    def __init__(self, sqs, ignore_schedule, override_series_id):
-        self.ignore_schedule = ignore_schedule
-        self.override_series_id = override_series_id
+    def __init__(self, sqs, message):
         self.sqs = sqs
-        self._message = self.__retrieve_message()
+        self._message = message
+        self.data = json.loads(message.body)
+        self.opencast_series_id = None
 
-        if self._message:
-            self.body = json.loads(self._message.body)
-            logger.info({"download_message": self.body})
-
-            self._uuid = self.body["uuid"]
-            self._zoom_series_id = self.body["zoom_series_id"]
-            self._host = self.body["host_name"]
-            self._topic = self.body["topic"]
-            self._duration = self.body["duration"]
-            self._received_time = self.body["received_time"]
-            self._correlation_id = self.body["correlation_id"]
-
-    def __retrieve_message(self):
-        download_queue = self.sqs.get_queue_by_name(
-                                    QueueName=DOWNLOAD_QUEUE_NAME)
-        messages = download_queue.receive_messages(
-            MaxNumberOfMessages=1,
-            VisibilityTimeout=700
-        )
-        if (len(messages) == 0):
-            self.body = None
-            return None
-
-        return messages[0]
+        logger.info({"download_message": self.data})
 
     @property
     def recording_files(self):
         if not hasattr(self, "_recording_files"):
-            files = self.body["recording_files"]
-            start_times = sorted(set([file["recording_start"] for file in files]))
-            track_numbers = {start_times[i]: i for i in range(len(start_times))}
+            files = self.data["recording_files"]
+            start_times = sorted(
+                set([file["recording_start"] for file in files])
+            )
+            track_numbers = {
+                start_times[i]: i for i in range(len(start_times))
+            }
 
             tracks = [{}] * len(start_times)
             for file in files:
@@ -142,8 +138,8 @@ class Download:
             self._recording_files = []
             for track_sequence in range(len(tracks)):
                 for file_data in tracks[track_sequence].values():
-                    file_data["meeting_uuid"] = self._uuid
-                    file_data["zoom_series_id"] = self._zoom_series_id
+                    file_data["meeting_uuid"] = self.data["uuid"]
+                    file_data["zoom_series_id"] = self.data["zoom_series_id"]
                     file_data["created_local"] = self._created_local
                     self._recording_files.append(
                         ZoomFile(file_data, track_sequence)
@@ -151,20 +147,12 @@ class Download:
         return self._recording_files
 
     @property
-    def uuid(self):
-        return self._uuid
-
-    @property
-    def zoom_series_id(self):
-        return self._zoom_series_id
-
-    @property
     def _created_utc(self):
         """
         UTC time object for recording start.
         """
         utc = datetime.strptime(
-            self.body["start_time"], TIMESTAMP_FORMAT) \
+            self.data["start_time"], TIMESTAMP_FORMAT) \
             .replace(tzinfo=timezone("UTC"))
         return utc
 
@@ -185,7 +173,7 @@ class Download:
         table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
 
         r = table.get_item(
-            Key={"zoom_series_id": str(self._zoom_series_id)}
+            Key={"zoom_series_id": str(self.data["zoom_series_id"])}
         )
 
         if "Item" not in r:
@@ -241,41 +229,36 @@ class Download:
         print("reached end of function")
         return None
 
-    @property
-    def opencast_series_id(self):
+    def oc_series_found(self, ignore_schedule, override_series_id):
 
-        if not hasattr(self, "_oc_series_id"):
+        if self.data["duration"] and self.data["duration"] < MINIMUM_DURATION:
+            logger.info("Recording duration shorter than {} minutes"
+                        .format(MINIMUM_DURATION))
+            return False
 
-            self._oc_series_id = None
+        if override_series_id:
+            self.opencast_series_id = override_series_id
+            logger.info("Using override series id '{}'"
+                        .format(self.opencast_series_id))
+            return False
 
-            if self._duration and self._duration < MINIMUM_DURATION:
-                logger.info("Recording duration shorter than {} minutes"
-                            .format(MINIMUM_DURATION))
-                return None
+        if ignore_schedule:
+            logger.info("Ignoring schedule")
+        else:
+            self.opencast_series_id = self._series_id_from_schedule
+            print("series_id_from_schedule returned {}"
+                  .format(self.opencast_series_id))
+            if self.opencast_series_id is not None:
+                logger.info("Matched with opencast series '{}'!"
+                            .format(self.opencast_series_id))
+                return True
 
-            if self.override_series_id:
-                self._oc_series_id = self.override_series_id
-                logger.info("Using override series id '{}'"
-                            .format(self._oc_series_id))
-                return None
+        if DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
+            logger.info("Using default series id {}"
+                        .format(DEFAULT_SERIES_ID))
+            self.opencast_series_id = DEFAULT_SERIES_ID
 
-            if self.ignore_schedule:
-                logger.info("Ignoring schedule")
-            else:
-                self._oc_series_id = self._series_id_from_schedule
-                print("series_id_from_schedule returned {}"
-                      .format(self._oc_series_id))
-                if self._oc_series_id is not None:
-                    logger.info("Matched with opencast series '{}'!"
-                                .format(self._oc_series_id))
-                    return self._oc_series_id
-
-            if DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
-                logger.info("Using default series id {}"
-                            .format(DEFAULT_SERIES_ID))
-                self._oc_series_id = DEFAULT_SERIES_ID
-
-        return self._oc_series_id
+        return True
 
     @property
     def upload_message(self):
@@ -288,19 +271,19 @@ class Download:
                     s3_filenames[file.recording_type] = [file.s3_filename]
 
             self._upload_message = {
-                "uuid": self._uuid,
-                "zoom_series_id": self._zoom_series_id,
+                "uuid": self.data["uuid"],
+                "zoom_series_id": self.data["zoom_series_id"],
                 "opencast_series_id": self.opencast_series_id,
-                "host_name": self._host,
-                "topic": self._topic,
+                "host_name": self.data["host_name"],
+                "topic": self.data["topic"],
                 "created": datetime.strftime(
                     self._created_utc, TIMESTAMP_FORMAT
                 ),
                 "created_local": datetime.strftime(
                     self._created_local, TIMESTAMP_FORMAT
                 ),
-                "webhook_received_time": self._received_time,
-                "correlation_id": self._correlation_id,
+                "webhook_received_time": self.data["received_time"],
+                "correlation_id": self.data["correlation_id"],
                 "s3_filenames": s3_filenames
             }
         return self._upload_message
@@ -315,16 +298,14 @@ class Download:
     def send_to_deadletter_queue(self, error):
         deadletter_queue = self.sqs.get_queue_by_name(
                                         QueueName=DEADLETTER_QUEUE_NAME)
-        message = SQSMessage(deadletter_queue, self.body)
+        message = SQSMessage(deadletter_queue, self.data)
         message.send(error=error)
-        self.delete()
-        return self.body
+        return self._message.body
 
     def send_to_uploader_queue(self):
         upload_queue = self.sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
-        message = SQSMessage(upload_queue, self.upload_message)
+        message = SQSMessage(upload_queue, json.dumps(self.upload_message))
         message.send()
-        self.delete()
         return self.upload_message
 
     def delete(self):
