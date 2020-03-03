@@ -195,7 +195,6 @@ def list_recordings(ctx, date=str(datetime.date.today())):
     recordings_found = 0
 
     for meeting in meetings:
-        time.sleep(0.01)
         uuid = meeting['uuid']
         series_id = meeting['id']
 
@@ -1342,7 +1341,7 @@ def __show_sqs_status(ctx):
 def __get_meetings(date):
     print("Requesting meeting data for {}...".format(date))
     requested_page_size = 300
-    meeting_metrics_rate_limit = 60
+    zoom_dashboard_rate_limit_secs = 5
     meetings = []
 
     for mtg_type in ["past", "pastOne"]:
@@ -1360,8 +1359,9 @@ def __get_meetings(date):
 
             r = zoom_api_request(path, ignore_failure=True)
             if r.status_code == 429:
-                print("API rate limited, waiting 10 seconds to retry...")
-                time.sleep(10)
+                print("API rate limited, waiting {} seconds to retry..."
+                      .format(zoom_dashboard_rate_limit_secs))
+                time.sleep(zoom_dashboard_rate_limit_secs)
                 continue
             else:
                 r.raise_for_status
@@ -1375,12 +1375,12 @@ def __get_meetings(date):
             meetings.extend(r.json()['meetings'])
 
             count += min(requested_page_size, resp_data["page_size"])
-            print("Retrieved {} of {} meetings."
-                  .format(count, resp_data["total_records"]))
+            print("Retrieved {} of {} '{}' meetings."
+                  .format(count, resp_data["total_records"], mtg_type))
             print("Waiting {} seconds for next request "
                   "to avoid Zoom API rate limit..."
-                  .format(meeting_metrics_rate_limit))
-            time.sleep(meeting_metrics_rate_limit)
+                  .format(zoom_dashboard_rate_limit_secs))
+            time.sleep(zoom_dashboard_rate_limit_secs)
 
         time.sleep(1)
 
