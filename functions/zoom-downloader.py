@@ -248,11 +248,16 @@ class Download:
 
             self._oc_series_id = None
 
+            if self._duration and self._duration < MINIMUM_DURATION:
+                logger.info("Recording duration shorter than {} minutes"
+                            .format(MINIMUM_DURATION))
+                return None
+
             if self.override_series_id:
                 self._oc_series_id = self.override_series_id
                 logger.info("Using override series id '{}'"
                             .format(self._oc_series_id))
-                return self._oc_series_id
+                return None
 
             if self.ignore_schedule:
                 logger.info("Ignoring schedule")
@@ -302,21 +307,10 @@ class Download:
 
     def upload_to_s3(self):
 
-        if self._duration and self._duration < MINIMUM_DURATION:
-            logger.info("Recording duration shorter than {} minutes"
-                        .format(MINIMUM_DURATION))
-            return None
-
-        if not self.opencast_series_id:
-            logger.info("No opencast series match found")
-            return None
-
         logger.info("downloading {} files".format(len(self.recording_files)))
 
         for file in self.recording_files:
             file.stream_file_to_s3()
-
-        return self.upload_message
 
     def send_to_deadletter_queue(self, error):
         deadletter_queue = self.sqs.get_queue_by_name(
