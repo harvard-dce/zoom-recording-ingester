@@ -1,6 +1,6 @@
 import json
 from os import getenv as env
-from common import setup_logging, zoom_api_request, TIMESTAMP_FORMAT
+from common import setup_logging, TIMESTAMP_FORMAT
 from datetime import datetime
 from pytz import timezone
 import boto3
@@ -139,13 +139,6 @@ def validate_payload(payload):
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
 
-def host_name(host_id):
-    resp = zoom_api_request("users/{}".format(host_id)).json()
-    logger.info({"Host details": resp})
-    name = "{} {}".format(resp["first_name"], resp["last_name"])
-    return name
-
-
 def construct_sqs_message(payload, context):
     now = datetime.strftime(
                 timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
@@ -163,15 +156,13 @@ def construct_sqs_message(payload, context):
                 "recording_type": file["recording_type"]
             })
 
-    host = host_name(payload["object"]["host_id"])
-
     sqs_message = {
         "uuid": payload["object"]["uuid"],
         "zoom_series_id": payload["object"]["id"],
         "topic": payload["object"]["topic"],
         "start_time": payload["object"]["start_time"],
         "duration": payload["object"]["duration"],
-        "host_name": host,
+        "host_id": payload["object"]["host_id"],
         "recording_files": recording_files,
         "correlation_id": context.aws_request_id,
         "received_time": now
