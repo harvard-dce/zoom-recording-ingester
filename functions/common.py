@@ -20,6 +20,10 @@ ZOOM_API_SECRET = env("ZOOM_API_SECRET")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
+class ZoomApiRequestError(Exception):
+    pass
+
+
 def setup_logging(handler_func):
 
     @wraps(handler_func)
@@ -87,7 +91,9 @@ def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
                 retries -= 1
             else:
                 logger.error("Connection Error: {}".format(e))
-                raise
+                raise ZoomApiRequestError(
+                    "Error requesting {}: {}".format(url, e)
+                )
 
     if not ignore_failure:
         r.raise_for_status()
