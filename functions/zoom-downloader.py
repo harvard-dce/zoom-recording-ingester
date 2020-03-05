@@ -18,7 +18,7 @@ DEADLETTER_QUEUE_NAME = env("DEADLETTER_QUEUE_NAME")
 MIN_CHUNK_SIZE = 5242880
 MEETING_LOOKUP_RETRIES = 2
 MEETING_LOOKUP_RETRY_DELAY = 60
-ZOOM_ADMIN_EMAIL = env("ZOOM_ADMIN_EMAIL")
+ZOOM_ADMIN_ID = env("ZOOM_ADMIN_ID")
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
@@ -98,12 +98,8 @@ def retrieve_message(queue):
 
 
 def get_admin_token():
-    # get admin user id from admin email
-    r = zoom_api_request("users/{}".format(ZOOM_ADMIN_EMAIL))
-    admin_id = r.json()["id"]
-
     # get admin level zak token from admin id
-    r = zoom_api_request("users/{}/token?type=zak".format(admin_id))
+    r = zoom_api_request("users/{}/token?type=zak".format(ZOOM_ADMIN_ID))
     return r.json()["token"]
 
 
@@ -180,7 +176,6 @@ class Download:
             return None
         else:
             schedule = r["Item"]
-            logger.info(schedule)
             return schedule
 
     @property
@@ -257,8 +252,9 @@ class Download:
             logger.info("Using default series id {}"
                         .format(DEFAULT_SERIES_ID))
             self.opencast_series_id = DEFAULT_SERIES_ID
+            return True
 
-        return True
+        return False
 
     @property
     def upload_message(self):
@@ -304,7 +300,7 @@ class Download:
 
     def send_to_uploader_queue(self):
         upload_queue = self.sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
-        message = SQSMessage(upload_queue, json.dumps(self.upload_message))
+        message = SQSMessage(upload_queue, self.upload_message)
         message.send()
         return self.upload_message
 

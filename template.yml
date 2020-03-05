@@ -12,7 +12,7 @@ Parameters:
     Type: String
   ZoomApiSecret:
     Type: String
-  ZoomAdminEmail:
+  ZoomAdminId:
     Type: String
   OpencastBaseUrl:
     Type: String
@@ -88,6 +88,8 @@ Resources:
             Prefix: ""
             Status: Enabled
             ExpirationInDays: 14
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
 
   ZoomIngesterUploadQueue:
     Type: AWS::SQS::Queue
@@ -297,7 +299,7 @@ Resources:
       Environment:
         Variables:
           ZOOM_VIDEOS_BUCKET: !Ref ZoomVideosBucket
-          ZOOM_ADMIN_EMAIL: !Ref ZoomAdminEmail
+          ZOOM_ADMIN_ID: !Ref ZoomAdminId
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
           DEADLETTER_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, QueueName]

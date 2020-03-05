@@ -675,6 +675,12 @@ def profile_arg():
     return ""
 
 
+def zoom_admin_id():
+    # get admin user id from admin email
+    r = zoom_api_request("users/{}".format(getenv("ZOOM_ADMIN_EMAIL")))
+    return r.json()["id"]
+
+
 def stack_tags():
     tags = "Key=cfn-stack,Value={}".format(STACK_NAME)
     extra_tags = getenv("STACK_TAGS")
@@ -761,7 +767,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=ZoomApiBaseUrl,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
-           "ParameterKey=ZoomAdminEmail,ParameterValue='{}' "
+           "ParameterKey=ZoomAdminId,ParameterValue='{}' "
            "ParameterKey=OpencastBaseUrl,ParameterValue='{}' "
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
@@ -789,7 +795,7 @@ def __create_or_update(ctx, op):
                 getenv("ZOOM_API_BASE_URL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
-                getenv("ZOOM_ADMIN_EMAIL"),
+                zoom_admin_id(),
                 oc_base_url(ctx),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
