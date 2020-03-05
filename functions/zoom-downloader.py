@@ -114,6 +114,18 @@ class Download:
         logger.info({"download_message": self.data})
 
     @property
+    def host_name(self):
+        if not hasattr(self, "_host_name"):
+            resp = zoom_api_request(
+                    "users/{}".format(self.data["host_id"])
+                   ).json()
+            logger.info({"Host details": resp})
+            self._host_name = "{} {}".format(
+                                resp["first_name"], resp["last_name"]
+                                )
+        return self._host_name
+
+    @property
     def recording_files(self):
         if not hasattr(self, "_recording_files"):
             files = self.data["recording_files"]
@@ -270,7 +282,7 @@ class Download:
                 "uuid": self.data["uuid"],
                 "zoom_series_id": self.data["zoom_series_id"],
                 "opencast_series_id": self.opencast_series_id,
-                "host_name": self.data["host_name"],
+                "host_name": self.host_name,
                 "topic": self.data["topic"],
                 "created": datetime.strftime(
                     self._created_utc, TIMESTAMP_FORMAT

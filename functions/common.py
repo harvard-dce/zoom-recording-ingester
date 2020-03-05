@@ -8,6 +8,8 @@ from os import getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname
 
+logger = logging.getLogger()
+
 load_dotenv(join(dirname(__file__), '../.env'))
 
 LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
@@ -58,7 +60,7 @@ def gen_token(key, secret, seconds_valid=60):
 
 
 def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
-                     seconds_valid=60, ignore_failure=False):
+                     seconds_valid=60, ignore_failure=False, retries=3):
     required_params = [("endpoint", endpoint),
                        ("zoom api key", key),
                        ("zoom api secret", secret)]
@@ -75,7 +77,17 @@ def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
         .format(gen_token(key, secret, seconds_valid).decode())
     }
 
-    r = requests.get(url, headers=headers)
+    while True:
+        try:
+            r = requests.get(url, headers=headers)
+            break
+        except (requests.ConnectionError, requests.ConnectionTimeout) as e:
+            if retries > 0:
+                logger.warning("Connection Error: {}".format(e))
+                retries -= 1
+            else:
+                logger.error("Connection Error: {}".format(e))
+                raise
 
     if not ignore_failure:
         r.raise_for_status()
