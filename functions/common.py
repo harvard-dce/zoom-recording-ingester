@@ -85,7 +85,8 @@ def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
         try:
             r = requests.get(url, headers=headers)
             break
-        except (requests.ConnectionError, requests.ConnectionTimeout) as e:
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.ConnectTimeout) as e:
             if retries > 0:
                 logger.warning("Connection Error: {}".format(e))
                 retries -= 1
