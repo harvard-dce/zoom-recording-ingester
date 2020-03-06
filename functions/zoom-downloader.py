@@ -47,7 +47,7 @@ def handler(event, context):
 
     # try DOWNLOAD_MESSAGES_PER_INVOCATION number of times to retrieve
     # a recoreding that matches the class schedule
-    dl = None
+    dl, download_message = None, None
     for _ in range(int(DOWNLOAD_MESSAGES_PER_INVOCATION)):
         download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
         download_message = retrieve_message(download_queue)
@@ -55,13 +55,13 @@ def handler(event, context):
             logger.info("No messages available in downloads queue.")
             return
 
-        dl = Download(sqs, download_message)
+        dl = Download(sqs, json.loads(download_message.body))
         if dl.oc_series_found(ignore_schedule, override_series_id):
             # process matched recording, don't discared message until after
             break
         # discard and keep checking messages for schedule match
-        dl.delete()
-        download_message = None
+        download_message.delete()
+        dl, download_message = None, None
 
     if not dl:
         logger.info("No available recordings match the class schedule.")
@@ -76,13 +76,13 @@ def handler(event, context):
     except PermanentDownloadError as e:
         # push message to deadletter queue, add error reason to message
         message = dl.send_to_deadletter_queue(e)
-        dl.delete()
+        download_message.delete()
         logger.error({"Error": e, "Sent to deadletter": message})
         raise
 
     # send a message to the opencast uploader
     message = dl.send_to_uploader_queue()
-    dl.delete()
+    download_message.delete()
     logger.info({"Sent to uploader": message})
 
 
@@ -105,10 +105,9 @@ def get_admin_token():
 
 class Download:
 
-    def __init__(self, sqs, message):
+    def __init__(self, sqs, data):
         self.sqs = sqs
-        self._message = message
-        self.data = json.loads(message.body)
+        self.data = data
         self.opencast_series_id = None
 
         logger.info({"download_message": self.data})
@@ -308,19 +307,13 @@ class Download:
                                         QueueName=DEADLETTER_QUEUE_NAME)
         message = SQSMessage(deadletter_queue, self.data)
         message.send(error=error)
-        return self._message.body
+        return self.data
 
     def send_to_uploader_queue(self):
         upload_queue = self.sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
         message = SQSMessage(upload_queue, self.upload_message)
         message.send()
         return self.upload_message
-
-    def delete(self):
-        """
-        Delete the message from the queue.
-        """
-        self._message.delete()
 
 
 class SQSMessage():
@@ -371,21 +364,20 @@ class SQSMessage():
 class ZoomFile:
 
     def __init__(self, file_data, track_sequence):
-        # TODO each file should be assigned a track sequence
+        self.file_data = file_data
         self._track_sequence = track_sequence
-        self._meeting_uuid = file_data["meeting_uuid"]
-        self._file_id = file_data["recording_id"]
-        self._zoom_series_id = file_data["zoom_series_id"]
-        self._created_local = file_data["created_local"]
-        self._download_url = file_data["download_url"]
-        self.zoom_file_type = file_data["file_type"].lower()
-        self.start = file_data["recording_start"]
-        self.end = file_data["recording_end"]
         self.recording_type = self.__standardized_recording_type(
             file_data["recording_type"]
         )
 
     def __standardized_recording_type(self, name):
+        """
+        Zoom does not guarantee these recording/view types will always be
+        provided in exactly the same format. For example,
+        `shared_screen_with_speaker_view` could also be
+        `shared_screen_with_speaker_view(CC)`. Since the exact format is
+        unpredictable, it is safer to standardize.
+        """
         if "screen" in name.lower():
             if "speaker" in name.lower():
                 return "shared_screen_with_speaker_view"
@@ -402,7 +394,9 @@ class ZoomFile:
     def zoom_filename(self):
         if not hasattr(self, "_zoom_filename"):
             # First request is for retrieving the filename
-            url = "{}?zak={}".format(self._download_url, ADMIN_TOKEN)
+            url = "{}?zak={}".format(
+                self.file_data["download_url"], ADMIN_TOKEN
+            )
             r = requests.get(url, allow_redirects=False)
             r.raise_for_status
 
@@ -443,9 +437,10 @@ class ZoomFile:
         if not hasattr(self, "_track_sequence"):
             return None
         if not hasattr(self, "_s3_filename"):
+            ts = int(self.file_data["created_local"].timestamp())
             self._s3_filename = "{}/{}/{:03d}-{}.{}".format(
-                                    self._zoom_series_id,
-                                    int(self._created_local.timestamp()),
+                                    self.file_data["zoom_series_id"],
+                                    ts,
                                     self._track_sequence,
                                     self.recording_type,
                                     self.file_extension
@@ -472,8 +467,10 @@ class ZoomFile:
     @property
     def stream(self):
         if not hasattr(self, "_stream"):
-            logger.info("requesting {}".format(self._download_url))
-            url = "{}?zak={}".format(self._download_url, ADMIN_TOKEN)
+            logger.info("requesting {}".format(self.file_data["download_url"]))
+            url = "{}?zak={}".format(
+                self.file_data["download_url"], ADMIN_TOKEN
+            )
             r = requests.get(url, stream=True)
             r.raise_for_status
 
@@ -489,8 +486,8 @@ class ZoomFile:
         s3 = boto3.client("s3")
 
         metadata = {
-            "uuid": self._meeting_uuid,
-            "file_id": self._file_id,
+            "uuid": self.file_data["meeting_uuid"],
+            "file_id": self.file_data["recording_id"],
             "file_type": self.file_extension
         }
 

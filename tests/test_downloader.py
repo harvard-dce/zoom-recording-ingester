@@ -95,128 +95,14 @@ def test_opencast_series_id(mocker):
             multiple_day_schedule["opencast_series_id"])
     ]
 
-    # also patch... created_local, retrieve message
     for start_time, schedule, expected in cases:
         time_object = datetime.strptime(start_time, TIMESTAMP_FORMAT)
         with patch.object(
-                downloader.Download,
-                "_Download__retrieve_message",
-                return_value=None):
+                downloader.Download, "_class_schedule", schedule):
             with patch.object(
-                    downloader.Download, "_class_schedule", schedule):
-                with patch.object(
-                     downloader.Download, "_created_local", time_object):
-                    dl = downloader.Download(None, None, None)
-                    assert(dl.opencast_series_id == expected)
-
-
-"""
-Tests for class ZoomRecordingFiles
-"""
-
-
-# def test_filter_and_sort(mocker):
-#
-#     now = datetime.now()
-#     one_minute_ago = (now - timedelta(minutes=1)).strftime(TIMESTAMP_FORMAT)
-#     two_minutes_ago = (now - timedelta(minutes=2)).strftime(TIMESTAMP_FORMAT)
-#     now = now.strftime(TIMESTAMP_FORMAT)
-#
-#     files = [
-#             {'recording_start': now,
-#              'file_type': 'MP4',
-#              'recording_type': 'shared_screen_with_speaker_view'},
-#             {'recording_start': now,
-#              'file_type': 'MP4',
-#              'recording_type': 'shared_screen'},
-#             {'recording_start': now,
-#              'file_type': 'MP4',
-#              'recording_type': 'active_speaker'}
-#         ]
-#
-#     expected = [
-#             {'recording_start': now,
-#              'file_type': 'MP4',
-#              'recording_type': 'shared_screen_with_speaker_view'}
-#         ]
-#
-#     assert downloader.filter_and_sort(files) == expected
-#
-#     files = [
-#         {'recording_start': now,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen_with_speaker_view'},
-#         {'recording_start': one_minute_ago,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen'},
-#         {'recording_start': now,
-#          'file_type': 'MP4',
-#          'recording_type': 'active_speaker'}
-#     ]
-#
-#     expected = [
-#         {'recording_start': one_minute_ago,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen'},
-#         {'recording_start': now,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen_with_speaker_view'}
-#     ]
-#
-#     assert downloader.filter_and_sort(files) == expected
-#
-#     files = [
-#         {'recording_start': now,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen_with_speaker_view'},
-#         {'recording_start': one_minute_ago,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen'},
-#         {'recording_start': two_minutes_ago,
-#          'file_type': 'MP4',
-#          'recording_type': 'active_speaker'}
-#     ]
-#
-#     expected = [
-#         {'recording_start': two_minutes_ago,
-#          'file_type': 'MP4',
-#          'recording_type': 'active_speaker'},
-#         {'recording_start': one_minute_ago,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen'},
-#         {'recording_start': now,
-#          'file_type': 'MP4',
-#          'recording_type': 'shared_screen_with_speaker_view'}
-#     ]
-#
-#     assert downloader.filter_and_sort(files) == expected
-
-
-# def test_overlapping_recording_segments():
-#
-#     now = datetime.now()
-#     one_minute_ago = (now - timedelta(minutes=1)).strftime(TIMESTAMP_FORMAT)
-#     two_minutes_ago = (now - timedelta(minutes=2)).strftime(TIMESTAMP_FORMAT)
-#     now = now.strftime(TIMESTAMP_FORMAT)
-#
-#     tracks = [
-#         (None, {'recording_start': two_minutes_ago, 'recording_end': one_minute_ago}, False),
-#         ({'recording_start': one_minute_ago, 'recording_end': now},
-#          {'recording_start': one_minute_ago, 'recording_end': now}, False),
-#         ({'recording_start': two_minutes_ago, 'recording_end': one_minute_ago},
-#          {'recording_start': one_minute_ago, 'recording_end': now}, True),
-#         ({'recording_start': two_minutes_ago, 'recording_end': now},
-#          {'recording_start': one_minute_ago, 'recording_end': now}, downloader.PermanentDownloadError),
-#         ({'recording_start': two_minutes_ago, 'recording_end': one_minute_ago},
-#          {'recording_start': two_minutes_ago, 'recording_end': now}, downloader.PermanentDownloadError)
-#     ]
-#     files = downloader.ZoomRecordingFiles("uuid", tracks)
-#     for prev_file, file, expected in tracks:
-#         if isinstance(expected, type):
-#             with pytest.raises(expected):
-#                 downloader.next_track_sequence(prev_file, file)
-#         else:
-#             assert downloader.next_track_sequence(prev_file, file) == expected
+                 downloader.Download, "_created_local", time_object):
+                dl = downloader.Download(None, None)
+                assert(dl._series_id_from_schedule == expected)
 
 
 """
@@ -256,17 +142,19 @@ def test_zoom_filename(mocker):
     ]
 
     file_data = {
+        "meeting_uuid": 1234,
         "download_url": "https://example.com/stream",
         "recording_id": 1234,
         "file_type": "mp4",
         "recording_start": "2020-01-09T19:50:46Z",
         "recording_end": "2020-01-09T21:50:46Z",
-        "view_type": "speaker"
+        "recording_type": "speaker"
     }
 
     for http_resp, expected, msg in cases:
         header = http_resp["header"] if "header" in http_resp else {}
         content = http_resp["content"] if "content" in http_resp else b''
+        downloader.ADMIN_TOKEN = "super-secret-admin-token"
         with requests_mock.mock() as req_mock:
             req_mock.get(
                 requests_mock.ANY,
@@ -274,7 +162,7 @@ def test_zoom_filename(mocker):
                 headers=header,
                 content=content
             )
-            file = downloader.ZoomFile("uuid", "admin_token", file_data)
+            file = downloader.ZoomFile(file_data, 1)
             if isinstance(expected, type) and expected.__base__ == Exception:
                 with pytest.raises(expected) as exc_info:
                     file.zoom_filename
