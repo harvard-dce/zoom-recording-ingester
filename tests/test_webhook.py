@@ -80,15 +80,25 @@ def test_non_json_body(handler):
     assert "not valid json" in res["body"]
 
 
+def test_missing_event(handler):
+    body = json.dumps({"no event type in here": 123})
+    res = handler(webhook, {"body": body})
+    assert res["statusCode"] == 400
+    assert "no event type" in res["body"].lower()
+
+
 def test_missing_payload(handler):
-    body = json.dumps({"not a payload": 123})
+    body = json.dumps({"not a payload": 123, "event": "recording.completed"})
     res = handler(webhook, {"body": body})
     assert res["statusCode"] == 400
     assert "missing payload" in res["body"].lower()
 
 
 def test_invalid_payload(handler):
-    body = json.dumps({"payload": "invalid payload"})
+    body = json.dumps({
+        "payload": "invalid payload",
+        "event": "recording.completed"
+    })
     res = handler(webhook, {"body": body})
     assert res["statusCode"] == 400
     assert "bad data" in res["body"].lower()

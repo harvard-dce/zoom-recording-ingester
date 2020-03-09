@@ -11,6 +11,10 @@ logger = logging.getLogger()
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
+INGEST_EVENT_TYPES = [
+    "recording.completed",
+    "on.demand.ingest"
+]
 
 
 class BadWebhookData(Exception):
@@ -53,11 +57,14 @@ def handler(event, context):
     except json.JSONDecodeError:
         return resp_400("Webhook notification body is not valid json.")
 
-    if "event" in body and body["event"] != "recording.completed":
+    zoom_event = body.get("event")
+    if zoom_event is None:
+        return resp_400("Request has no event type?")
+    elif zoom_event not in INGEST_EVENT_TYPES:
         return resp_204(
-            "Handling not implemented for event '{}'"
-            .format(body["event"])
+            "Handling not implemented for event '{}'".format(zoom_event)
         )
+    logger.info("Processing event type: {}".format(zoom_event))
 
     if "payload" not in body:
         return resp_400("Missing payload field in webhook notification body.")
@@ -167,6 +174,9 @@ def construct_sqs_message(payload, context):
         "correlation_id": context.aws_request_id,
         "received_time": now
     }
+
+    if "on_demand_series_id" in payload:
+        sqs_message["on_demand_series_id"] = payload["on_demand_series_id"]
 
     return sqs_message
 

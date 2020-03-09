@@ -1,8 +1,7 @@
+import io
 import site
-import unittest
-import pytest
 import json
-import copy
+import pytest
 from os.path import dirname, join
 from importlib import import_module
 
@@ -10,98 +9,122 @@ site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 uploader = import_module('zoom-uploader')
 
-SAMPLE_MESSAGE_BODY = {
-    "uuid": "abcdefg1234==",
-    "zoom_series_id": 123456789,
-    "opencast_series_id": "20200299999",
-    "host_name": "Angela Amari",
-    "topic": "TEST E-50",
-    "created": "2020-03-09T23:19:20Z",
-    "webhook_received_time": "2020-03-10T01:58:03Z",
-    "correlation_id": "1234"
-}
+def test_too_many_uploads(handler, mocker):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    uploader.sqs.get_queue_by_name = mocker.Mock()
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=10))
 
+    # with max = 5 and fake count = 10 the handler should abort
+    # before retrieving messages
+    mocker.patch.object(uploader, 'OC_TRACK_UPLOAD_MAX', 5)
+    res = handler(uploader, {})
+    assert uploader.sqs.get_queue_by_name.call_count == 0
 
-class MockContext():
-    def __init__(self, aws_request_id):
-        self.aws_request_id = aws_request_id
-        self.function_name = "zoom-uploader"
+def test_unknown_uploads(handler, mocker):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    uploader.sqs.get_queue_by_name = mocker.Mock()
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=None))
 
+    # with max = 5 and fake count = None the handler should abort
+    # before retrieving messages
+    mocker.patch.object(uploader, 'OC_TRACK_UPLOAD_MAX', 5)
+    res = handler(uploader, {})
+    assert uploader.sqs.get_queue_by_name.call_count == 0
 
-class MockUploadMessage():
-    def __init__(self, body):
-        self.body = json.dumps(body)
-        self.attributes = None
-        self.delete_call_count = 0
+def test_upload_count_ok(handler, mocker):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    receive_messages = mocker.Mock(return_value=[])
+    uploader.sqs.get_queue_by_name \
+        .return_value.receive_messages = receive_messages
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=3))
 
-    def delete(self):
-        self.delete_call_count += 1
+    # with max = 3 and fake count = 5 the handler should proceed
+    # to retrieving messages
+    mocker.patch.object(uploader, 'OC_TRACK_UPLOAD_MAX', 5)
+    res = handler(uploader, {})
+    assert receive_messages.call_count == 1
 
+def test_no_messages_available(handler, mocker, caplog):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=3))
+    uploader.sqs.get_queue_by_name \
+        .return_value.receive_messages \
+        .return_value = []
+    res = handler(uploader, {})
+    assert caplog.messages[-1] == "No upload queue messages available."
 
-"""
-Test handler
-"""
+def test_ingestion_error(handler, mocker, upload_message):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=3))
+    message = upload_message()
+    uploader.sqs.get_queue_by_name \
+        .return_value.receive_messages \
+        .return_value = [message]
+    uploader.process_upload = mocker.Mock(
+        side_effect=Exception("boom!"))
+    with pytest.raises(Exception) as exc_info:
+        res = handler(uploader, {})
+    assert exc_info.match("boom!")
+    # make sure the message doesn't get deleted
+    assert message.delete.call_count == 0
 
+def test_bad_message_body(handler, mocker):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=3))
+    message = mocker.Mock(body="this is definitely not json")
+    uploader.sqs.get_queue_by_name \
+        .return_value.receive_messages \
+        .return_value = [message]
+    with pytest.raises(Exception) as exc_info:
+        res = handler(uploader, {})
+    assert exc_info.typename == "JSONDecodeError"
+    # make sure the message doesn't get deleted
+    assert message.delete.call_count == 0
 
-class TestHandler(unittest.TestCase):
+def test_workflow_initiated(handler, mocker, upload_message, caplog):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=3))
+    message = upload_message()
+    uploader.sqs.get_queue_by_name \
+        .return_value.receive_messages \
+        .return_value = [message]
+    uploader.process_upload = mocker.Mock(return_value=12345)
+    res = handler(uploader, {})
+    assert "12345 initiated" in caplog.messages[-1]
 
-    @pytest.fixture(autouse=True)
-    def initfixtures(self, mocker):
-        self.mocker = mocker
-        self.context = MockContext(aws_request_id="mock-correlation_id")
-        self.mock_sqs = unittest.mock.Mock()
-        self.mocker.patch.object(uploader, "sqs_resource", self.mock_sqs)
+def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
+    mocker.patch.object(uploader, 'sqs', mocker.Mock())
+    mocker.patch.object(uploader, 'get_current_upload_count',
+                        mocker.Mock(return_value=3))
+    message = upload_message()
+    uploader.sqs.get_queue_by_name \
+        .return_value.receive_messages \
+        .return_value = [message]
+    uploader.process_upload = mocker.Mock(return_value=None)
+    res = handler(uploader, {})
+    assert "No workflow initiated." == caplog.messages[-1]
 
-    def test_no_messages_available(self):
-        self.mock_sqs().get_queue_by_name \
-            .return_value.receive_messages.return_value = []
+def test_get_current_upload_count(mocker):
+    uploader.aws_lambda = mocker.Mock()
+    cases = [
+        (10, {"track": 5, "uri-track": 5}),
+        (10, {"track": 5, "uri-track": 5, "foo": 3, "bar": 9}),
+        (35, {"track": 35, "bar": 9})
+    ]
+    for count, count_data in cases:
+        uploader.aws_lambda.invoke.return_value = {
+            "Payload": io.StringIO(json.dumps(count_data))
+        }
+        assert uploader.get_current_upload_count() == count
 
-        with self.assertLogs(level='INFO') as cm:
-            resp = uploader.handler({}, self.context)
-            log_message = json.loads(cm.output[-1])["message"]
-            assert log_message == "No upload queue messages available."
-            assert not resp
-
-    def test_workflow_initiated(self):
-
-        mock_wf_id = 92293838
-        cases = [
-            (mock_wf_id, "Workflow id {} initiated".format(mock_wf_id)),
-            (None, "No workflow initiated.")
-        ]
-
-        for wf_id, expected_log_msg in cases:
-
-            message = MockUploadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
-
-            self.mock_sqs().get_queue_by_name \
-                .return_value.receive_messages.return_value = [message]
-
-            self.mocker.patch.object(
-                uploader,
-                "process_upload",
-                return_value=wf_id
-            )
-
-            with self.assertLogs(level="INFO") as cm:
-                uploader.handler({}, self.context)
-                log_message = json.loads(cm.output[-1])["message"]
-                assert log_message == expected_log_msg
-                assert message.delete_call_count == 1
-
-    def test_error_while_ingesting(self):
-        message = MockUploadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
-
-        self.mock_sqs().get_queue_by_name \
-            .return_value.receive_messages.return_value = [message]
-
-        error_message = "failure while ingesting"
-        self.mocker.patch.object(
-            uploader,
-            "process_upload",
-            side_effect=Exception(error_message)
-        )
-
-        with pytest.raises(Exception) as exc_info:
-            uploader.handler({}, self.context)
-        assert exc_info.match(error_message)
+    uploader.aws_lambda.invoke.return_value = {
+        "Payload": io.StringIO("no json here either")
+    }
+    assert uploader.get_current_upload_count() == None

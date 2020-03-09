@@ -22,12 +22,12 @@ ZOOM_ADMIN_ID = env("ZOOM_ADMIN_ID")
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
-DOWNLOAD_MESSAGES_PER_INVOCATION = env('DOWNLOAD_MESSAGES_PER_INVOCATION')
+DOWNLOAD_MESSAGES_PER_INVOCATION = env("DOWNLOAD_MESSAGES_PER_INVOCATION")
 # Recordings that happen within BUFFER_MINUTES a courses schedule
 # start time will be captured
-BUFFER_MINUTES = 30
+BUFFER_MINUTES = int(env("BUFFER_MINUTES", 30))
 # Ignore recordings that are less than MIN_DURATION (in minutes)
-MINIMUM_DURATION = 2
+MINIMUM_DURATION = int(env("MINIMUM_DURATION", 2))
 
 
 class PermanentDownloadError(Exception):
@@ -250,6 +250,12 @@ class Download:
         if override_series_id:
             self.opencast_series_id = override_series_id
             logger.info("Using override series id '{}'"
+                        .format(self.opencast_series_id))
+            return True
+
+        if "on_demand_series_id" in self.data:
+            self.opencast_series_id = self.data["on_demand_series_id"]
+            logger.info("Using on-demand provided series id '{}'"
                         .format(self.opencast_series_id))
             return True
 

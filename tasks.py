@@ -10,7 +10,7 @@ from invoke import task, Collection
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
 from dotenv import load_dotenv
-from os.path import join, dirname, exists
+from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
 from functions.common import zoom_api_request
@@ -26,12 +26,15 @@ STACK_NAME = env('STACK_NAME')
 OC_CLUSTER_NAME = env('OC_CLUSTER_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
+INGEST_ALLOWED_IPS = env('INGEST_ALLOWED_IPS', '')
 
 FUNCTION_NAMES = [
     'zoom-webhook',
     'zoom-downloader',
     'zoom-uploader',
-    'zoom-log-notifications'
+    'zoom-log-notifications',
+    'opencast-op-counts',
+    'zoom-on-demand'
 ]
 
 if AWS_PROFILE is not None:
@@ -155,6 +158,16 @@ def deploy(ctx, function=None, do_release=False):
 
 
 @task(pre=[production_failsafe])
+def deploy_on_demand(ctx, do_release=False):
+    deploy(ctx, "zoom-on-demand", do_release)
+
+
+@task(pre=[production_failsafe])
+def deploy_opencast_op_counts(ctx, do_release=False):
+    deploy(ctx, "opencast-op-counts", do_release)
+
+
+@task(pre=[production_failsafe])
 def deploy_webhook(ctx, do_release=False):
     deploy(ctx, "zoom-webhook", do_release)
 
@@ -234,6 +247,49 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         print("No recordings found on {}".format(date))
     else:
         print("Done!")
+
+@task
+def update_requirements(ctx):
+    """
+    Run a `pip-compile -U` on all requirements files
+    """
+    req_file = relpath(join(dirname(__file__), 'requirements.in'))
+    ctx.run("pip-compile -r -U {}".format(req_file))
+    for func in FUNCTION_NAMES:
+        req_file = relpath(join(dirname(__file__),
+                        'function_requirements/{}.in'.format(func)))
+        ctx.run("pip-compile -r -U {}".format(req_file))
+
+
+@task
+def generate_resource_policy(ctx):
+    """
+    Update/set the api resource access policy
+    """
+    resource_policy = json.loads(API_RESOURCE_POLICY)
+
+    if not INGEST_ALLOWED_IPS:
+        ok = input(
+            '\nYou have not configured any allowed ips for the ingest endpoint'
+            '\nDo you still want to apply the access policy? [y/N] ').lower().strip().startswith(
+            'y')
+        if not ok:
+            return
+    else:
+        resource_policy["Statement"][1]["Condition"]["NotIpAddress"] \
+            ["aws:SourceIp"] = INGEST_ALLOWED_IPS.split(',')
+
+    api_id = api_gateway_id(ctx)
+
+    for s in resource_policy["Statement"]:
+        s["Resource"] = s["Resource"].format(
+            region=AWS_DEFAULT_REGION,
+            account=account_id(ctx),
+            api_id=api_id
+        )
+
+    print("Copy/paste the following into the API Gateway console")
+    print(json.dumps(resource_policy, indent=2))
 
 
 @task(help={'uuid': 'meeting instance uuid',
@@ -615,12 +671,16 @@ ns.add_task(codebuild)
 ns.add_task(package)
 ns.add_task(release)
 ns.add_task(list_recordings)
+ns.add_task(update_requirements)
+ns.add_task(generate_resource_policy)
 
 deploy_ns = Collection('deploy')
 deploy_ns.add_task(deploy, 'all')
 deploy_ns.add_task(deploy_webhook, 'webhook')
 deploy_ns.add_task(deploy_downloader, 'downloader')
 deploy_ns.add_task(deploy_uploader, 'uploader')
+deploy_ns.add_task(deploy_opencast_op_counts, 'opencast-op-counts')
+deploy_ns.add_task(deploy_on_demand, 'on-demand')
 ns.add_collection(deploy_ns)
 
 exec_ns = Collection('exec')
@@ -744,6 +804,39 @@ def oc_base_url(ctx):
 
     return url
 
+def oc_db_url(ctx):
+
+    cmd = ("aws {} rds describe-db-clusters "
+           "--db-cluster-identifier '{}-cluster' --output text "
+           "--query 'DBClusters[0].ReaderEndpoint' ") \
+        .format(profile_arg(), OC_CLUSTER_NAME)
+
+    res = ctx.run(cmd, hide=True)
+    endpoint = res.stdout.strip()
+
+    db_password = getenv('OC_DB_PASSWORD')
+    if db_password is None:
+        raise Exception("Missing OC_DB_PASSWORD env var")
+
+    return "mysql://root:{}@{}".format(db_password, endpoint)
+
+
+def account_id(ctx):
+
+    cmd = ("aws {} sts get-caller-identity "
+           "--query 'Account' --output text").format(profile_arg())
+    res = ctx.run(cmd, hide=1)
+    return res.stdout.strip()
+
+
+def api_gateway_id(ctx):
+
+    cmd = ("aws {} apigateway get-rest-apis "
+           "--query \"items[?name=='{}'].id\" --output text") \
+            .format(profile_arg(), STACK_NAME)
+    res = ctx.run(cmd, hide=1)
+    return res.stdout.strip()
+
 
 def stack_exists(ctx):
     cmd = "aws {} cloudformation describe-stacks --stack-name {}" \
@@ -757,6 +850,7 @@ def __create_or_update(ctx, op):
     template_path = join(dirname(__file__), 'template.yml')
 
     subnet_id, sg_id = vpc_components(ctx)
+    db_url = oc_db_url(ctx)
 
     default_publisher = getenv('DEFAULT_PUBLISHER', required=False)
     if default_publisher is None:
@@ -788,6 +882,10 @@ def __create_or_update(ctx, op):
            "ParameterKey=OCFlavor,ParameterValue='{}' "
            "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
            "ParameterKey=DownloadMessagesPerInvocation,ParameterValue='{}' "
+           "ParameterKey=OpencastDatabaseUrl,ParameterValue='{}' "
+           "ParameterKey=BufferMinutes,ParameterValue='{}' "
+           "ParameterKey=MinimumDuration,ParameterValue='{}' "
+           "ParameterKey=OCTrackUploadMax,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -815,7 +913,11 @@ def __create_or_update(ctx, op):
                 getenv("OC_WORKFLOW"),
                 getenv("OC_FLAVOR"),
                 getenv("PARALLEL_ENDPOINT", required=False),
-                getenv('DOWNLOAD_MESSAGES_PER_INVOCATION')
+                getenv('DOWNLOAD_MESSAGES_PER_INVOCATION'),
+                db_url,
+                getenv("BUFFER_MINUTES"),
+                getenv("MINIMUM_DURATION"),
+                getenv("OC_TRACK_UPLOAD_MAX")
                 )
 
     if op == 'create-change-set':
@@ -1434,3 +1536,29 @@ def __request_ids_from_logs(ctx, log_group, filter_pattern):
         log_stream, message = line.strip().split(maxsplit=1)
         message = json.loads(message)
         yield log_stream, message['aws_request_id']
+
+
+API_RESOURCE_POLICY = """
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "execute-api:Invoke",
+            "Resource": "arn:aws:execute-api:{region}:{account}:{api_id}/*"
+        },
+        {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "execute-api:Invoke",
+            "Resource": "arn:aws:execute-api:{region}:{account}:{api_id}/*/POST/ingest",
+            "Condition": {
+                "NotIpAddress": {
+                    "aws:SourceIp": []
+                }
+            }
+        }
+    ]
+}
+"""
