@@ -31,7 +31,8 @@ FUNCTION_NAMES = [
     'zoom-webhook',
     'zoom-downloader',
     'zoom-uploader',
-    'zoom-log-notifications'
+    'zoom-log-notifications',
+    'opencast-op-counts'
 ]
 
 if AWS_PROFILE is not None:
@@ -784,6 +785,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OCFlavor,ParameterValue='{}' "
            "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
            "ParameterKey=DownloadMessagesPerInvocation,ParameterValue='{}' "
+           "ParameterKey=OpencastDatabaseUrl,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -811,7 +813,8 @@ def __create_or_update(ctx, op):
                 getenv("OC_WORKFLOW"),
                 getenv("OC_FLAVOR"),
                 getenv("PARALLEL_ENDPOINT", required=False),
-                getenv('DOWNLOAD_MESSAGES_PER_INVOCATION')
+                getenv('DOWNLOAD_MESSAGES_PER_INVOCATION'),
+                getenv('OPENCAST_DB_URL')
                 )
 
     if op == 'create-change-set':

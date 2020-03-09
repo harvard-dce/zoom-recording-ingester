@@ -52,6 +52,8 @@ Parameters:
     Type: String
   DownloadMessagesPerInvocation:
     Type: String
+  OpencastDatabaseUrl:
+    Type: String
 
 Conditions:
   UploadFunctionVpcConfig: !Not [!Equals ["", !Ref VpcSubnetId]]
@@ -229,6 +231,39 @@ Resources:
             application/json: Empty
           StatusCode: 200
 
+  OpencastOpCountsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: opencast-op-counts.handler
+      Runtime: python3.8
+      Timeout: 10
+      Role: !GetAtt [ZoomIngesterRole, Arn]
+      FunctionName: !Sub "${AWS::StackName}-opencast-op-counts-function"
+      Environment:
+        Variables:
+          OPENCAST_DB_URL: !Ref OpencastDatabaseUrl
+          DEBUG: 0
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Sub "${AWS::StackName}/opencast-op-counts.zip"
+      VpcConfig:
+        !If
+        - UploadFunctionVpcConfig
+        -
+          SecurityGroupIds:
+            - !Ref VpcSecurityGroupId
+          SubnetIds:
+            - !Ref VpcSubnetId
+        - !Ref AWS::NoValue
+
+  OpencastOpCountsFunctionAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      Description: "initial release"
+      FunctionName: !Ref OpencastOpCountsFunction
+      FunctionVersion: "$LATEST"
+      Name: !Ref LambdaReleaseAlias
+
   ZoomWebhookFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -363,6 +398,7 @@ Resources:
           DEBUG: 0
           OC_WORKFLOW: !Ref OCWorkflow
           OC_FLAVOR: !Ref OCFlavor
+          OC_OP_COUNT_FUNCTION: !Ref OpencastOpCountsFunction
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-uploader.zip"

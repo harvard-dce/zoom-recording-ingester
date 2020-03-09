@@ -27,8 +27,11 @@ ZOOM_OPENCAST_FLAVOR = env("OC_FLAVOR")
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
 OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
+OC_OP_COUNT_FUNCTION = env("OC_OP_COUNT_FUNCTION")
+OC_TRACK_UPLOAD_MAX = 5
 
 s3 = boto3.resource("s3")
+aws_lambda = boto3.client("lambda")
 
 session = requests.Session()
 session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
@@ -66,6 +69,16 @@ def sqs_resource():
 @setup_logging
 def handler(event, context):
 
+    current_uploads = get_current_upload_count()
+    if current_uploads is None:
+        logger.info("Unable to determine number of existing upload ops")
+        return
+    elif current_uploads >= OC_TRACK_UPLOAD_MAX:
+        logger.info("Too many current track uploads: {}".format(current_uploads))
+        return
+    else:
+        logger.info("Opencast upload count looks good: {}".format(current_uploads))
+
     sqs = sqs_resource()
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
@@ -76,6 +89,8 @@ def handler(event, context):
     if len(messages) == 0:
         logger.warning("No upload queue messages available")
         return
+    else:
+        logger.info("{} upload messages in queue".format(len(messages)))
 
     upload_message = messages[0]
     logger.debug({
@@ -92,6 +107,8 @@ def handler(event, context):
                                     upload_data["webhook_received_time"]),
             "body": upload_data
         })
+
+        # don't
         wf_id = process_upload(upload_data)
         upload_message.delete()
         if wf_id:
@@ -110,6 +127,18 @@ def minutes_in_pipeline(webhook_received_time):
     duration = ingest_time - start_time
     return duration.total_seconds() // 60
 
+def get_current_upload_count():
+    try:
+        resp = aws_lambda.invoke(FunctionName=OC_OP_COUNT_FUNCTION)
+        op_counts = json.load(resp['Payload'])
+        logger.info('op counts: {}'.format(op_counts))
+        return sum(
+            v for k, v in op_counts.items()
+            if v is not None and k in ('track', 'uri-track')
+        )
+    except Exception as e:
+        logger.exception(e)
+        return None
 
 def process_upload(upload_data):
     upload = Upload(upload_data)

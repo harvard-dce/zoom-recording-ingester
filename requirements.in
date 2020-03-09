@@ -18,3 +18,4 @@ awslogs
 -r function_requirements/zoom-downloader.in
 -r function_requirements/zoom-uploader.in
 -r function_requirements/zoom-log-notifications.in
+-r function_requirements/opencast-op-counts.in
