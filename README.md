@@ -32,6 +32,7 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
 
 1. Run `invoke create-code-bucket` to ensure the s3 bucket for packaged lambda code exists
 1. Run `invoke stack.create` to build the CloudFormation stack
+1. Run `invoke generate-resource-policy` and paste the output into the API Gateway's "Resource Policy" field in the web console.
 1. Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
     1. Export the DCE Zoom schedule google spreadsheet to a CSV file
     1. Run `invoke schedule.import -c [csv file] -s [semester] -y [year]`
@@ -173,6 +174,10 @@ Delete the stack.
 
 Enable/disable debug logging in the Lambda functions. This task adds or modifies
 a `DEBUG` evnironment variable in the Lambda function(s) settings.
+
+##### `invoke update-requirements`
+
+Does a bulk `pip-compile` upgrade of all base and function requirements.
 
 ## Development
 

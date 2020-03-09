@@ -9,11 +9,10 @@ from xml.sax.saxutils import escape
 from datetime import datetime
 from hashlib import md5
 from uuid import UUID
-from common import TIMESTAMP_FORMAT
+from common import TIMESTAMP_FORMAT, setup_logging
 
 
 import logging
-from common import setup_logging
 logger = logging.getLogger()
 
 UPLOAD_QUEUE_NAME = env("UPLOAD_QUEUE_NAME")
@@ -27,8 +26,12 @@ ZOOM_OPENCAST_FLAVOR = env("OC_FLAVOR")
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
 OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
+OC_OP_COUNT_FUNCTION = env("OC_OP_COUNT_FUNCTION")
+OC_TRACK_UPLOAD_MAX = int(env("OC_TRACK_UPLOAD_MAX", 5))
 
 s3 = boto3.resource("s3")
+aws_lambda = boto3.client("lambda")
+sqs = boto3.resource('sqs')
 
 session = requests.Session()
 session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
@@ -46,6 +49,11 @@ MP4_VIEW_PRIORITY_LIST = [
     "gallery_view"
 ]
 
+UPLOAD_OP_TYPES = [
+    'track',
+    'uri-track'
+]
+
 
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
@@ -58,15 +66,19 @@ def oc_api_request(method, endpoint, **kwargs):
     return resp
 
 
-# boto resource/client setup must be wrapped for unit testing
-def sqs_resource():
-    return boto3.resource("sqs")
-
-
 @setup_logging
 def handler(event, context):
 
-    sqs = sqs_resource()
+    current_uploads = get_current_upload_count()
+    if current_uploads is None:
+        logger.error("Unable to determine number of existing upload ops")
+        return
+    elif current_uploads >= OC_TRACK_UPLOAD_MAX:
+        logger.warning("Too many current track uploads: {}".format(current_uploads))
+        return
+    else:
+        logger.info("Opencast upload count looks good: {}".format(current_uploads))
+
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
     messages = upload_queue.receive_messages(
@@ -76,6 +88,8 @@ def handler(event, context):
     if len(messages) == 0:
         logger.warning("No upload queue messages available.")
         return
+    else:
+        logger.info("{} upload messages in queue".format(len(messages)))
 
     upload_message = messages[0]
     logger.debug({
@@ -92,6 +106,7 @@ def handler(event, context):
                                     upload_data["webhook_received_time"]),
             "body": upload_data
         })
+
         wf_id = process_upload(upload_data)
         upload_message.delete()
         if wf_id:
@@ -110,6 +125,18 @@ def minutes_in_pipeline(webhook_received_time):
     duration = ingest_time - start_time
     return duration.total_seconds() // 60
 
+def get_current_upload_count():
+    try:
+        resp = aws_lambda.invoke(FunctionName=OC_OP_COUNT_FUNCTION)
+        op_counts = json.load(resp['Payload'])
+        logger.info('op counts: {}'.format(op_counts))
+        return sum(
+            v for k, v in op_counts.items()
+            if v is not None and k in UPLOAD_OP_TYPES
+        )
+    except Exception as e:
+        logger.exception(e)
+        return None
 
 def process_upload(upload_data):
     upload = Upload(upload_data)
