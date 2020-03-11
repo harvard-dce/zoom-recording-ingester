@@ -34,6 +34,11 @@ class PermanentDownloadError(Exception):
     pass
 
 
+# abstraction for unit testing
+def sqs_resource():
+    return boto3.resource("sqs")
+
+
 @setup_logging
 def handler(event, context):
     """
@@ -43,13 +48,13 @@ def handler(event, context):
 
     ignore_schedule = event.get("ignore_schedule", False)
     override_series_id = event.get("override_series_id")
-    sqs = boto3.resource("sqs")
+    sqs = sqs_resource()
 
     # try DOWNLOAD_MESSAGES_PER_INVOCATION number of times to retrieve
     # a recoreding that matches the class schedule
     dl, download_message = None, None
+    download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
     for _ in range(int(DOWNLOAD_MESSAGES_PER_INVOCATION)):
-        download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
         download_message = retrieve_message(download_queue)
         if not download_message:
             logger.info("No messages available in downloads queue.")
@@ -252,8 +257,8 @@ class Download:
             logger.info("Ignoring schedule")
         else:
             self.opencast_series_id = self._series_id_from_schedule
-            print("series_id_from_schedule returned {}"
-                  .format(self.opencast_series_id))
+            logger.info("series_id_from_schedule returned {}"
+                        .format(self.opencast_series_id))
             if self.opencast_series_id is not None:
                 logger.info("Matched with opencast series '{}'!"
                             .format(self.opencast_series_id))

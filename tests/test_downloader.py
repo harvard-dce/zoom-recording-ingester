@@ -1,22 +1,183 @@
 import site
 import os
+import json
 from os.path import dirname, join
 import pytest
 from importlib import import_module
 import requests_mock
-from datetime import datetime, timedelta
+from datetime import datetime
 from pytz import timezone
 from mock import patch
+import unittest
+from freezegun import freeze_time
+import copy
 
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 downloader = import_module('zoom-downloader')
+downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 10
+downloader.CLASS_SCHEDULE_TABLE = "mock-schedule-table"
 
 LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
 TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 
 tz = timezone(LOCAL_TIME_ZONE)
 FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
+
+SAMPLE_MESSAGE_BODY = {
+    "duration": 30,
+    "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
+}
+
+DAYS = ["M", "T", "W", "R", "F", "Sa", "Sn"]
+
+SAMPLE_SCHEDULE = {
+        "Days": [
+            DAYS[datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT).weekday()]
+        ],
+        "zoom_series_id": "123456789",
+        "opencast_series_id": "20200299999",
+        "Time": [
+            datetime.strftime(
+                datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT),
+                "%H:%M"
+            )
+        ],
+        "opencast_subject": "TEST E-61"
+    }
+
+
+class MockContext():
+    def __init__(self, aws_request_id):
+        self.aws_request_id = aws_request_id
+        self.function_name = "zoom-downloader"
+
+
+class MockDownloadMessage():
+    def __init__(self, body):
+        self.body = json.dumps(body)
+        self.delete_count = 0
+
+    def delete(self):
+        self.delete_count += 1
+
+
+"""
+Test handler
+"""
+
+
+class TestHandler(unittest.TestCase):
+
+    @pytest.fixture(autouse=True)
+    def initfixtures(self, mocker):
+        self.mocker = mocker
+        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.mock_sqs = unittest.mock.Mock()
+        self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
+        self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
+
+    def test_no_messages_available(self):
+        self.mocker.patch.object(
+            downloader, "retrieve_message", return_value=None
+        )
+
+        with self.assertLogs(level='INFO') as cm:
+            resp = downloader.handler({}, self.context)
+            log_message = json.loads(cm.output[-1])["message"]
+            assert log_message == "No messages available in downloads queue."
+            assert not resp
+
+    @freeze_time(FROZEN_TIME)
+    def test_no_schedule_match(self):
+        """
+        Test that after retrieving DOWNLOAD_MESSAGES_PER_INVOCATION
+        messages that don't match, the downloader lambda deletes each
+        message and returns.
+        """
+
+        message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
+
+        self.mocker.patch.object(
+            downloader, "retrieve_message", return_value=message
+        )
+        self.mocker.patch.object(
+            downloader.Download, "_class_schedule", return_value={}
+        )
+
+        with self.assertLogs(level="INFO") as cm:
+            resp = downloader.handler({}, self.context)
+
+            assert not resp
+            assert message.delete_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
+
+            log_message = json.loads(cm.output[-1])["message"]
+            expected = "No available recordings match the class schedule."
+            assert log_message == expected
+
+    def test_schedule_matched(self):
+        """
+        Test that after a message is found, the handler stops
+        retrieving messages.
+        """
+
+        no_match_message = MockDownloadMessage(
+            copy.deepcopy(SAMPLE_MESSAGE_BODY)
+        )
+
+        match_message = MockDownloadMessage(
+            copy.deepcopy(SAMPLE_MESSAGE_BODY)
+        )
+
+        messages = [no_match_message] * downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
+        messages[-1] = match_message
+
+        def mock_messages(*args):
+            return messages.pop(0)
+
+        self.mocker.patch.object(
+            downloader,
+            "retrieve_message",
+            side_effect=mock_messages
+        )
+
+        series_found = [False] * downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
+        series_found[-1] = True
+
+        def mock_series_found(*args):
+            return series_found.pop(0)
+
+        self.mocker.patch.object(
+            downloader.Download,
+            "oc_series_found",
+            side_effect=mock_series_found
+        )
+
+        self.mocker.patch.object(
+            downloader,
+            "get_admin_token",
+            return_value="mock-admin-token"
+        )
+
+        self.mocker.patch.object(downloader.Download, "upload_to_s3")
+
+        mock_upload_msg = {"mock_upload_message": 1234}
+        self.mocker.patch.object(
+            downloader.Download,
+            "send_to_uploader_queue",
+            return_value=mock_upload_msg
+        )
+
+        with self.assertLogs(level="INFO") as cm:
+            resp = downloader.handler({}, self.context)
+
+            assert not resp
+            assert no_match_message.delete_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION - 1
+            assert match_message.delete_count == 1
+
+            log_message = json.loads(cm.output[-1])["message"]
+            expected = {"Sent to uploader": mock_upload_msg}
+            assert log_message == expected
 
 
 """

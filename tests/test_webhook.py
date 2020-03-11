@@ -33,8 +33,7 @@ SAMPLE_NOTIFICATION = {
                  "recording_end": "2020-01-09T20:50:46Z",
                  "download_url": "https://zoom.us/rec/play/some-long-id",
                  "file_type": "MP4",
-                 "recording_type": "shared_screen_with_speaker_view",
-                 "status": "completed"}
+                 "recording_type": "shared_screen_with_speaker_view"}
             ]
 
         }
@@ -43,7 +42,6 @@ SAMPLE_NOTIFICATION = {
 }
 
 MOCK_CORRELATION_ID = "12345-abcde"
-MOCK_HOST_NAME = "host name"
 
 # file id renamed for sqs message
 files = copy.deepcopy(
@@ -57,10 +55,10 @@ SAMPLE_SQS_MESSAGE_BODY = {
     "topic": SAMPLE_NOTIFICATION["payload"]["object"]["topic"],
     "start_time": SAMPLE_NOTIFICATION["payload"]["object"]["start_time"],
     "duration": SAMPLE_NOTIFICATION["payload"]["object"]["duration"],
-    "host_name": MOCK_HOST_NAME,
+    "host_id": SAMPLE_NOTIFICATION["payload"]["object"]["host_id"],
     "recording_files": files,
-    "correlation_id": MOCK_CORRELATION_ID,
-    "received_time": FROZEN_TIME
+    "received_time": FROZEN_TIME,
+    "correlation_id": MOCK_CORRELATION_ID
 }
 
 
@@ -142,7 +140,6 @@ def test_handler_happy_trail(handler, mocker):
     event = {
         'body': json.dumps(SAMPLE_NOTIFICATION)
     }
-    mocker.patch.object(webhook, 'host_name', return_value=MOCK_HOST_NAME)
     mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
     context = MockContext(aws_request_id=MOCK_CORRELATION_ID)
 
@@ -159,7 +156,6 @@ def test_delay_seconds(handler, mocker):
     event = {
         "body": json.dumps(notification)
     }
-    mocker.patch.object(webhook, 'host_name', return_value=MOCK_HOST_NAME)
     mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
     context = MockContext(aws_request_id=MOCK_CORRELATION_ID)
 
