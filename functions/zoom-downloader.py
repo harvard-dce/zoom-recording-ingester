@@ -57,7 +57,7 @@ def handler(event, context):
     for _ in range(int(DOWNLOAD_MESSAGES_PER_INVOCATION)):
         download_message = retrieve_message(download_queue)
         if not download_message:
-            logger.info("No messages available in downloads queue.")
+            logger.info("No download queue messages available.")
             return
 
         dl = Download(sqs, json.loads(download_message.body))

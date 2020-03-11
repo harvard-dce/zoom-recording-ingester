@@ -56,10 +56,10 @@ class MockContext():
 class MockDownloadMessage():
     def __init__(self, body):
         self.body = json.dumps(body)
-        self.delete_count = 0
+        self.delete_call_count = 0
 
     def delete(self):
-        self.delete_count += 1
+        self.delete_call_count += 1
 
 
 """
@@ -85,7 +85,7 @@ class TestHandler(unittest.TestCase):
         with self.assertLogs(level='INFO') as cm:
             resp = downloader.handler({}, self.context)
             log_message = json.loads(cm.output[-1])["message"]
-            assert log_message == "No messages available in downloads queue."
+            assert log_message == "No download queue messages available."
             assert not resp
 
     @freeze_time(FROZEN_TIME)
@@ -109,7 +109,7 @@ class TestHandler(unittest.TestCase):
             resp = downloader.handler({}, self.context)
 
             assert not resp
-            assert message.delete_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
+            assert message.delete_call_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
 
             log_message = json.loads(cm.output[-1])["message"]
             expected = "No available recordings match the class schedule."
@@ -172,8 +172,8 @@ class TestHandler(unittest.TestCase):
             resp = downloader.handler({}, self.context)
 
             assert not resp
-            assert no_match_message.delete_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION - 1
-            assert match_message.delete_count == 1
+            assert no_match_message.delete_call_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION - 1
+            assert match_message.delete_call_count == 1
 
             log_message = json.loads(cm.output[-1])["message"]
             expected = {"Sent to uploader": mock_upload_msg}

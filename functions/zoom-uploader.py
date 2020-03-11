@@ -74,7 +74,7 @@ def handler(event, context):
         VisibilityTimeout=300
     )
     if len(messages) == 0:
-        logger.warning("No upload queue messages available")
+        logger.warning("No upload queue messages available.")
         return
 
     upload_message = messages[0]
