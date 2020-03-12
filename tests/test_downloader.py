@@ -370,8 +370,10 @@ class TestDownloader(unittest.TestCase):
             (SAMPLE_MESSAGE_BODY, (None, False), default_id, True,
              default_series_id_msg),
 
-            # no match found
-            (SAMPLE_MESSAGE_BODY, (None, False), None, False, no_match_msg)
+            # no match found, no default series id
+            (SAMPLE_MESSAGE_BODY, (None, False), None, False, no_match_msg),
+            (SAMPLE_MESSAGE_BODY, (None, False), "None", False, no_match_msg),
+            (SAMPLE_MESSAGE_BODY, (None, False), "", False, no_match_msg),
         ]
 
         for data, args, default_id, expected_ret, expected_msg in cases:

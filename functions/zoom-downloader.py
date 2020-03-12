@@ -262,7 +262,7 @@ class Download:
                             .format(self.opencast_series_id))
                 return True
 
-        if DEFAULT_SERIES_ID is not None and DEFAULT_SERIES_ID != "None":
+        if DEFAULT_SERIES_ID and DEFAULT_SERIES_ID != "None":
             logger.info("Using default series id {}"
                         .format(DEFAULT_SERIES_ID))
             self.opencast_series_id = DEFAULT_SERIES_ID
