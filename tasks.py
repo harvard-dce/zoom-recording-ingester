@@ -237,9 +237,11 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 
 
 @task(help={'uuid': 'meeting instance uuid',
-            'ignore_schedule': ('do opencast series id lookup but ignore if '
-                                'meeting times don\'t match')})
-def exec_pipeline(ctx, uuid, ignore_schedule=False):
+            'ignore_schedule': ('ignore schedule, use default series if '
+                                'available'),
+            'override_series_id': ('opencast series id to use regardless of '
+                                   'schedule')})
+def exec_pipeline(ctx, uuid, ignore_schedule=False, override_series_id=None):
     """
     Manually trigger the webhook handler, downloader, and uploader.
     Positional arguments: uuid, host_id, series-id
@@ -252,7 +254,9 @@ def exec_pipeline(ctx, uuid, ignore_schedule=False):
     # Keep retrying downloader until some messages are processed
     # or it fails.
     print("\nTriggering downloader...\n")
-    resp = exec_downloader(ctx, ignore_schedule=ignore_schedule)
+    resp = exec_downloader(ctx,
+                           ignore_schedule=ignore_schedule,
+                           series_id=override_series_id)
     wait = 1
     while not resp:
         resp = exec_downloader(ctx)
@@ -354,10 +358,10 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
 
     payload = {'ignore_schedule': ignore_schedule}
 
-    if series_id is not None:
+    if series_id:
         payload['override_series_id'] = series_id
 
-    if qualifier is None:
+    if not qualifier:
         qualifier = getenv('LAMBDA_RELEASE_ALIAS')
 
     cmd = ("aws lambda invoke --function-name='{}-zoom-downloader-function' "

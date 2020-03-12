@@ -1,9 +1,22 @@
 {
-  "uuid": "DvKcwNXKQfGR9ggog0fzJg==",
-  "meeting_number": 12345678,
-  "host_name": "Professor Faculty",
-  "topic": "Recording Title",
-  "start_time": "2018-03-05T23:03:16Z",
-  "recording_count": 3,
-  "correlation_id": "cee93910-22eb-11e8-93b6-5d4c54c2ff0c"
+  "minutes_in_pipeline": 5,
+  "body": {
+      // unique id of meeting session
+      "uuid": "abcdefghijklmnop==",
+      // meeting room id
+      "zoom_series_id": 123456789,
+      "opencast_series_id": "20190199999",
+      "host_name": "Foo Bar",
+      "topic": "Special Lecture",
+      "created": "2020-03-12T20:43:36Z",
+      "created_local": "2020-03-12T16:43:36Z",
+      "webhook_received_time": "2020-03-13T00:34:12Z",
+      // webhook function's aws request id
+      "correlation_id": "cab436d8-64bc-11ea-bc55-0242ac130003",
+      "s3_filenames": {
+          "shared_screen_with_speaker_view": [
+              "123456789/1584045816/000-shared_screen_with_speaker_view.mp4"
+          ]
+      }
+  }
 }

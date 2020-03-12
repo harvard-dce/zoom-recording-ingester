@@ -16,7 +16,7 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
 * A Zoom account login user/pass combo
 * An email address to recieve alerts and other notifications
 
-    
+
 ## Initial Setup
 
 #### local environment setup
@@ -36,7 +36,7 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
     1. Export the DCE Zoom schedule google spreadsheet to a CSV file
     1. Run `invoke schedule.import -c [csv file] -s [semester] -y [year]`
 
-That's it. Your Zoom Ingester is deployed and operational. To see a summary of the 
+That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
 
 #### dependency changes
@@ -50,7 +50,7 @@ which is then compiled to a "locked" `.txt` version like so:
 Both the `.in` and `.txt` files are version-controlled, so the initial compile was
 only necessary once. Now we only have to run `pip-compile` in a couple of situations:
 
-* when upgrading a particular package. 
+* when upgrading a particular package.
 * to update the project's base requirements list if a dependency for a specific function is changed
 
 In the first case you run `pip-compile -P [package-name] [source file]` where `source_file` is the `.in` file getting the update.
@@ -64,11 +64,11 @@ Finally, run `pip-sync` to ensure the packages are updated in your virtualenv .
 
 Lambda functions employ the concepts of "versions" and "aliases". Each time you push new
 code to a Lambda function it updates a special version signifier, `$LATEST`. If you wish
-to assign an actual version number to what is referenced by `$LATEST` you "publish" a 
-new version. Versions are immutable and version numbers always increment by 1. 
+to assign an actual version number to what is referenced by `$LATEST` you "publish" a
+new version. Versions are immutable and version numbers always increment by 1.
 
 Aliases allow us to control which versions of the Lambda functions are invoked by the system.
-The Zoom Ingester uses a single alias defined by the `.env` variable, `LAMBDA_RELEASE_ALIAS` (default "live"), 
+The Zoom Ingester uses a single alias defined by the `.env` variable, `LAMBDA_RELEASE_ALIAS` (default "live"),
 to designate the currently released versions of each function. A new version of each
 function can be published independent of the alias as many times as you like. It is only
 when the release alias is updated to point to one of the new versions that the behavior
@@ -81,7 +81,7 @@ At this point you may wish to re-release a specific tag or branch of the functio
 In a production environment this should be done via the CodeBuild project, like so:
 
     invoke codebuild -r release-v1.0.0
-    
+
 This command will trigger CodeBuild to package and release the function code from the github
 repo identified by the "release-v1.0.0" tag. Each function will have a new Lambda version "2"
 published and the release alias will be updated to point to this version.
@@ -112,9 +112,9 @@ information:
 The Zoom Ingester pipeline includes a DynamoDB table that stores information about
 when Zoom classes are held. This is because the same Zoom series id can be used by
 different courses. To determine the correct Opencast series that the recording should
-be ingested to we need to also know what time the meeting occurred. 
+be ingested to we need to also know what time the meeting occurred.
 
-The current authority for Zoom meeting schedules is a google spreadsheet. To populate 
+The current authority for Zoom meeting schedules is a google spreadsheet. To populate
 our DynamoDB from the spread sheet data we have to export the spreadsheet to CSV and then
 import to DynamoDB using the `invoke schedule.import` task.
 
@@ -149,7 +149,7 @@ Use `stack.update` to modify an existing stack.
 
 ##### `invoke stack.status`
 
-This will output some tables of information about the current state of the 
+This will output some tables of information about the current state of the
 CloudFormation stack and the Lambda functions.
 
 ##### `invoke codebuild --revision [tag or branch]`
@@ -180,7 +180,7 @@ a `DEBUG` evnironment variable in the Lambda function(s) settings.
    to unique values, e.g. "myname-zoom-ingester"
 1. Follow the usual stack creation steps outlined at the top
 1. Make changes
-1. Run `invoke deploy --do-release` to push changes to your Lambda functions
+1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions
 1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
 1. Repeat
 
@@ -207,4 +207,4 @@ execute:
 
 `invoke test`
 
-Alternatively you can run `tox`. 
+Alternatively you can run `tox`.
