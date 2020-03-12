@@ -15,7 +15,7 @@ phases:
       - invoke test
   build:
     commands:
-      - invoke deploy
+      - invoke deploy.all
       - invoke release --description "$CODEBUILD_SOURCE_VERSION"
 artifacts:
   files:
