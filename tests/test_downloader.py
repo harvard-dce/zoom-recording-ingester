@@ -1,332 +1,419 @@
 import site
 import os
+import json
 from os.path import dirname, join
 import pytest
 from importlib import import_module
-import requests
 import requests_mock
-from datetime import datetime, timedelta
+from datetime import datetime
 from pytz import timezone
 from mock import patch
+import unittest
+from freezegun import freeze_time
+import copy
 
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 
 downloader = import_module('zoom-downloader')
+downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 10
+downloader.CLASS_SCHEDULE_TABLE = "mock-schedule-table"
 
 LOCAL_TIME_ZONE = os.getenv('LOCAL_TIME_ZONE')
 TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 
+tz = timezone(LOCAL_TIME_ZONE)
+FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 
-def test_overlapping_recording_segments():
+SAMPLE_MESSAGE_BODY = {
+    "duration": 30,
+    "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
+}
 
-    now = datetime.now()
-    one_minute_ago = (now - timedelta(minutes=1)).strftime(TIMESTAMP_FORMAT)
-    two_minutes_ago = (now - timedelta(minutes=2)).strftime(TIMESTAMP_FORMAT)
-    now = now.strftime(TIMESTAMP_FORMAT)
+DAYS = ["M", "T", "W", "R", "F", "Sa", "Sn"]
 
-    tracks = [
-        (None, {'recording_start': two_minutes_ago, 'recording_end': one_minute_ago}, False),
-        ({'recording_start': one_minute_ago, 'recording_end': now},
-         {'recording_start': one_minute_ago, 'recording_end': now}, False),
-        ({'recording_start': two_minutes_ago, 'recording_end': one_minute_ago},
-         {'recording_start': one_minute_ago, 'recording_end': now}, True),
-        ({'recording_start': two_minutes_ago, 'recording_end': now},
-         {'recording_start': one_minute_ago, 'recording_end': now}, downloader.PermanentDownloadError),
-        ({'recording_start': two_minutes_ago, 'recording_end': one_minute_ago},
-         {'recording_start': two_minutes_ago, 'recording_end': now}, downloader.PermanentDownloadError)
-    ]
-
-    for prev_file, file, expected in tracks:
-        if isinstance(expected, type):
-            with pytest.raises(expected):
-                downloader.next_track_sequence(prev_file, file)
-        else:
-            assert downloader.next_track_sequence(prev_file, file) == expected
+SAMPLE_SCHEDULE = {
+        "Days": [
+            DAYS[datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT).weekday()]
+        ],
+        "zoom_series_id": "123456789",
+        "opencast_series_id": "20200299999",
+        "Time": [
+            datetime.strftime(
+                datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT),
+                "%H:%M"
+            )
+        ],
+        "opencast_subject": "TEST E-61"
+    }
 
 
-def test_recording_data_request(mocker):
-
-    mocker.patch.object(downloader, 'gen_token', return_value=b'foobarbaz')
-
-    # test that auth token gets in the headers properly
-    with requests_mock.mock() as req_mock:
-        req_mock.get(requests_mock.ANY, status_code=200, json={})
-        api_data = downloader.api_request('https://api.example.com/v2/abcd-1234')
-        assert api_data == {}
-        assert 'Authorization' in req_mock.last_request.headers
-        assert req_mock.last_request.headers['Authorization'] == 'Bearer foobarbaz'
-
-    # test simple response returns ok
-    with requests_mock.mock() as req_mock:
-        req_mock.get(requests_mock.ANY, status_code=200, json={'code': 9999, 'foo': 'bar'})
-        api_data = downloader.api_request('https://api.example.com/v2/xyz-789')
-        assert api_data['foo'] == 'bar'
+class MockContext():
+    def __init__(self, aws_request_id):
+        self.aws_request_id = aws_request_id
+        self.function_name = "zoom-downloader"
 
 
-def test_verify_recording_status():
+class MockDownloadMessage():
+    def __init__(self, body):
+        self.body = json.dumps(body)
+        self.delete_call_count = 0
 
-    rec_data = [
-        ({}, downloader.PermanentDownloadError, "No recordings for this meeting."),
-        ({'recording_files': []}, downloader.PermanentDownloadError, "No recordings for this meeting."),
-        ({'recording_files': [{'id': 1, 'status': 'not completed'}]}, False, None),
-        ({'recording_files': [{'id': 1, 'status': 'completed'}]},
-         downloader.ApiResponseParsingFailure, 'missing a download_url'),
-        ({'recording_files': [{'id': 1, 'status': 'completed', 'download_url': 'http://example.com/video.mp4'}]},
-         True, None)
-    ]
-
-    for data, expected, msg in rec_data:
-        if isinstance(expected, type) and expected.__base__ == Exception:
-            with pytest.raises(expected):
-                downloader.verify_recording_status(data)
-        else:
-            assert downloader.verify_recording_status(data) == expected
+    def delete(self):
+        self.delete_call_count += 1
 
 
-def test_get_api_data_timeout_retries(mocker):
-
-    mock_api_request = mocker.patch.object(downloader, 'api_request')
-    mocker.patch.object(downloader, 'MEETING_LOOKUP_RETRY_DELAY', new=0)
-
-    # fail > retry times
-    mock_api_request.side_effect = [
-        requests.ConnectTimeout()
-        for i in range(downloader.MEETING_LOOKUP_RETRIES + 1)
-    ]
-
-    with pytest.raises(downloader.ApiLookupFailure) as exc_info:
-        downloader.get_api_data('https://api.example.com/v2/abcd-1234')
-
-    assert mock_api_request.call_count == 3
-    assert 'No more retries' in str(exc_info.value)
-    return
+"""
+Test handler
+"""
 
 
-def test_get_recording_data_validate_retries(mocker):
+class TestHandler(unittest.TestCase):
 
-    mock_api_request = mocker.patch.object(downloader, 'api_request')
-    mocker.patch.object(downloader, 'MEETING_LOOKUP_RETRY_DELAY', new=0)
+    @pytest.fixture(autouse=True)
+    def initfixtures(self, mocker):
+        self.mocker = mocker
+        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.mock_sqs = unittest.mock.Mock()
+        self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
+        self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
 
-    with pytest.raises(downloader.ApiLookupFailure) as exc_info:
-        validator = lambda x: False
-        downloader.get_api_data('https://api.example.com/v2/abcd-1234', validate_callback=validator)
+    def test_no_messages_available(self):
+        self.mocker.patch.object(
+            downloader, "retrieve_message", return_value=None
+        )
 
-    assert mock_api_request.call_count == 3
-    assert 'No more retries' in str(exc_info.value)
-    return
+        with self.assertLogs(level='INFO') as cm:
+            resp = downloader.handler({}, self.context)
+            log_message = json.loads(cm.output[-1])["message"]
+            assert log_message == "No download queue messages available."
+            assert not resp
+
+    @freeze_time(FROZEN_TIME)
+    def test_no_schedule_match(self):
+        """
+        Test that after retrieving DOWNLOAD_MESSAGES_PER_INVOCATION
+        messages that don't match, the downloader lambda deletes each
+        message and returns.
+        """
+
+        message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
+
+        self.mocker.patch.object(
+            downloader, "retrieve_message", return_value=message
+        )
+        self.mocker.patch.object(
+            downloader.Download, "_class_schedule", return_value={}
+        )
+
+        with self.assertLogs(level="INFO") as cm:
+            resp = downloader.handler({}, self.context)
+
+            assert not resp
+            assert message.delete_call_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
+
+            log_message = json.loads(cm.output[-1])["message"]
+            expected = "No available recordings match the class schedule."
+            assert log_message == expected
+
+    def test_schedule_matched(self):
+        """
+        Test that after a message is found, the handler stops
+        retrieving messages.
+        """
+
+        no_match_message = MockDownloadMessage(
+            copy.deepcopy(SAMPLE_MESSAGE_BODY)
+        )
+
+        match_message = MockDownloadMessage(
+            copy.deepcopy(SAMPLE_MESSAGE_BODY)
+        )
+
+        messages = [no_match_message] * downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
+        messages[-1] = match_message
+
+        def mock_messages(*args):
+            return messages.pop(0)
+
+        self.mocker.patch.object(
+            downloader,
+            "retrieve_message",
+            side_effect=mock_messages
+        )
+
+        series_found = [False] * downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
+        series_found[-1] = True
+
+        def mock_series_found(*args):
+            return series_found.pop(0)
+
+        self.mocker.patch.object(
+            downloader.Download,
+            "oc_series_found",
+            side_effect=mock_series_found
+        )
+
+        self.mocker.patch.object(
+            downloader,
+            "get_admin_token",
+            return_value="mock-admin-token"
+        )
+
+        self.mocker.patch.object(downloader.Download, "upload_to_s3")
+
+        mock_upload_msg = {"mock_upload_message": 1234}
+        self.mocker.patch.object(
+            downloader.Download,
+            "send_to_uploader_queue",
+            return_value=mock_upload_msg
+        )
+
+        with self.assertLogs(level="INFO") as cm:
+            resp = downloader.handler({}, self.context)
+
+            assert not resp
+            assert no_match_message.delete_call_count == downloader.DOWNLOAD_MESSAGES_PER_INVOCATION - 1
+            assert match_message.delete_call_count == 1
+
+            log_message = json.loads(cm.output[-1])["message"]
+            expected = {"Sent to uploader": mock_upload_msg}
+            assert log_message == expected
+
+    def test_error_while_downloading(self):
+
+        message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
+        self.mocker.patch.object(
+            downloader,
+            "retrieve_message",
+            return_value=message
+        )
+        self.mocker.patch.object(
+            downloader.Download,
+            "oc_series_found",
+            return_value=True
+        )
+        self.mocker.patch.object(downloader, "get_admin_token")
+
+        error_msg = "Error while uploading to S3"
+        self.mocker.patch.object(
+            downloader.Download,
+            "upload_to_s3",
+            side_effect=downloader.PermanentDownloadError(error_msg)
+        )
+
+        mock_deadletter_msg = {
+            "Error": error_msg,
+            "Sent to deadletter": SAMPLE_MESSAGE_BODY
+        }
+        self.mocker.patch.object(
+            downloader.Download,
+            "send_to_deadletter_queue",
+            return_value=SAMPLE_MESSAGE_BODY
+        )
+
+        with self.assertLogs(level="INFO") as cm:
+            with pytest.raises(downloader.PermanentDownloadError) as exc_info:
+                downloader.handler({}, self.context)
+            assert exc_info.match(error_msg)
+            deadletter_log_message = json.loads(cm.output[-2])["message"]
+            handler_failed_log_message = json.loads(cm.output[-1])["message"]
+            assert deadletter_log_message == mock_deadletter_msg
+            assert handler_failed_log_message == "handler failed!"
 
 
-def test_get_recording_data_retries(mocker):
-
-    mock_api_request = mocker.patch.object(downloader, 'api_request')
-    mocker.patch.object(downloader, 'MEETING_LOOKUP_RETRY_DELAY', new=0)
-
-    mock_api_request.side_effect = [
-        requests.ConnectTimeout(),
-        requests.ConnectTimeout(),
-        {'foo': 1}
-    ]
-
-    resp = downloader.get_api_data('https://api.example.com/v2/abcd-1234')
-
-    assert mock_api_request.call_count == 3
-    assert resp['foo'] == 1
+"""
+Tests for class Downloader
+"""
 
 
-def test_recording_data(mocker):
+class TestDownloader(unittest.TestCase):
+
+    @pytest.fixture(autouse=True)
+    def initfixtures(self, mocker):
+        self.mocker = mocker
+        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.mock_sqs = unittest.mock.Mock()
+        self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
+        self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
+
+    def local_hour(self, timestamp):
+        hour = datetime.strptime(
+            timestamp, TIMESTAMP_FORMAT) \
+            .replace(tzinfo=timezone(LOCAL_TIME_ZONE)).hour
+        return "{:02}:00".format(hour)
+
+    def test_series_id_from_schedule(self):
+        """
+        Test whether schedule matching determines expected opencast series id.
+        """
+        # all times in GMT but schedule times are local
+        monday_start_time = "2019-12-30T10:00:05Z"
+        wednesday_start_time = "2020-01-01T16:00:05Z"
+        thursday_start_time = "2020-01-02T16:00:05Z"
+        saturday_start_time = "2020-01-04T16:00:05Z"
+
+        monday_schedule = {
+                "Days": ["M"],
+                "Time": [self.local_hour(monday_start_time)],
+                "opencast_series_id": "monday_good",
+            }
+        bad_monday_schedule = {
+                "Days": ["M"],
+                "Time": [],
+                "opencast_series_id": "monday_bad",
+            }
+        thursday_schedule = {
+                "Days": ["R"],
+                "Time": [self.local_hour(thursday_start_time)],
+                "opencast_series_id": "thursday_good",
+            }
+        bad_thursday_schedule = {
+                "Days": ["Th"],
+                "Time": ["11:00"],
+                "opencast_series_id": "thursday_bad",
+            }
+        saturday_schedule = {
+                "Days": ["Sa"],
+                "Time": [self.local_hour(saturday_start_time)],
+                "opencast_series_id": "saturday_good",
+            }
+        bad_saturday_schedule = {
+                "Days": ["Sa"],
+                "Time": ["20:00"],
+                "opencast_series_id": "saturday_bad",
+            }
+        multiple_day_schedule = {
+                "Days": ["M", "W"],
+                "Time": [self.local_hour(wednesday_start_time)],
+                "opencast_series_id": "multiple_days",
+            }
+
+        cases = [
+            # Mondays
+            (monday_start_time, monday_schedule,
+                monday_schedule["opencast_series_id"]),
+            (monday_start_time, bad_monday_schedule, None),
+            # Thursdays
+            (thursday_start_time, thursday_schedule,
+                thursday_schedule["opencast_series_id"]),
+            (thursday_start_time, bad_thursday_schedule, None),
+            # Saturdays
+            (saturday_start_time, saturday_schedule,
+                saturday_schedule["opencast_series_id"]),
+            (saturday_start_time, bad_saturday_schedule, None),
+            # Multiple days
+            (wednesday_start_time, multiple_day_schedule,
+                multiple_day_schedule["opencast_series_id"])
+        ]
+
+        for start_time, schedule, expected in cases:
+            time_object = datetime.strptime(start_time, TIMESTAMP_FORMAT)
+            with patch.object(
+                    downloader.Download, "_class_schedule", schedule):
+                with patch.object(
+                     downloader.Download, "_created_local", time_object):
+                    dl = downloader.Download(None, None)
+                    assert(dl._series_id_from_schedule == expected)
+
     """
-    Test get_recording_data to make sure forward slashes survive url and endpoint url is correct.
+    Tests for downloader.oc_series_found()
     """
 
-    mock_get_api_data = mocker.patch.object(downloader, 'get_api_data')
-    mocker.patch.object(downloader, 'remove_incomplete_metadata')
-    mocker.patch.object(downloader, 'verify_recording_status')
-    calls = [('tCh9CNwpQ4xfRJmPpyWQ==', 'https://api.zoom.us/v2/meetings/tCh9CNwpQ4xfRJmPpyWQ==/recordings'),
-             ('/Ch9CNwpQ4xfRJmPpyWQ9/', 'https://api.zoom.us/v2/meetings/%252FCh9CNwpQ4xfRJmPpyWQ9%252F/recordings')]
+    def test_oc_series_found(self):
+        downloader.MINIMUM_DURATION = 2
+        override_id = 12345678
+        schedule_id = 44444444
+        default_id = 20200299999
 
-    for call in calls:
+        skipped_msg = "Recording duration shorter than {} minutes".format(
+                        downloader.MINIMUM_DURATION
+                       )
 
-        def side_effect(*args, **kwargs):
-            assert (args[0] == call[1])
+        override_msg = ("Using override series id '{}'"
+                        .format(override_id))
 
-        mock_get_api_data.side_effect = side_effect
-        dl = downloader.Download({'uuid': call[0]})
-        dl.recording_data()
+        schedule_match_msg = ("Matched with opencast series '{}'!"
+                              .format(schedule_id))
 
+        default_series_id_msg = ("Using default series id {}"
+                                 .format(default_id))
 
-def test_duration(mocker):
+        no_match_msg = "No opencast series found."
 
-    now = datetime.now()
+        # data, oc_series_found args, default series,
+        # expected ret val, expected log message
+        cases = [
+            # duration filtering cases
+            ({"duration": 1}, (override_id, False), None, False, skipped_msg),
+            ({"duration": 2}, (override_id, False), None, True, override_msg),
+            ({"duration": 3}, (override_id, False), None, True, override_msg),
+            ({"duration": 100}, (override_id, False), None, True, override_msg),
 
-    thirty_seconds_ago = (
-            now - timedelta(seconds=30)
-        ).strftime(TIMESTAMP_FORMAT)
+            # override series id with ignore schedule
+            (SAMPLE_MESSAGE_BODY, (override_id, True), None, True, override_msg),
+            # override series id without ignore schedule
+            (SAMPLE_MESSAGE_BODY, (override_id, False), None, True, override_msg),
+            # override series id with ignore schedule and default series
+            (SAMPLE_MESSAGE_BODY, (override_id, True), default_id, True,
+             override_msg),
 
-    one_hour_ago = (
-            now - timedelta(hours=1) - timedelta(minutes=1)
-        ).strftime(TIMESTAMP_FORMAT)
-    one_hour = "1:01:00"
+            # ignore schedule without default series
+            (SAMPLE_MESSAGE_BODY, (None, True), None, False, no_match_msg),
+            # ignore schedule with default series
+            (SAMPLE_MESSAGE_BODY,
+             (None, True), default_id, True, default_series_id_msg),
 
-    four_hours_ago = (
-            now - timedelta(hours=4) - timedelta(minutes=35)
-        ).strftime(TIMESTAMP_FORMAT)
-    four_hours = "04:35:00"
+            # regular schedule match
+            (SAMPLE_MESSAGE_BODY, (None, False), None, True, schedule_match_msg),
 
-    now = now.strftime(TIMESTAMP_FORMAT)
+            # default series id when no schedule matched
+            (SAMPLE_MESSAGE_BODY, (None, False), default_id, True,
+             default_series_id_msg),
 
-    cases = [
-        ({'duration': one_hour,
-          'start_time': thirty_seconds_ago,
-          'end_time': now},
-         one_hour,
-         'Duration formatted HH:MM:SS should return unchanged.'),
-        ({'duration': one_hour,
-          'start_time': one_hour_ago,
-          'end_time': now},
-         one_hour,
-         'Duration formatted HH:MM:SS should return unchanged'),
-        ({'duration': '',
-          'start_time': four_hours_ago,
-          'end_time': now},
-         four_hours,
-         'Duration calculated incorrectly from start_time - end_time'),
-        ({'duration': None,
-          'start_time': None,
-          'end_time': None},
-         None,
-         'No duration, start_time, or end_time '
-         'should return a duration of None'),
-        ({'duration': '55:08',
-          'start_time': None,
-          'end_time': None},
-         '00:55:08',
-         'Duration formatted MM:SS should return duration formatted HH:MM:SS'),
-        ({'duration': 'some invalid duration',
-          'start_time': None,
-          'end_time': None},
-         None,
-         'Invalid duration and no start or end time should return None'),
-        ({'duration': 'some invalid duration',
-          'start_time': thirty_seconds_ago,
-          'end_time': None},
-         None,
-         'Invalid duration and no start time should return None'),
-        ({'duration': 'some invalid duration',
-          'start_time': thirty_seconds_ago,
-          'end_time': now},
-         "00:00:{:02d}".format(30),
-         'Invalid duration and valid start and end time should return duration'
-         ' between start and end in the format HH:MM:SS'),
-        ({'duration': 'some invalid duration',
-          'start_time': 'abc',
-          'end_time': 'def'},
-         None,
-         'Malformed data should return None for duration'),
-        ({'duration': '24:00:00',
-          'start_time': None,
-          'end_time': None},
-         None,
-         'The duration format 24:00:00 is invalid, should set duration=None')
-    ]
+            # no match found, no default series id
+            (SAMPLE_MESSAGE_BODY, (None, False), None, False, no_match_msg),
+            (SAMPLE_MESSAGE_BODY, (None, False), "None", False, no_match_msg),
+            (SAMPLE_MESSAGE_BODY, (None, False), "", False, no_match_msg),
+        ]
 
-    for data, expected, msg in cases:
-        dl = downloader.Download(data)
-        assert (dl.duration == expected), msg
+        for data, args, default_id, expected_ret, expected_msg in cases:
+            with self.assertLogs(level='INFO') as cm:
+                downloader.DEFAULT_SERIES_ID = default_id
+                if expected_msg == schedule_match_msg:
+                    self.mocker.patch.object(
+                        downloader.Download,
+                        "_series_id_from_schedule",
+                        schedule_id
+                    )
+                else:
+                    self.mocker.patch.object(
+                        downloader.Download,
+                        "_series_id_from_schedule",
+                        None
+                    )
+
+                dl = downloader.Download(None, data)
+
+                ret = dl.oc_series_found(
+                            override_series_id=args[0],
+                            ignore_schedule=args[1]
+                         )
+                assert ret == expected_ret
+
+                log_message = cm.output[-1].split(":")[-1]
+                assert log_message == expected_msg
 
 
-def test_shorter_than_minimum_duration():
-    cases = [
-        ({"duration": "02:45:01"}, False),
-        ({"duration": "02:01:21"}, False),
-        ({"duration": "00:02:00"}, False),
-        ({"duration": "00:01:59"}, True),
-        ({"duration": "00:00:35"}, True),
-        ({"duration": ""}, False),
-    ]
-
-    for data, expected in cases:
-        dl = downloader.Download(data)
-        assert (dl.shorter_than_minimum_duration == expected)
+"""
+Tests for class ZoomFile
+"""
 
 
-def local_hour(utc_timestamp):
-    utc = datetime.strptime(
-        utc_timestamp, TIMESTAMP_FORMAT) \
-        .replace(tzinfo=timezone('UTC'))
-    hour = utc.astimezone(timezone(LOCAL_TIME_ZONE)).hour
-    return "{:02}:00".format(hour)
-
-
-def test_series_id_from_schedule(mocker):
-    # all times in GMT but schedule times are local
-    monday = "2019-12-30T10:00:05Z"
-    wednesday = "2020-01-01T16:00:05Z"
-    thursday = "2020-01-02T16:00:05Z"
-    saturday = "2020-01-04T16:00:05Z"
-
-    monday_schedule = {
-            "Days": ["M"],
-            "Time": [local_hour(monday)],
-            "opencast_series_id": "monday_good",
-        }
-    bad_monday_schedule = {
-            "Days": ["M"],
-            "Time": [],
-            "opencast_series_id": "monday_bad",
-        }
-    thursday_schedule = {
-            "Days": ["R"],
-            "Time": [local_hour(thursday)],
-            "opencast_series_id": "thursday_good",
-        }
-    bad_thursday_schedule = {
-            "Days": ["Th"],
-            "Time": ["11:00"],
-            "opencast_series_id": "thursday_bad",
-        }
-    saturday_schedule = {
-            "Days": ["Sa"],
-            "Time": [local_hour(saturday)],
-            "opencast_series_id": "saturday_good",
-        }
-    bad_saturday_schedule = {
-            "Days": ["Sa"],
-            "Time": ["20:00"],
-            "opencast_series_id": "saturday_bad",
-        }
-    multiple_day_schedule = {
-            "Days": ["M", "W"],
-            "Time": [local_hour(wednesday)],
-            "opencast_series_id": "multiple_days",
-        }
-
-    cases = [
-        # Mondays
-        ({"start_time": monday}, monday_schedule,
-            monday_schedule["opencast_series_id"]),
-        ({"start_time": monday}, bad_monday_schedule, None),
-        # Thursdays
-        ({"start_time": thursday}, thursday_schedule,
-            thursday_schedule["opencast_series_id"]),
-        ({"start_time": thursday}, bad_thursday_schedule, None),
-        # Saturdays
-        ({"start_time": saturday}, saturday_schedule,
-            saturday_schedule["opencast_series_id"]),
-        ({"start_time": saturday}, bad_saturday_schedule, None),
-        # Multiple days
-        ({"start_time": wednesday}, multiple_day_schedule,
-            multiple_day_schedule["opencast_series_id"])
-    ]
-
-    for data, schedule, expected in cases:
-        with patch.object(downloader.Download, "class_schedule", schedule):
-            dl = downloader.Download(data)
-            assert(dl.series_id_from_schedule == expected)
-
-
-def test_get_stream(mocker):
-    mocker.patch.object(downloader, "get_admin_token", return_value="1234")
-
+def test_zoom_filename(mocker):
+    """
+    Test whether the zoom's name for the recording file can be extracted from
+    the stream header and check for appropriate error messages.
+    """
     mp4_file = "zoom_file.mp4"
     location_header = {
         "Location": "https://zoom.us/{}?123456".format(mp4_file)
@@ -339,20 +426,34 @@ def test_get_stream(mocker):
     }
 
     cases = [
+        # get zoom filename from header
         ({"header": location_header}, mp4_file, None),
+        # don't get zoom filename from header
         ({"header": content_disposition_header}, mp4_file, None),
         ({}, downloader.PermanentDownloadError,
          "Zoom name not found in headers"),
+        # invalid content type returned
         ({"header": html_content}, downloader.PermanentDownloadError,
          "Zoom returned stream with content type text/html"),
+        # returned html error page
         ({"header": html_content, "content": b'Error'},
          downloader.PermanentDownloadError, "Zoom returned an HTML error page")
     ]
 
-    for input, expected, msg in cases:
-        url = "https://example.com/stream"
-        header = input["header"] if "header" in input else {}
-        content = input["content"] if "content" in input else b''
+    file_data = {
+        "meeting_uuid": 1234,
+        "download_url": "https://example.com/stream",
+        "recording_id": 1234,
+        "file_type": "mp4",
+        "recording_start": "2020-01-09T19:50:46Z",
+        "recording_end": "2020-01-09T21:50:46Z",
+        "recording_type": "speaker"
+    }
+
+    for http_resp, expected, msg in cases:
+        header = http_resp["header"] if "header" in http_resp else {}
+        content = http_resp["content"] if "content" in http_resp else b''
+        downloader.ADMIN_TOKEN = "super-secret-admin-token"
         with requests_mock.mock() as req_mock:
             req_mock.get(
                 requests_mock.ANY,
@@ -360,145 +461,11 @@ def test_get_stream(mocker):
                 headers=header,
                 content=content
             )
+            file = downloader.ZoomFile(file_data, 1)
             if isinstance(expected, type) and expected.__base__ == Exception:
                 with pytest.raises(expected) as exc_info:
-                    downloader.get_stream(url)
+                    file.zoom_filename
                 if msg is not None:
                     assert exc_info.match(msg)
             else:
-                stream, zoom_name = downloader.get_stream(url)
-                assert(zoom_name == expected)
-
-
-def test_remove_incomplete_metadata(mocker):
-    mp4_complete = {
-        "id": "123",
-        "meeting_id": "abc",
-        "recording_start": "2019-01-31T17:09:11Z",
-        "recording_end": "2019-01-31T17:11:21Z",
-        "file_type": "MP4",
-        "download_url": "url",
-        "status": "completed",
-        "recording_type": "shared_screen_with_speaker_view"}
-
-    mp4_incomplete = {
-        "meeting_id": "abc",
-        "recording_start": "2019-01-31T17:09:11Z",
-        "recording_end": "2019-01-31T17:11:21Z",
-        "file_type": "MP4",
-        "download_url": "url",
-        "status": "completed",
-        "recording_type": "shared_screen_with_speaker_view"}
-
-    non_mp4_complete = {
-        "id": "123",
-        "meeting_id": "abc",
-        "recording_start": "2019-01-31T17:09:11Z",
-        "recording_end": "2019-01-31T17:11:21Z",
-        "file_type": "CHAT",
-        "download_url": "url",
-        "status": "completed",
-        "recording_type": "shared_screen_with_speaker_view"}
-
-    non_mp4_incomplete = {
-        "meeting_id": "abc",
-        "recording_start": "2019-01-31T17:09:11Z",
-        "recording_end": "2019-01-31T17:11:21Z",
-        "file_type": "CHAT",
-        "download_url": "url",
-        "status": "completed",
-        "recording_type": "shared_screen_with_speaker_view"}
-
-    cases = [
-        ([mp4_complete, non_mp4_complete, non_mp4_incomplete],
-            [mp4_complete, non_mp4_complete], None),
-        ([mp4_incomplete], downloader.PermanentDownloadError,
-            "MP4 file missing required metadata. {}".format(mp4_incomplete))
-    ]
-
-    for files, expected, msg in cases:
-        param = {'recording_files': files}
-        if isinstance(expected, type):
-            with pytest.raises(expected) as exc_info:
-                downloader.remove_incomplete_metadata(param)
-            if msg is not None:
-                assert exc_info.match(msg)
-        else:
-            assert downloader.remove_incomplete_metadata(param)['recording_files'] == expected
-
-
-def test_filter_and_sort(mocker):
-
-    now = datetime.now()
-    one_minute_ago = (now - timedelta(minutes=1)).strftime(TIMESTAMP_FORMAT)
-    two_minutes_ago = (now - timedelta(minutes=2)).strftime(TIMESTAMP_FORMAT)
-    now = now.strftime(TIMESTAMP_FORMAT)
-
-    files = [
-            {'recording_start': now,
-             'file_type': 'MP4',
-             'recording_type': 'shared_screen_with_speaker_view'},
-            {'recording_start': now,
-             'file_type': 'MP4',
-             'recording_type': 'shared_screen'},
-            {'recording_start': now,
-             'file_type': 'MP4',
-             'recording_type': 'active_speaker'}
-        ]
-
-    expected = [
-            {'recording_start': now,
-             'file_type': 'MP4',
-             'recording_type': 'shared_screen_with_speaker_view'}
-        ]
-
-    assert downloader.filter_and_sort(files) == expected
-
-    files = [
-        {'recording_start': now,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen_with_speaker_view'},
-        {'recording_start': one_minute_ago,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen'},
-        {'recording_start': now,
-         'file_type': 'MP4',
-         'recording_type': 'active_speaker'}
-    ]
-
-    expected = [
-        {'recording_start': one_minute_ago,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen'},
-        {'recording_start': now,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen_with_speaker_view'}
-    ]
-
-    assert downloader.filter_and_sort(files) == expected
-
-    files = [
-        {'recording_start': now,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen_with_speaker_view'},
-        {'recording_start': one_minute_ago,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen'},
-        {'recording_start': two_minutes_ago,
-         'file_type': 'MP4',
-         'recording_type': 'active_speaker'}
-    ]
-
-    expected = [
-        {'recording_start': two_minutes_ago,
-         'file_type': 'MP4',
-         'recording_type': 'active_speaker'},
-        {'recording_start': one_minute_ago,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen'},
-        {'recording_start': now,
-         'file_type': 'MP4',
-         'recording_type': 'shared_screen_with_speaker_view'}
-    ]
-
-    assert downloader.filter_and_sort(files) == expected
+                assert(file.zoom_filename == expected)

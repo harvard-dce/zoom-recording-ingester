@@ -1,8 +1,6 @@
-import requests
 import json
-from urllib.parse import parse_qsl
 from os import getenv as env
-from common import setup_logging
+from common import setup_logging, TIMESTAMP_FORMAT
 from datetime import datetime
 from pytz import timezone
 import boto3
@@ -10,11 +8,9 @@ import boto3
 import logging
 logger = logging.getLogger()
 
-DOWNLOAD_QUEUE_NAME = env('DOWNLOAD_QUEUE_NAME')
+DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
-PARALLEL_ENDPOINT = env('PARALLEL_ENDPOINT')
-TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 class BadWebhookData(Exception):
@@ -24,138 +20,161 @@ class BadWebhookData(Exception):
 def resp_204(msg):
     logger.info("http 204 response: {}".format(msg))
     return {
-        'statusCode': 204,
-        'headers': {},
-        'body': ""  # 204 = no content
+        "statusCode": 204,
+        "headers": {},
+        "body": ""  # 204 = no content
     }
 
 
 def resp_400(msg):
     logger.error("http 400 response: {}".format(msg))
     return {
-        'statusCode': 400,
-        'headers': {},
-        'body': msg
+        "statusCode": 400,
+        "headers": {},
+        "body": msg
     }
 
 
 @setup_logging
 def handler(event, context):
     """
-    This function accepts the incoming POST relay from the API Gateway endpoint that
-    serves as the Zoom webhook endpoint. It checks for the appropriate event status
-    type, fetches info about the meeting host, and then passes responsibility on
-    to the downloader function via a queue.
+    This function accepts the incoming POST relay from the API Gateway endpoint
+    that serves as the Zoom webhook endpoint. It checks for the appropriate
+    event status type, fetches info about the meeting host, and then passes
+    responsibility on to the downloader function via a queue.
     """
 
-    if 'body' not in event:
-        return resp_400("bad data: no body in event")
-
-    if PARALLEL_ENDPOINT and PARALLEL_ENDPOINT != "None":
-
-        logger.debug("Sending webhook to {}. Data: {}"
-                     .format(PARALLEL_ENDPOINT, event['body']))
-
-        r = requests.post(PARALLEL_ENDPOINT,
-                          headers={'content-type': 'application/json'},
-                          data=event['body'])
-
-        r.raise_for_status()
-
-        logger.info("Copied webhook to endpoint {}, status code {}"
-                    .format(PARALLEL_ENDPOINT, r.status_code))
+    if "body" not in event:
+        return resp_400("Bad data. No body found in event.")
 
     try:
-        payload = parse_payload(event['body'])
-        logger.info({'payload': payload})
-    except BadWebhookData as e:
-        return resp_400("bad webhook payload data: {}".format(str(e)))
+        body = json.loads(event["body"])
+        logger.info({"webhook_notification": body})
+    except json.JSONDecodeError:
+        return resp_400("Webhook notification body is not valid json.")
 
-    if payload['status'] != 'RECORDING_MEETING_COMPLETED':
+    if "event" in body and body["event"] != "recording.completed":
         return resp_204(
-            "Handling not implemented for status '{}'".format(payload['status'])
+            "Handling not implemented for event '{}'"
+            .format(body["event"])
         )
 
-    now = datetime.strftime(
-                timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
-                TIMESTAMP_FORMAT)
+    if "payload" not in body:
+        return resp_400("Missing payload field in webhook notification body.")
+    payload = body["payload"]
 
-    sqs_message = {
-        'uuid': payload["uuid"],
-        'host_id': payload["host_id"],
-        'correlation_id': context.aws_request_id,
-        'received_time': now
-    }
+    try:
+        validate_payload(payload)
+    except BadWebhookData as e:
+        return resp_400("Bad data: {}".format(str(e)))
 
-    if 'delay_seconds' in payload:
+    sqs_message = construct_sqs_message(payload, context)
+    logger.info({"SQS message to downloader": sqs_message})
+
+    if "delay_seconds" in payload:
         logger.debug("Override default message delay.")
-        send_sqs_message(sqs_message, delay=payload['delay_seconds'])
+        send_sqs_message(sqs_message, delay=payload["delay_seconds"])
     else:
         send_sqs_message(sqs_message)
 
     return {
-        'statusCode': 200,
-        'headers': {},
-        'body': "Success"
+        "statusCode": 200,
+        "headers": {},
+        "body": "Success"
     }
 
 
-def parse_payload(event_body):
+def validate_payload(payload):
+    required_payload_fields = [
+        "object"
+    ]
+    required_object_fields = [
+        "id",  # zoom series id
+        "uuid",  # unique id of the meeting instance,
+        "host_id",
+        "topic",
+        "start_time",
+        "duration",  # duration in minutes
+        "recording_files"
+    ]
+    required_file_fields = [
+        "id",  # unique id for the file
+        "recording_start",
+        "recording_end",
+        "download_url",
+        "file_type",
+        "recording_type"
+    ]
 
     try:
-        payload = dict(parse_qsl(event_body, strict_parsing=True))
-    except ValueError as e:
-        raise BadWebhookData(str(e))
+        for field in required_payload_fields:
+            if field not in payload.keys():
+                raise BadWebhookData(
+                    "Missing required payload field '{}'. Keys found: {}"
+                    .format(field, payload.keys()))
 
-    if 'type' in payload:
-        logger.info("Got old-style payload {}".format(payload))
-        payload['status'] = payload['type']
-        del payload['type']
-        if 'content' in payload:
-            try:
-                content = json.loads(payload['content'])
-                logger.debug({"payload content": content})
-                payload['uuid'] = content['uuid']
-                payload['host_id'] = content['host_id']
-                del payload['content']
-            except Exception as e:
-                raise BadWebhookData("Failed to parse payload 'content' value. {}".format(e))
-        else:
-            raise BadWebhookData("payload missing 'content' value")
-    elif 'status' in payload:
-        return payload
-    else:
-        try:
-            payload = json.loads(event_body)
-            logger.info("Got new-style payload {}".format(payload))
+        obj = payload["object"]
+        for field in required_object_fields:
+            if field not in obj.keys():
+                raise BadWebhookData(
+                    "Missing required object field '{}'. Keys found: {}"
+                    .format(field, obj.keys()))
 
-            if 'payload' in payload and 'event' in payload:
-                status = payload['event']
-                payload = payload['payload']
+        files = obj["recording_files"]
+        for file in files:
+            if "file_type" not in file:
+                raise BadWebhookData("Missing required file field 'file_type'")
+            if file["file_type"].lower() != "mp4":
+                continue
+            for field in required_file_fields:
+                if field not in file.keys():
+                    raise BadWebhookData(
+                        "Missing required file field '{}'".format(field))
+            if "status" in file and file["status"].lower() != "completed":
+                raise BadWebhookData(
+                    "File with incomplete status {}".format(file["status"])
+                )
 
-                if 'meeting' in payload:
-                    payload['object'] = payload['meeting']
-                    del payload['meeting']
+    except Exception as e:
+        raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
-                if 'recording' in status.lower() and 'completed' in status.lower():
-                    payload['status'] = 'RECORDING_MEETING_COMPLETED'
-                    payload['uuid'] = payload['object']['uuid']
-                    payload['host_id'] = payload['object']['host_id']
-                else:
-                    payload['status'] = status
-            else:
-                payload['status'] = payload['event']
-                return payload
-        except Exception as e:
-            raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
-    return payload
+def construct_sqs_message(payload, context):
+    now = datetime.strftime(
+                timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
+                TIMESTAMP_FORMAT)
+
+    recording_files = []
+    for file in payload["object"]["recording_files"]:
+        if file["file_type"].lower() == "mp4":
+            recording_files.append({
+                "recording_id": file["id"],
+                "recording_start": file["recording_start"],
+                "recording_end": file["recording_end"],
+                "download_url": file["download_url"],
+                "file_type": file["file_type"],
+                "recording_type": file["recording_type"]
+            })
+
+    sqs_message = {
+        "uuid": payload["object"]["uuid"],
+        "zoom_series_id": payload["object"]["id"],
+        "topic": payload["object"]["topic"],
+        "start_time": payload["object"]["start_time"],
+        "duration": payload["object"]["duration"],
+        "host_id": payload["object"]["host_id"],
+        "recording_files": recording_files,
+        "correlation_id": context.aws_request_id,
+        "received_time": now
+    }
+
+    return sqs_message
 
 
 def send_sqs_message(message, delay=DEFAULT_MESSAGE_DELAY):
 
     logger.debug("SQS sending start...")
-    sqs = boto3.resource('sqs')
+    sqs = boto3.resource("sqs")
 
     try:
         download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
@@ -167,7 +186,7 @@ def send_sqs_message(message, delay=DEFAULT_MESSAGE_DELAY):
 
     except Exception as e:
         logger.error("Error when sending SQS message for meeting uuid {} :{}"
-                     .format(message['uuid'], e))
+                     .format(message["uuid"], e))
         raise
 
     logger.debug({"Message sent": message_sent})

@@ -12,7 +12,7 @@ Parameters:
     Type: String
   ZoomApiSecret:
     Type: String
-  ZoomAdminEmail:
+  ZoomAdminId:
     Type: String
   OpencastBaseUrl:
     Type: String
@@ -50,7 +50,7 @@ Parameters:
     Type: String
   ParallelEndpoint:
     Type: String
-  UploadMessagesPerInvocation:
+  DownloadMessagesPerInvocation:
     Type: String
 
 Conditions:
@@ -88,6 +88,8 @@ Resources:
             Prefix: ""
             Status: Enabled
             ExpirationInDays: 14
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
 
   ZoomIngesterUploadQueue:
     Type: AWS::SQS::Queue
@@ -231,16 +233,17 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-webhook.handler
-      Runtime: python3.7
+      Runtime: python3.8
       Timeout: 30
       Role: !GetAtt [ZoomIngesterRole, Arn]
       FunctionName: !Sub "${AWS::StackName}-zoom-webhook-function"
       Environment:
         Variables:
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
+          ZOOM_API_KEY: !Ref ZoomApiKey
+          ZOOM_API_SECRET: !Ref ZoomApiSecret
           LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
-          PARALLEL_ENDPOINT: !Join ['/', !Split ['!', !Ref ParallelEndpoint]]
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-webhook.zip"
@@ -288,7 +291,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-downloader.handler
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 512
       Timeout: 300
       Role: !GetAtt [ZoomIngesterRole, Arn]
@@ -296,7 +299,7 @@ Resources:
       Environment:
         Variables:
           ZOOM_VIDEOS_BUCKET: !Ref ZoomVideosBucket
-          ZOOM_ADMIN_EMAIL: !Ref ZoomAdminEmail
+          ZOOM_ADMIN_ID: !Ref ZoomAdminId
           DOWNLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderQueue, QueueName]
           UPLOAD_QUEUE_NAME: !GetAtt [ZoomIngesterUploadQueue, QueueName]
           DEADLETTER_QUEUE_NAME: !GetAtt [ZoomIngesterDownloaderDeadLetterQueue, QueueName]
@@ -307,6 +310,7 @@ Resources:
           CLASS_SCHEDULE_TABLE: !Ref ClassScheduleDynamoTable
           LOCAL_TIME_ZONE: !Ref LocalTimeZone
           DEBUG: 0
+          DOWNLOAD_MESSAGES_PER_INVOCATION: !Ref DownloadMessagesPerInvocation
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-downloader.zip"
@@ -341,7 +345,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-uploader.handler
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 256
       Timeout: 300
       Role: !GetAtt [ZoomIngesterRole, Arn]
@@ -359,7 +363,6 @@ Resources:
           DEBUG: 0
           OC_WORKFLOW: !Ref OCWorkflow
           OC_FLAVOR: !Ref OCFlavor
-          UPLOAD_MESSAGES_PER_INVOCATION: !Ref UploadMessagesPerInvocation
       Code:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-uploader.zip"
@@ -555,7 +558,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-log-notifications.handler
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 128
       Timeout: 5
       Role: !GetAtt [ZoomIngesterRole, Arn]
@@ -705,6 +708,16 @@ Resources:
       - MetricValue: "1"
         MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "SkippedForDuration"
+
+  MinutesInPipelineMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref ZoomUploaderLogGroup
+      FilterPattern: "{$.message.minutes_in_pipeline > 0}"
+      MetricTransformations:
+      - MetricValue: "$.message.minutes_in_pipeline"
+        MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
+        MetricName: "MinutesInPipeline"
 
   WorkflowInitiatedMetricFilter:
     Type: AWS::Logs::MetricFilter

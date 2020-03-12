@@ -6,7 +6,6 @@ import time
 import csv
 import shutil
 import datetime
-from urllib.parse import urlencode
 from invoke import task, Collection
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
@@ -14,11 +13,9 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import gen_token
-import requests
+from functions.common import zoom_api_request
 from pytz import timezone
 from multiprocessing import Process
-import difflib
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -66,6 +63,7 @@ def queue_is_empty(ctx, queue_name):
 
     num_queued = int(ctx.run(cmd, hide=True).stdout.strip())
     return num_queued == 0
+
 
 @task
 def production_failsafe(ctx):
@@ -156,6 +154,21 @@ def deploy(ctx, function=None, do_release=False):
             release(ctx, func)
 
 
+@task(pre=[production_failsafe])
+def deploy_webhook(ctx, do_release=False):
+    deploy(ctx, "zoom-webhook", do_release)
+
+
+@task(pre=[production_failsafe])
+def deploy_downloader(ctx, do_release=False):
+    deploy(ctx, "zoom-downloader", do_release)
+
+
+@task(pre=[production_failsafe])
+def deploy_uploader(ctx, do_release=False):
+    deploy(ctx, "zoom-uploader", do_release)
+
+
 @task(pre=[production_failsafe],
       help={'function': 'name of specific function'})
 def release(ctx, function=None, description=None):
@@ -171,40 +184,32 @@ def release(ctx, function=None, description=None):
         new_version = __publish_version(ctx, func, description)
         __update_release_alias(ctx, func, new_version, description)
 
+
 @task
 def list_recordings(ctx, date=str(datetime.date.today())):
     """
     Optional: --date='YYYY-MM-DD'
     """
-    base_url = getenv('ZOOM_API_BASE_URL')
-    key = getenv('ZOOM_API_KEY')
-    secret = getenv('ZOOM_API_SECRET')
     meetings = __get_meetings(date)
 
     recordings_found = 0
 
     for meeting in meetings:
-        time.sleep(0.1)
-        token = gen_token(key=key, secret=secret)
         uuid = meeting['uuid']
         series_id = meeting['id']
 
-        r = requests.get("{}meetings/{}".format(base_url, series_id),
-                         headers={"Authorization": "Bearer %s" % token.decode()})
-
+        r = zoom_api_request(
+            "meetings/{}".format(series_id), ignore_failure=True,
+        )
         if r.status_code == 404:
             continue
-
         r.raise_for_status()
 
-        host_id = r.json()['host_id']
-
-        r = requests.get("{}meetings/{}/recordings".format(base_url, uuid),
-                         headers={"Authorization": "Bearer %s" % token.decode()})
-
+        r = zoom_api_request(
+            "meetings/{}/recordings".format(uuid), ignore_failure=True
+        )
         if r.status_code == 404:
             continue
-
         r.raise_for_status()
 
         # sometimes this zoom endpoint sends an empty list of recording files
@@ -219,7 +224,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         start_time = utc.localize(datetime.datetime.strptime(utc_start_time,
                                   "%Y-%m-%dT%H:%M:%SZ")).astimezone(local_tz)
 
-        print("\n\tuuid, host_id: {} {}".format(uuid, host_id))
+        print("\n\tuuid: {}".format(uuid))
         print("\tSeries id: {}".format(r.json()["id"]))
         print("\tTopic: {}".format(r.json()["topic"]))
         print("\tStart time: {}".format(start_time))
@@ -231,11 +236,10 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         print("Done!")
 
 
-@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id',
+@task(help={'uuid': 'meeting instance uuid',
             'ignore_schedule': ('do opencast series id lookup but ignore if '
                                 'meeting times don\'t match')})
-def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2,
-                  ignore_schedule=False):
+def exec_pipeline(ctx, uuid, ignore_schedule=False):
     """
     Manually trigger the webhook handler, downloader, and uploader.
     Positional arguments: uuid, host_id, series-id
@@ -243,7 +247,7 @@ def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2,
     """
 
     print("\nTriggering webhook...\n")
-    exec_webhook(ctx, uuid, host_id, status, webhook_version)
+    exec_webhook(ctx, uuid)
 
     # Keep retrying downloader until some messages are processed
     # or it fails.
@@ -270,74 +274,69 @@ def exec_pipeline(ctx, uuid, host_id, status=None, webhook_version=2,
         return
 
 
-@task(help={'uuid': 'meeting instance uuid', 'host-id': 'meeting host id'})
-def exec_webhook(ctx, uuid, host_id, status=None, webhook_version=3):
+@task(help={'uuid': 'meeting instance uuid'})
+def exec_webhook(ctx, uuid):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
 
-    if None in (uuid, host_id):
-        raise Exit("You must provide both a --uuid and a --host-id value")
+    if not uuid:
+        raise Exit("You must provide a recording uuid")
 
     apig = boto3.client('apigateway')
 
     apis = apig.get_rest_apis()
-    api_id = jmespath.search("items[?name=='{}'].id | [0]".format(STACK_NAME), apis)
+    api_id = jmespath.search(
+        "items[?name=='{}'].id | [0]".format(STACK_NAME),
+        apis
+    )
     if not api_id:
-        raise Exit("No api found, double check that your environment variables are correct.")
+        raise Exit(
+            "No api found, double check that your environment variables "
+            "are correct."
+        )
 
     api_resources = apig.get_resources(restApiId=api_id)
-    resource_id = jmespath.search("items[?pathPart=='new_recording'].id | [0]", api_resources)
+    resource_id = jmespath.search(
+        "items[?pathPart=='new_recording'].id | [0]",
+        api_resources
+    )
 
-    if webhook_version == 3:
-        if status is None:
-            status = 'recording.completed'
+    data = zoom_api_request("meetings/{}/recordings".format(uuid)).json()
 
-        event_body = json.dumps(
-            {'event': status,
-             'payload': {
-                 'object': {
-                     'uuid': uuid,
-                     'host_id': host_id
-                    },
-                     'delay_seconds': 0
-                 }
-             }
-        )
+    required_fields = ["host_id", "recording_files"]
+    for field in required_fields:
+        if field not in data:
+            pprint(data)
+            raise Exception(
+                "No {} found in response.\n".format(field)
+            )
 
-    elif webhook_version == 2:
-        if status is None:
-            status = 'recording_completed'
+    for file in data["recording_files"]:
+        if "status" in file and file["status"] != "completed":
+            raise Exception("Not all recordings have completed processing.")
+        if "id" not in file and file["file_type"].lower() != "mp4":
+            data["recording_files"].remove(file)
 
-        event_body = json.dumps(
-            {'event': status,
-             'payload': {
-                 'meeting': {
-                     'uuid': uuid,
-                     'host_id': host_id
-                    },
-                 'delay_seconds': 0
-                }
-             }
-        )
-
-    else:
-        if status is None:
-            status = 'RECORDING_MEETING_COMPLETED'
-
-        content = json.dumps({'uuid': uuid, 'host_id': host_id})
-        event_body = "type={}&{}".format(status,  urlencode({'content': content}))
+    event_body = {
+        "event": "recording.completed",
+        "payload": {
+            "object": data,
+            "delay_seconds": 0
+        }
+    }
 
     resp = apig.test_invoke_method(
         restApiId=api_id,
         resourceId=resource_id,
-        httpMethod='POST',
-        body=event_body
+        httpMethod="POST",
+        body=json.dumps(event_body)
     )
 
-    print(event_body)
-
-    print("Returned with status code: {}. {}".format(resp['status'], resp['body']))
+    print("Returned with status code: {}. {}".format(
+        resp["status"],
+        resp["body"])
+    )
 
 
 @task(help={
@@ -492,7 +491,7 @@ def test(ctx):
     """
     Execute the pytest tests
     """
-    ctx.run('py.test --cov-report term-missing --cov=functions tests')
+    ctx.run('py.test --cov-report term-missing --cov=functions tests -vv')
 
 
 @task(pre=[production_failsafe])
@@ -610,9 +609,15 @@ ns = Collection()
 ns.add_task(test)
 ns.add_task(codebuild)
 ns.add_task(package)
-ns.add_task(deploy)
 ns.add_task(release)
 ns.add_task(list_recordings)
+
+deploy_ns = Collection('deploy')
+deploy_ns.add_task(deploy, 'all')
+deploy_ns.add_task(deploy_webhook, 'webhook')
+deploy_ns.add_task(deploy_downloader, 'downloader')
+deploy_ns.add_task(deploy_uploader, 'uploader')
+ns.add_collection(deploy_ns)
 
 exec_ns = Collection('exec')
 exec_ns.add_task(exec_webhook, 'webhook')
@@ -668,6 +673,12 @@ def profile_arg():
     if AWS_PROFILE is not None:
         return "--profile {}".format(AWS_PROFILE)
     return ""
+
+
+def zoom_admin_id():
+    # get admin user id from admin email
+    r = zoom_api_request("users/{}".format(getenv("ZOOM_ADMIN_EMAIL")))
+    return r.json()["id"]
 
 
 def stack_tags():
@@ -756,7 +767,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=ZoomApiBaseUrl,ParameterValue='{}' "
            "ParameterKey=ZoomApiKey,ParameterValue='{}' "
            "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
-           "ParameterKey=ZoomAdminEmail,ParameterValue='{}' "
+           "ParameterKey=ZoomAdminId,ParameterValue='{}' "
            "ParameterKey=OpencastBaseUrl,ParameterValue='{}' "
            "ParameterKey=OpencastApiUser,ParameterValue='{}' "
            "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
@@ -772,7 +783,7 @@ def __create_or_update(ctx, op):
            "ParameterKey=OCWorkflow,ParameterValue='{}' "
            "ParameterKey=OCFlavor,ParameterValue='{}' "
            "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
-           "ParameterKey=UploadMessagesPerInvocation,ParameterValue='{}' "
+           "ParameterKey=DownloadMessagesPerInvocation,ParameterValue='{}' "
            ).format(
                 profile_arg(),
                 op,
@@ -784,7 +795,7 @@ def __create_or_update(ctx, op):
                 getenv("ZOOM_API_BASE_URL"),
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
-                getenv("ZOOM_ADMIN_EMAIL"),
+                zoom_admin_id(),
                 oc_base_url(ctx),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
@@ -800,7 +811,7 @@ def __create_or_update(ctx, op):
                 getenv("OC_WORKFLOW"),
                 getenv("OC_FLAVOR"),
                 getenv("PARALLEL_ENDPOINT", required=False),
-                getenv('UPLOAD_MESSAGES_PER_INVOCATION')
+                getenv('DOWNLOAD_MESSAGES_PER_INVOCATION')
                 )
 
     if op == 'create-change-set':
@@ -1334,36 +1345,48 @@ def __show_sqs_status(ctx):
 
 
 def __get_meetings(date):
-    page_size = 300
-    key = getenv('ZOOM_API_KEY')
-    secret = getenv('ZOOM_API_SECRET')
+    print("Requesting meeting data for {}...".format(date))
+    requested_page_size = 300
+    zoom_dashboard_rate_limit_secs = 5
     meetings = []
 
     for mtg_type in ["past", "pastOne"]:
-        url = "{}metrics/meetings/".format(getenv('ZOOM_API_BASE_URL'))
-        url += "?page_size=%s&type=%s&from=%s&to=%s" % (page_size, mtg_type, date, date)
+        base_path = ("metrics/meetings/?page_size={}&type={}&from={}&to={}"
+                     .format(requested_page_size, mtg_type, date, date))
 
-        token = gen_token(key=key, secret=secret)
-
+        next_page_token = None
+        count = 0
         while True:
-            r = requests.get(url, headers={"Authorization": "Bearer %s" % token.decode()})
-            if r.status_code != 429:
-                break
+            if next_page_token:
+                path = ("{}&next_page_token={}"
+                        .format(base_path, next_page_token))
             else:
-                print("API rate limited, waiting 10 seconds to retry...")
-                time.sleep(10)
+                path = base_path
 
-        r.raise_for_status()
-        response = r.json()
-        meetings.extend(response['meetings'])
+            r = zoom_api_request(path, ignore_failure=True)
+            if r.status_code == 429:
+                print("API rate limited, waiting {} seconds to retry..."
+                      .format(zoom_dashboard_rate_limit_secs))
+                time.sleep(zoom_dashboard_rate_limit_secs)
+                continue
+            else:
+                r.raise_for_status
 
-        while 'next_page_token' in response and response['next_page_token'].strip() is True:
-            token = gen_token(key=key, secret=secret)
-            r = requests.get(url + "&next_page_token=" + response['next_page_token'],
-                             headers={"Authorization": "Bearer %s" % token.decode()})
-            r.raise_for_status()
+            resp_data = r.json()
+            if 'next_page_token' not in resp_data:
+                break
+            next_page_token = resp_data['next_page_token'].strip()
+            if not next_page_token:
+                break
             meetings.extend(r.json()['meetings'])
-            time.sleep(60)
+
+            count += min(requested_page_size, resp_data["page_size"])
+            print("Retrieved {} of {} '{}' meetings."
+                  .format(count, resp_data["total_records"], mtg_type))
+            print("Waiting {} seconds for next request "
+                  "to avoid Zoom API rate limit..."
+                  .format(zoom_dashboard_rate_limit_secs))
+            time.sleep(zoom_dashboard_rate_limit_secs)
 
         time.sleep(1)
 
@@ -1400,7 +1423,8 @@ def __request_ids_from_logs(ctx, log_group, filter_pattern):
 
     cmd = ("aws logs filter-log-events {} --log-group-name {} "
            "--output text --query 'events[][logStreamName,message]' "
-           "--filter-pattern '{}'").format(profile_arg(), log_group, filter_pattern)
+           "--filter-pattern '{}'"
+           .format(profile_arg(), log_group, filter_pattern))
 
     for line in ctx.run(cmd, hide=True).stdout.splitlines():
         log_stream, message = line.strip().split(maxsplit=1)
