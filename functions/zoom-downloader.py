@@ -51,7 +51,7 @@ def handler(event, context):
     sqs = sqs_resource()
 
     # try DOWNLOAD_MESSAGES_PER_INVOCATION number of times to retrieve
-    # a recoreding that matches the class schedule
+    # a recording that matches the class schedule
     dl, download_message = None, None
     download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
     for _ in range(int(DOWNLOAD_MESSAGES_PER_INVOCATION)):
@@ -240,7 +240,7 @@ class Download:
         print("reached end of function")
         return None
 
-    def oc_series_found(self, ignore_schedule, override_series_id):
+    def oc_series_found(self, ignore_schedule=False, override_series_id=None):
 
         if self.data["duration"] and self.data["duration"] < MINIMUM_DURATION:
             logger.info("Recording duration shorter than {} minutes"
@@ -251,14 +251,12 @@ class Download:
             self.opencast_series_id = override_series_id
             logger.info("Using override series id '{}'"
                         .format(self.opencast_series_id))
-            return False
+            return True
 
         if ignore_schedule:
             logger.info("Ignoring schedule")
         else:
             self.opencast_series_id = self._series_id_from_schedule
-            logger.info("series_id_from_schedule returned {}"
-                        .format(self.opencast_series_id))
             if self.opencast_series_id is not None:
                 logger.info("Matched with opencast series '{}'!"
                             .format(self.opencast_series_id))
@@ -270,6 +268,7 @@ class Download:
             self.opencast_series_id = DEFAULT_SERIES_ID
             return True
 
+        logger.info("No opencast series found.")
         return False
 
     @property

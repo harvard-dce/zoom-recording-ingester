@@ -179,91 +179,227 @@ class TestHandler(unittest.TestCase):
             expected = {"Sent to uploader": mock_upload_msg}
             assert log_message == expected
 
+    def test_error_while_downloading(self):
+
+        message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
+        self.mocker.patch.object(
+            downloader,
+            "retrieve_message",
+            return_value=message
+        )
+        self.mocker.patch.object(
+            downloader.Download,
+            "oc_series_found",
+            return_value=True
+        )
+        self.mocker.patch.object(downloader, "get_admin_token")
+
+        error_msg = "Error while uploading to S3"
+        self.mocker.patch.object(
+            downloader.Download,
+            "upload_to_s3",
+            side_effect=downloader.PermanentDownloadError(error_msg)
+        )
+
+        mock_deadletter_msg = {
+            "Error": error_msg,
+            "Sent to deadletter": SAMPLE_MESSAGE_BODY
+        }
+        self.mocker.patch.object(
+            downloader.Download,
+            "send_to_deadletter_queue",
+            return_value=SAMPLE_MESSAGE_BODY
+        )
+
+        with self.assertLogs(level="INFO") as cm:
+            with pytest.raises(downloader.PermanentDownloadError) as exc_info:
+                downloader.handler({}, self.context)
+            assert exc_info.match(error_msg)
+            deadletter_log_message = json.loads(cm.output[-2])["message"]
+            handler_failed_log_message = json.loads(cm.output[-1])["message"]
+            assert deadletter_log_message == mock_deadletter_msg
+            assert handler_failed_log_message == "handler failed!"
+
 
 """
 Tests for class Downloader
 """
 
 
-def local_hour(timestamp):
-    hour = datetime.strptime(
-        timestamp, TIMESTAMP_FORMAT) \
-        .replace(tzinfo=timezone(LOCAL_TIME_ZONE)).hour
-    return "{:02}:00".format(hour)
+class TestDownloader(unittest.TestCase):
 
+    @pytest.fixture(autouse=True)
+    def initfixtures(self, mocker):
+        self.mocker = mocker
+        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.mock_sqs = unittest.mock.Mock()
+        self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
+        self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
 
-def test_opencast_series_id(mocker):
-    """
-    Test whether schedule matching determines expected opencast series id.
-    """
-    # all times in GMT but schedule times are local
-    monday_start_time = "2019-12-30T10:00:05Z"
-    wednesday_start_time = "2020-01-01T16:00:05Z"
-    thursday_start_time = "2020-01-02T16:00:05Z"
-    saturday_start_time = "2020-01-04T16:00:05Z"
+    def local_hour(self, timestamp):
+        hour = datetime.strptime(
+            timestamp, TIMESTAMP_FORMAT) \
+            .replace(tzinfo=timezone(LOCAL_TIME_ZONE)).hour
+        return "{:02}:00".format(hour)
 
-    monday_schedule = {
-            "Days": ["M"],
-            "Time": [local_hour(monday_start_time)],
-            "opencast_series_id": "monday_good",
-        }
-    bad_monday_schedule = {
-            "Days": ["M"],
-            "Time": [],
-            "opencast_series_id": "monday_bad",
-        }
-    thursday_schedule = {
-            "Days": ["R"],
-            "Time": [local_hour(thursday_start_time)],
-            "opencast_series_id": "thursday_good",
-        }
-    bad_thursday_schedule = {
-            "Days": ["Th"],
-            "Time": ["11:00"],
-            "opencast_series_id": "thursday_bad",
-        }
-    saturday_schedule = {
-            "Days": ["Sa"],
-            "Time": [local_hour(saturday_start_time)],
-            "opencast_series_id": "saturday_good",
-        }
-    bad_saturday_schedule = {
-            "Days": ["Sa"],
-            "Time": ["20:00"],
-            "opencast_series_id": "saturday_bad",
-        }
-    multiple_day_schedule = {
-            "Days": ["M", "W"],
-            "Time": [local_hour(wednesday_start_time)],
-            "opencast_series_id": "multiple_days",
-        }
+    def test_series_id_from_schedule(self):
+        """
+        Test whether schedule matching determines expected opencast series id.
+        """
+        # all times in GMT but schedule times are local
+        monday_start_time = "2019-12-30T10:00:05Z"
+        wednesday_start_time = "2020-01-01T16:00:05Z"
+        thursday_start_time = "2020-01-02T16:00:05Z"
+        saturday_start_time = "2020-01-04T16:00:05Z"
 
-    cases = [
-        # Mondays
-        (monday_start_time, monday_schedule,
-            monday_schedule["opencast_series_id"]),
-        (monday_start_time, bad_monday_schedule, None),
-        # Thursdays
-        (thursday_start_time, thursday_schedule,
-            thursday_schedule["opencast_series_id"]),
-        (thursday_start_time, bad_thursday_schedule, None),
-        # Saturdays
-        (saturday_start_time, saturday_schedule,
-            saturday_schedule["opencast_series_id"]),
-        (saturday_start_time, bad_saturday_schedule, None),
-        # Multiple days
-        (wednesday_start_time, multiple_day_schedule,
-            multiple_day_schedule["opencast_series_id"])
-    ]
+        monday_schedule = {
+                "Days": ["M"],
+                "Time": [self.local_hour(monday_start_time)],
+                "opencast_series_id": "monday_good",
+            }
+        bad_monday_schedule = {
+                "Days": ["M"],
+                "Time": [],
+                "opencast_series_id": "monday_bad",
+            }
+        thursday_schedule = {
+                "Days": ["R"],
+                "Time": [self.local_hour(thursday_start_time)],
+                "opencast_series_id": "thursday_good",
+            }
+        bad_thursday_schedule = {
+                "Days": ["Th"],
+                "Time": ["11:00"],
+                "opencast_series_id": "thursday_bad",
+            }
+        saturday_schedule = {
+                "Days": ["Sa"],
+                "Time": [self.local_hour(saturday_start_time)],
+                "opencast_series_id": "saturday_good",
+            }
+        bad_saturday_schedule = {
+                "Days": ["Sa"],
+                "Time": ["20:00"],
+                "opencast_series_id": "saturday_bad",
+            }
+        multiple_day_schedule = {
+                "Days": ["M", "W"],
+                "Time": [self.local_hour(wednesday_start_time)],
+                "opencast_series_id": "multiple_days",
+            }
 
-    for start_time, schedule, expected in cases:
-        time_object = datetime.strptime(start_time, TIMESTAMP_FORMAT)
-        with patch.object(
-                downloader.Download, "_class_schedule", schedule):
+        cases = [
+            # Mondays
+            (monday_start_time, monday_schedule,
+                monday_schedule["opencast_series_id"]),
+            (monday_start_time, bad_monday_schedule, None),
+            # Thursdays
+            (thursday_start_time, thursday_schedule,
+                thursday_schedule["opencast_series_id"]),
+            (thursday_start_time, bad_thursday_schedule, None),
+            # Saturdays
+            (saturday_start_time, saturday_schedule,
+                saturday_schedule["opencast_series_id"]),
+            (saturday_start_time, bad_saturday_schedule, None),
+            # Multiple days
+            (wednesday_start_time, multiple_day_schedule,
+                multiple_day_schedule["opencast_series_id"])
+        ]
+
+        for start_time, schedule, expected in cases:
+            time_object = datetime.strptime(start_time, TIMESTAMP_FORMAT)
             with patch.object(
-                 downloader.Download, "_created_local", time_object):
-                dl = downloader.Download(None, None)
-                assert(dl._series_id_from_schedule == expected)
+                    downloader.Download, "_class_schedule", schedule):
+                with patch.object(
+                     downloader.Download, "_created_local", time_object):
+                    dl = downloader.Download(None, None)
+                    assert(dl._series_id_from_schedule == expected)
+
+    """
+    Tests for downloader.oc_series_found()
+    """
+
+    def test_oc_series_found(self):
+        downloader.MINIMUM_DURATION = 2
+        override_id = 12345678
+        schedule_id = 44444444
+        default_id = 20200299999
+
+        skipped_msg = "Recording duration shorter than {} minutes".format(
+                        downloader.MINIMUM_DURATION
+                       )
+
+        override_msg = ("Using override series id '{}'"
+                        .format(override_id))
+
+        schedule_match_msg = ("Matched with opencast series '{}'!"
+                              .format(schedule_id))
+
+        default_series_id_msg = ("Using default series id {}"
+                                 .format(default_id))
+
+        no_match_msg = "No opencast series found."
+
+        # data, oc_series_found args, default series,
+        # expected ret val, expected log message
+        cases = [
+            # duration filtering cases
+            ({"duration": 1}, (override_id, False), None, False, skipped_msg),
+            ({"duration": 2}, (override_id, False), None, True, override_msg),
+            ({"duration": 3}, (override_id, False), None, True, override_msg),
+            ({"duration": 100}, (override_id, False), None, True, override_msg),
+
+            # override series id with ignore schedule
+            (SAMPLE_MESSAGE_BODY, (override_id, True), None, True, override_msg),
+            # override series id without ignore schedule
+            (SAMPLE_MESSAGE_BODY, (override_id, False), None, True, override_msg),
+            # override series id with ignore schedule and default series
+            (SAMPLE_MESSAGE_BODY, (override_id, True), default_id, True,
+             override_msg),
+
+            # ignore schedule without default series
+            (SAMPLE_MESSAGE_BODY, (None, True), None, False, no_match_msg),
+            # ignore schedule with default series
+            (SAMPLE_MESSAGE_BODY,
+             (None, True), default_id, True, default_series_id_msg),
+
+            # regular schedule match
+            (SAMPLE_MESSAGE_BODY, (None, False), None, True, schedule_match_msg),
+
+            # default series id when no schedule matched
+            (SAMPLE_MESSAGE_BODY, (None, False), default_id, True,
+             default_series_id_msg),
+
+            # no match found
+            (SAMPLE_MESSAGE_BODY, (None, False), None, False, no_match_msg)
+        ]
+
+        for data, args, default_id, expected_ret, expected_msg in cases:
+            with self.assertLogs(level='INFO') as cm:
+                downloader.DEFAULT_SERIES_ID = default_id
+                if expected_msg == schedule_match_msg:
+                    self.mocker.patch.object(
+                        downloader.Download,
+                        "_series_id_from_schedule",
+                        schedule_id
+                    )
+                else:
+                    self.mocker.patch.object(
+                        downloader.Download,
+                        "_series_id_from_schedule",
+                        None
+                    )
+
+                dl = downloader.Download(None, data)
+
+                ret = dl.oc_series_found(
+                            override_series_id=args[0],
+                            ignore_schedule=args[1]
+                         )
+                assert ret == expected_ret
+
+                log_message = cm.output[-1].split(":")[-1]
+                assert log_message == expected_msg
 
 
 """
