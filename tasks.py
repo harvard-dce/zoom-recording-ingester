@@ -237,8 +237,8 @@ def list_recordings(ctx, date=str(datetime.date.today())):
 
 
 @task(help={'uuid': 'meeting instance uuid',
-            'ignore_schedule': ('ignore schedule, use default series if '
-                                'available'),
+            'ignore_schedule': ('do opencast series id lookup but ignore if '
+                                'meeting times don\'t match'),
             'override_series_id': ('opencast series id to use regardless of '
                                    'schedule')})
 def exec_pipeline(ctx, uuid, ignore_schedule=False, override_series_id=None):
