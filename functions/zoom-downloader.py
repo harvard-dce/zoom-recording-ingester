@@ -177,22 +177,23 @@ class Download:
         return self._created_utc.astimezone(tz)
 
     @property
-    def _class_schedule(self):
+    def class_schedule(self):
         """
         Retrieve the course schedule from DynamoDB.
         """
-        dynamodb = boto3.resource("dynamodb")
-        table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
+        if not hasattr(self, "_class_schedule"):
+            dynamodb = boto3.resource("dynamodb")
+            table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
 
-        r = table.get_item(
-            Key={"zoom_series_id": str(self.data["zoom_series_id"])}
-        )
+            r = table.get_item(
+                Key={"zoom_series_id": str(self.data["zoom_series_id"])}
+            )
 
-        if "Item" not in r:
-            return None
-        else:
-            schedule = r["Item"]
-            return schedule
+            if "Item" not in r:
+                self._class_schedule = None
+            else:
+                self._class_schedule = r["Item"]
+        return self._class_schedule
 
     @property
     def _series_id_from_schedule(self):
@@ -201,7 +202,7 @@ class Download:
         extract the opencast series id.
         """
 
-        schedule = self._class_schedule
+        schedule = self.class_schedule
 
         if not schedule:
             return None
@@ -253,14 +254,18 @@ class Download:
                         .format(self.opencast_series_id))
             return True
 
-        if ignore_schedule:
-            logger.info("Ignoring schedule")
-        else:
-            self.opencast_series_id = self._series_id_from_schedule
-            if self.opencast_series_id is not None:
-                logger.info("Matched with opencast series '{}'!"
+        if self.class_schedule:
+            if ignore_schedule:
+                self.opencast_series_id = self.class_schedule["opencast_series_id"]
+                logger.info("Matched with OC series {}, ignoring schedule"
                             .format(self.opencast_series_id))
                 return True
+            else:
+                self.opencast_series_id = self._series_id_from_schedule
+                if self.opencast_series_id:
+                    logger.info("Matched with opencast series '{}'!"
+                                .format(self.opencast_series_id))
+                    return True
 
         if DEFAULT_SERIES_ID and DEFAULT_SERIES_ID != "None":
             logger.info("Using default series id {}"

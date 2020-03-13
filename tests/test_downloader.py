@@ -5,7 +5,7 @@ from os.path import dirname, join
 import pytest
 from importlib import import_module
 import requests_mock
-from datetime import datetime
+from datetime import datetime, timedelta
 from pytz import timezone
 from mock import patch
 import unittest
@@ -24,7 +24,10 @@ TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 tz = timezone(LOCAL_TIME_ZONE)
 FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 
+SAMPLE_OC_SERIES_ID = 20200299999
+SAMPLE_ZOOM_SERIES_ID = 123456789
 SAMPLE_MESSAGE_BODY = {
+    "zoom_series_id": SAMPLE_ZOOM_SERIES_ID,
     "duration": 30,
     "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
 }
@@ -35,8 +38,8 @@ SAMPLE_SCHEDULE = {
         "Days": [
             DAYS[datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT).weekday()]
         ],
-        "zoom_series_id": "123456789",
-        "opencast_series_id": "20200299999",
+        "zoom_series_id": str(SAMPLE_ZOOM_SERIES_ID),
+        "opencast_series_id": str(SAMPLE_OC_SERIES_ID),
         "Time": [
             datetime.strftime(
                 datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT),
@@ -102,7 +105,7 @@ class TestHandler(unittest.TestCase):
             downloader, "retrieve_message", return_value=message
         )
         self.mocker.patch.object(
-            downloader.Download, "_class_schedule", return_value={}
+            downloader.Download, "class_schedule", return_value={}
         )
 
         with self.assertLogs(level="INFO") as cm:
@@ -231,10 +234,28 @@ class TestDownloader(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def initfixtures(self, mocker):
         self.mocker = mocker
-        self.context = MockContext(aws_request_id="mock-correlation_id")
-        self.mock_sqs = unittest.mock.Mock()
-        self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
-        self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
+
+        downloader.MINIMUM_DURATION = 2
+        self.override_id = 22222222
+        self.default_id = 20200299999
+
+        self.skipped_msg = "Recording duration shorter than {} minutes".format(
+                        downloader.MINIMUM_DURATION
+                       )
+
+        self.override_msg = ("Using override series id '{}'"
+                             .format(self.override_id))
+
+        self.ignore_schedule_msg = ("Matched with OC series {}, ignoring schedule"
+                                    .format(SAMPLE_OC_SERIES_ID))
+
+        self.schedule_match_msg = ("Matched with opencast series '{}'!"
+                                   .format(SAMPLE_OC_SERIES_ID))
+
+        self.default_series_id_msg = ("Using default series id {}"
+                                      .format(self.default_id))
+
+        self.no_match_msg = "No opencast series found."
 
     def local_hour(self, timestamp):
         hour = datetime.strptime(
@@ -309,7 +330,7 @@ class TestDownloader(unittest.TestCase):
         for start_time, schedule, expected in cases:
             time_object = datetime.strptime(start_time, TIMESTAMP_FORMAT)
             with patch.object(
-                    downloader.Download, "_class_schedule", schedule):
+                    downloader.Download, "class_schedule", schedule):
                 with patch.object(
                      downloader.Download, "_created_local", time_object):
                     dl = downloader.Download(None, None)
@@ -319,80 +340,20 @@ class TestDownloader(unittest.TestCase):
     Tests for downloader.oc_series_found()
     """
 
-    def test_oc_series_found(self):
-        downloader.MINIMUM_DURATION = 2
-        override_id = 12345678
-        schedule_id = 44444444
-        default_id = 20200299999
+    def test_duration_filtering(self):
 
-        skipped_msg = "Recording duration shorter than {} minutes".format(
-                        downloader.MINIMUM_DURATION
-                       )
-
-        override_msg = ("Using override series id '{}'"
-                        .format(override_id))
-
-        schedule_match_msg = ("Matched with opencast series '{}'!"
-                              .format(schedule_id))
-
-        default_series_id_msg = ("Using default series id {}"
-                                 .format(default_id))
-
-        no_match_msg = "No opencast series found."
-
-        # data, oc_series_found args, default series,
-        # expected ret val, expected log message
+        # duration in minutes, args to oc_series_found,
+        # expected ret val, expeced log message
         cases = [
-            # duration filtering cases
-            ({"duration": 1}, (override_id, False), None, False, skipped_msg),
-            ({"duration": 2}, (override_id, False), None, True, override_msg),
-            ({"duration": 3}, (override_id, False), None, True, override_msg),
-            ({"duration": 100}, (override_id, False), None, True, override_msg),
-
-            # override series id with ignore schedule
-            (SAMPLE_MESSAGE_BODY, (override_id, True), None, True, override_msg),
-            # override series id without ignore schedule
-            (SAMPLE_MESSAGE_BODY, (override_id, False), None, True, override_msg),
-            # override series id with ignore schedule and default series
-            (SAMPLE_MESSAGE_BODY, (override_id, True), default_id, True,
-             override_msg),
-
-            # ignore schedule without default series
-            (SAMPLE_MESSAGE_BODY, (None, True), None, False, no_match_msg),
-            # ignore schedule with default series
-            (SAMPLE_MESSAGE_BODY,
-             (None, True), default_id, True, default_series_id_msg),
-
-            # regular schedule match
-            (SAMPLE_MESSAGE_BODY, (None, False), None, True, schedule_match_msg),
-
-            # default series id when no schedule matched
-            (SAMPLE_MESSAGE_BODY, (None, False), default_id, True,
-             default_series_id_msg),
-
-            # no match found, no default series id
-            (SAMPLE_MESSAGE_BODY, (None, False), None, False, no_match_msg),
-            (SAMPLE_MESSAGE_BODY, (None, False), "None", False, no_match_msg),
-            (SAMPLE_MESSAGE_BODY, (None, False), "", False, no_match_msg),
+            (1, (self.override_id, False), False, self.skipped_msg),
+            (2, (self.override_id, False), True, self.override_msg),
+            (3, (self.override_id, False), True, self.override_msg),
+            (100, (self.override_id, False), True, self.override_msg)
         ]
 
-        for data, args, default_id, expected_ret, expected_msg in cases:
+        for duration, args, expected_ret, expected_msg in cases:
             with self.assertLogs(level='INFO') as cm:
-                downloader.DEFAULT_SERIES_ID = default_id
-                if expected_msg == schedule_match_msg:
-                    self.mocker.patch.object(
-                        downloader.Download,
-                        "_series_id_from_schedule",
-                        schedule_id
-                    )
-                else:
-                    self.mocker.patch.object(
-                        downloader.Download,
-                        "_series_id_from_schedule",
-                        None
-                    )
-
-                dl = downloader.Download(None, data)
+                dl = downloader.Download(None, {"duration": duration})
 
                 ret = dl.oc_series_found(
                             override_series_id=args[0],
@@ -402,6 +363,117 @@ class TestDownloader(unittest.TestCase):
 
                 log_message = cm.output[-1].split(":")[-1]
                 assert log_message == expected_msg
+
+    def test_override_series_id(self):
+
+        # oc_series_found args, default id, expected ret, expected log message
+        cases = [
+            # override series id with ignore schedule
+            ((self.override_id, True), None, True, self.override_msg),
+            # override series id without ignore schedule
+            ((self.override_id, False), None, True, self.override_msg),
+            # override series id with ignore schedule and default series
+            ((self.override_id, True), self.default_id, True, self.override_msg)
+        ]
+
+        for args, default_id, expected_ret, expected_msg in cases:
+            with self.assertLogs(level='INFO') as cm:
+                downloader.DEFAULT_SERIES_ID = self.default_id
+                dl = downloader.Download(None, SAMPLE_MESSAGE_BODY)
+
+                ret = dl.oc_series_found(
+                            override_series_id=args[0],
+                            ignore_schedule=args[1]
+                         )
+                assert ret == expected_ret
+
+                log_message = cm.output[-1].split(":")[-1]
+                assert log_message == expected_msg
+
+    def test_ignore_schedule(self):
+
+        now = datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT)
+        one_hour_ago = (now - timedelta(hours=1)).strftime(TIMESTAMP_FORMAT)
+
+        # data, ignore_schedule, series_match,
+        # expected return value, expected log message
+        cases = [
+            # ignore schedule, series matches
+            (SAMPLE_MESSAGE_BODY, True, SAMPLE_SCHEDULE,
+             True, self.ignore_schedule_msg),
+            # ignore schedule, series matches (time doesn't)
+            ({"start_time": one_hour_ago},
+             True, SAMPLE_SCHEDULE,
+             True, self.ignore_schedule_msg),
+            # don't ignore schedule, series matches but time doesn't
+            ({"start_time": one_hour_ago},
+             False, SAMPLE_SCHEDULE,
+             False, self.no_match_msg),
+            # ignore schedule but no matching series
+            ({"zoom_series_id": 9999},
+             True, None,
+             False, self.no_match_msg)
+        ]
+
+        for data, ignore_schedule, schedule, expected_ret, expected_msg in cases:
+            with self.assertLogs(level='INFO') as cm:
+                data["duration"] = 30
+                downloader.DEFAULT_SERIES_ID = None
+                self.mocker.patch.object(
+                    downloader.Download,
+                    "class_schedule",
+                    schedule
+                )
+                dl = downloader.Download(None, data)
+
+                ret = dl.oc_series_found(ignore_schedule=ignore_schedule)
+                assert ret == expected_ret
+
+                log_message = cm.output[-1].split(":")[-1]
+                assert log_message == expected_msg
+
+    def test_default_series_id(self):
+
+        # default_series_id, schedule, expected ret, expected log message
+        cases = [
+            # default series id when schedule matched
+            (self.default_id, SAMPLE_SCHEDULE,
+             True, self.schedule_match_msg),
+            # default series id when no schedule matched
+            (self.default_id, None, True, self.default_series_id_msg),
+            # default series id is an empty string
+            ("", None, False, self.no_match_msg),
+            # default series id is None
+            (None, None, False, self.no_match_msg),
+            # default series id is "None"
+            ("None", None, False, self.no_match_msg)
+        ]
+
+        for default_series_id, schedule, expected_ret, expected_msg in cases:
+            with self.assertLogs(level='INFO') as cm:
+                downloader.DEFAULT_SERIES_ID = default_series_id
+                self.mocker.patch.object(
+                    downloader.Download,
+                    "class_schedule",
+                    schedule
+                )
+                id_from_schedule = None
+                if schedule:
+                    id_from_schedule = schedule["opencast_series_id"]
+                self.mocker.patch.object(
+                    downloader.Download,
+                    "_series_id_from_schedule",
+                    id_from_schedule
+                )
+                dl = downloader.Download(None, SAMPLE_MESSAGE_BODY)
+
+                ret = dl.oc_series_found()
+                assert ret == expected_ret
+
+                log_message = cm.output[-1].split(":")[-1]
+                assert log_message == expected_msg
+
+        downloader.DEFAULT_SERIES_ID = None
 
 
 """
@@ -465,7 +537,7 @@ def test_zoom_filename(mocker):
             if isinstance(expected, type) and expected.__base__ == Exception:
                 with pytest.raises(expected) as exc_info:
                     file.zoom_filename
-                if msg is not None:
+                if msg:
                     assert exc_info.match(msg)
             else:
                 assert(file.zoom_filename == expected)
