@@ -255,7 +255,7 @@ Resources:
       AuthorizationType: NONE
       RequestParameters:
         method.request.querystring.uuid: true
-        method.request.querystring.series_id: false
+        method.request.querystring.oc_series_id: false
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST

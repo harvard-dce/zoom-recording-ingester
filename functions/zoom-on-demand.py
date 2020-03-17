@@ -96,8 +96,8 @@ def handler(event, context):
     # series id is an optional param. if not present the download function will
     # attempt to determine the series id by matching the recording times against
     # it's known schedule as usual.
-    if "series_id" in body:
-        webhook_data["payload"]["on_demand_series_id"] = body["series_id"]
+    if "oc_series_id" in body:
+        webhook_data["payload"]["on_demand_series_id"] = body["oc_series_id"]
 
     logger.info("posting on-demand request: {}".format(webhook_data))
     try:
