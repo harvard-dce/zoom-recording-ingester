@@ -42,7 +42,7 @@ def handler(event, context):
 
     logger.info(event)
 
-    if "body" not in event:
+    if "body" not in event or event["body"] is None:
         return resp(400, "Bad data. No body found in event.")
 
     try:
@@ -64,18 +64,25 @@ def handler(event, context):
             return resp(400, "Bad url: missing 'meeting_id' param.")
         uuid = query_params["meeting_id"][0]
 
+    logger.info("Got recording uuid: '{}'".format(uuid))
+
     try:
-        zoom_endpoint = "/meetings/{}/recordings".format(uuid)
-        logger.info("zoom api request to {}".format(zoom_endpoint))
-        r = zoom_api_request(zoom_endpoint)
-        recording_data = r.json()
-    except requests.HTTPError as e:
-        if e.response.status_code == 404:
-            return resp(404, "No zoom recording with id '{}'"
-                        .format(uuid))
-        else:
-            return resp(500, "Something went wrong querying the zoom api: {}"
-                        .format(str(e)))
+        try:
+            zoom_endpoint = "/meetings/{}/recordings".format(uuid)
+            logger.info("zoom api request to {}".format(zoom_endpoint))
+            r = zoom_api_request(zoom_endpoint)
+            recording_data = r.json()
+        except requests.HTTPError as e:
+            # return a 404 if there's no such meeting
+            if e.response.status_code == 404:
+                return resp(404, "No zoom recording with id '{}'"
+                            .format(uuid))
+            else:
+                raise
+    # otherwise return a 500 on any other errors (bad json, bad request, etc)
+    except Exception as e:
+        return resp(500, "Something went wrong querying the zoom api: {}"
+                    .format(str(e)))
 
     # verify that all the recording files are actually "completed"
     not_completed = sum(

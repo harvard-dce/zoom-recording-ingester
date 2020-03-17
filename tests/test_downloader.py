@@ -176,7 +176,7 @@ class TestHandler(unittest.TestCase):
             assert match_message.delete_call_count == 1
 
             log_message = json.loads(cm.output[-1])["message"]
-            expected = {"Sent to uploader": mock_upload_msg}
+            expected = {"sqs_message": mock_upload_msg}
             assert log_message == expected
 
     def test_error_while_downloading(self):
