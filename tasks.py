@@ -1354,10 +1354,14 @@ def __show_webhook_endpoint(ctx):
            "--query \"StackResources[?ResourceType=='AWS::ApiGateway::RestApi'].PhysicalResourceId\" "
            "--output text").format(profile_arg(), STACK_NAME)
     rest_api_id = ctx.run(cmd, hide=True).stdout.strip()
-    invoke_url = "https://{}.execute-api.{}.amazonaws.com/{}/new_recording" \
-        .format(rest_api_id, AWS_DEFAULT_REGION, getenv("LAMBDA_RELEASE_ALIAS"))
 
-    print(tabulate([["Webhook Endpoint", invoke_url]], tablefmt="grid"))
+    webhook_url = "https://{}.execute-api.{}.amazonaws.com/{}/new_recording" \
+        .format(rest_api_id, AWS_DEFAULT_REGION, getenv("LAMBDA_RELEASE_ALIAS"))
+    print(tabulate([["Webhook Endpoint", webhook_url]], tablefmt="grid"))
+
+    on_demand_url = "https://{}.execute-api.{}.amazonaws.com/{}/ingest" \
+        .format(rest_api_id, AWS_DEFAULT_REGION, getenv("LAMBDA_RELEASE_ALIAS"))
+    print(tabulate([["On-Demand Endpoint", on_demand_url]], tablefmt="grid"))
 
 
 def __show_function_status(ctx):
