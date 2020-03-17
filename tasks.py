@@ -818,7 +818,7 @@ def oc_db_url(ctx):
     if db_password is None:
         raise Exception("Missing OC_DB_PASSWORD env var")
 
-    return "mysql://root:{}@{}".format(db_password, endpoint)
+    return "mysql://root:{}@{}:3306/opencast".format(db_password, endpoint)
 
 
 def account_id(ctx):

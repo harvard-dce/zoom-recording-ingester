@@ -42,6 +42,8 @@ def handler(event, context):
         return res
     except mysql.connector.Error as e:
         logger.exception("Error communicating with the db: {}".format(str(e)))
+    except Exception as e:
+        logger.exception("Error connecting to the db: {}".format(str(e)))
     finally:
         logger.info("Operation counts: {}".format(res))
         cnx.close()
