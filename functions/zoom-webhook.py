@@ -81,6 +81,8 @@ def handler(event, context):
     if "delay_seconds" in payload:
         logger.debug("Override default message delay.")
         send_sqs_message(sqs_message, delay=payload["delay_seconds"])
+    elif zoom_event == "on.demand.ingest":
+        send_sqs_message(sqs_message, delay=0)
     else:
         send_sqs_message(sqs_message)
 

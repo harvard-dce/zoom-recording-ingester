@@ -173,3 +173,20 @@ def test_delay_seconds(handler, mocker):
     mock_sqs_send.assert_called_once_with(
         SAMPLE_SQS_MESSAGE_BODY, delay=delay_seconds)
     assert resp['statusCode'] == 200
+
+
+@freeze_time(FROZEN_TIME)
+def test_on_demand_no_delay(handler, mocker):
+    notification = copy.deepcopy(SAMPLE_NOTIFICATION)
+    notification["event"] = "on.demand.ingest"
+    event = {
+        "body": json.dumps(notification)
+    }
+    mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
+    context = MockContext(aws_request_id=MOCK_CORRELATION_ID)
+
+    resp = handler(webhook, event, context)
+    mock_sqs_send.assert_called_once_with(
+        SAMPLE_SQS_MESSAGE_BODY, delay=0)
+    assert resp['statusCode'] == 200
+
