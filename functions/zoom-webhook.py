@@ -76,7 +76,7 @@ def handler(event, context):
         return resp_400("Bad data: {}".format(str(e)))
 
     sqs_message = construct_sqs_message(payload, context)
-    logger.info({"SQS message to downloader": sqs_message})
+    logger.info({"sqs_message": sqs_message})
 
     if "delay_seconds" in payload:
         logger.debug("Override default message delay.")

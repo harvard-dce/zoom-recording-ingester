@@ -88,7 +88,7 @@ def handler(event, context):
     # send a message to the opencast uploader
     message = dl.send_to_uploader_queue()
     download_message.delete()
-    logger.info({"Sent to uploader": message})
+    logger.info({"sqs_message": message})
 
 
 def retrieve_message(queue):
