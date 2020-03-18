@@ -60,10 +60,12 @@ def handler(event, context):
             logger.info("No download queue messages available.")
             return
 
-        dl = Download(sqs, json.loads(download_message.body))
+        dl_data = json.loads(download_message.body)
+        dl = Download(sqs, dl_data)
         if dl.oc_series_found(ignore_schedule, override_series_id):
             # process matched recording, don't discared message until after
             break
+        logger.info({"no_oc_series_found": dl_data})
         # discard and keep checking messages for schedule match
         download_message.delete()
         dl, download_message = None, None
