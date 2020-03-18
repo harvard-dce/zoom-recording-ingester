@@ -344,6 +344,7 @@ class TestDownloader(unittest.TestCase):
         # expected ret val, expected log message
         cases = [
             # duration filtering cases
+            ({"duration": 0}, (override_id, False), None, False, skipped_msg),
             ({"duration": 1}, (override_id, False), None, False, skipped_msg),
             ({"duration": 2}, (override_id, False), None, True, override_msg),
             ({"duration": 3}, (override_id, False), None, True, override_msg),

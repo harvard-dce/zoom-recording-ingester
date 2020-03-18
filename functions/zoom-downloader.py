@@ -242,7 +242,7 @@ class Download:
 
     def oc_series_found(self, ignore_schedule=False, override_series_id=None):
 
-        if self.data["duration"] and self.data["duration"] < MINIMUM_DURATION:
+        if "duration" in self.data and int(self.data["duration"]) < MINIMUM_DURATION:
             logger.info("Recording duration shorter than {} minutes"
                         .format(MINIMUM_DURATION))
             return False
