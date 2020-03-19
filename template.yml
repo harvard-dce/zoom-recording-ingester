@@ -688,6 +688,29 @@ Resources:
       FunctionVersion: "$LATEST"
       Name: !Ref LambdaReleaseAlias
 
+  ZoomIngesterOnDemandLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-zoom-on-demand-function"
+      RetentionInDays: 60
+
+  ZoomIngesterOnDemandLogSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn:
+      - ZoomIngesterOnDemandLogGroup
+      - ZoomIngesterOnDemandFunction
+      - ZoomIngesterOnDemandFunctionAlias
+      - ZoomLogNotificationPermission
+    Properties:
+      LogGroupName: !Ref ZoomIngesterOnDemandLogGroup
+      DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
+      FilterPattern:
+        !Join
+          - ""
+          - - "{ $.level = "
+            - !Ref LogNotificationsFilterLogLevel
+            - " }"
+
   ZoomWebhookLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -757,6 +780,29 @@ Resources:
             - !Ref LogNotificationsFilterLogLevel
             - " }"
 
+  OpencastOpCountsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-opencast-op-counts-function"
+      RetentionInDays: 60
+
+  OpencastOpCountsLogSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn:
+      - OpencastOpCountsLogGroup
+      - OpencastOpCountsFunction
+      - OpencastOpCountsFunctionAlias
+      - ZoomLogNotificationPermission
+    Properties:
+      LogGroupName: !Ref OpencastOpCountsLogGroup
+      DestinationArn: !Sub "${ZoomLogNotificationsFunction.Arn}:${LambdaReleaseAlias}"
+      FilterPattern:
+        !Join
+          - ""
+          - - "{ $.level = "
+            - !Ref LogNotificationsFilterLogLevel
+            - " }"
+
   ZoomLogNotificationPermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -801,9 +847,9 @@ Resources:
     Type: AWS::Logs::MetricFilter
     Properties:
       LogGroupName: !Ref ZoomDownloaderLogGroup
-      FilterPattern: "{$.message.duration > 0}"
+      FilterPattern: "{$.message.download_message.duration > 0}"
       MetricTransformations:
-      - MetricValue: "$.message.duration"
+      - MetricValue: "$.message.download_message.duration"
         MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
         MetricName: "RecordingDuration"
 
@@ -811,7 +857,7 @@ Resources:
     Type: AWS::Logs::MetricFilter
     Properties:
       LogGroupName: !Ref ZoomDownloaderLogGroup
-      FilterPattern: "Skipping"
+      FilterPattern: "Recording duration shorter than"
       MetricTransformations:
       - MetricValue: "1"
         MetricNamespace: !Sub "${AWS::StackName}-ZoomIngesterLogMetrics"
