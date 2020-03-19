@@ -208,20 +208,22 @@ Resources:
     Properties:
       Name: !Ref AWS::StackName
 
-  ZoomIngesterResource:
+  ZoomIngesterWebhookResource:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref ZoomIngesterApi
       ParentId: !GetAtt [ZoomIngesterApi, RootResourceId]
       PathPart: "new_recording"
+    DependsOn:
+      - ZoomIngesterApi
 
-  ZoomIngesterWebhook:
+  ZoomIngesterWebhookEndpoint:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId:
         Ref: ZoomIngesterApi
       ResourceId:
-        Ref: ZoomIngesterResource
+        Ref: ZoomIngesterWebhookResource
       HttpMethod: POST
       AuthorizationType: NONE
       RequestParameters:
@@ -236,6 +238,8 @@ Resources:
         - ResponseModels:
             application/json: Empty
           StatusCode: 200
+    DependsOn:
+      - ZoomIngesterWebhookResource
 
   ZoomIngesterOnDemandResource:
     Type: AWS::ApiGateway::Resource
@@ -243,6 +247,8 @@ Resources:
       RestApiId: !Ref ZoomIngesterApi
       ParentId: !GetAtt [ZoomIngesterApi, RootResourceId]
       PathPart: "ingest"
+    DependsOn:
+      - ZoomIngesterApi
 
   ZoomIngesterOnDemandEndpoint:
     Type: AWS::ApiGateway::Method
@@ -260,11 +266,13 @@ Resources:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
         Credentials: !GetAtt [ZoomIngesterRole, Arn]
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ZoomOnDemandFunction.Arn}:${LambdaReleaseAlias}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ZoomIngesterOnDemandFunction.Arn}:${LambdaReleaseAlias}/invocations
       MethodResponses:
         - ResponseModels:
             application/json: Empty
           StatusCode: 200
+    DependsOn:
+      - ZoomIngesterOnDemandResource
 
   OpencastOpCountsFunction:
     Type: AWS::Lambda::Function
@@ -299,7 +307,7 @@ Resources:
       FunctionVersion: "$LATEST"
       Name: !Ref LambdaReleaseAlias
 
-  ZoomOnDemandFunction:
+  ZoomIngesterOnDemandFunction:
     Type: AWS::Lambda::Function
     Properties:
       Handler: zoom-on-demand.handler
@@ -325,11 +333,11 @@ Resources:
         S3Bucket: !Ref LambdaCodeBucket
         S3Key: !Sub "${AWS::StackName}/zoom-on-demand.zip"
 
-  ZoomOnDemandFunctionAlias:
+  ZoomIngesterOnDemandFunctionAlias:
     Type: AWS::Lambda::Alias
     Properties:
       Description: "initial release"
-      FunctionName: !Ref ZoomOnDemandFunction
+      FunctionName: !Ref ZoomIngesterOnDemandFunction
       FunctionVersion: "$LATEST"
       Name: !Ref LambdaReleaseAlias
 
@@ -363,7 +371,7 @@ Resources:
   ZoomIngesterDeploy:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - ZoomIngesterWebhook
+      - ZoomIngesterWebhookEndpoint
     Properties:
       RestApiId: !Ref ZoomIngesterApi
       Description: "Deployment for the zoom ingester api"
@@ -382,6 +390,8 @@ Resources:
           HttpMethod: "*"
           LoggingLevel: INFO
           ResourcePath: "/*"
+    DependsOn:
+      - ZoomIngesterDeploy
 
   ZoomIngesterApiKey:
     Type: AWS::ApiGateway::ApiKey
