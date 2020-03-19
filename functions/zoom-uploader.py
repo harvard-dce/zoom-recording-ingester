@@ -42,8 +42,8 @@ session.headers.update({
 })
 
 MP4_VIEW_PRIORITY_LIST = [
-    "active_speaker",
     "shared_screen_with_speaker_view",
+    "active_speaker",
     "shared_screen",
     "shared_screen_with_gallery_view",
     "gallery_view"
