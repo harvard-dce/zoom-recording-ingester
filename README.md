@@ -33,6 +33,14 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
 1. Run `invoke create-code-bucket` to ensure the s3 bucket for packaged lambda code exists
 1. Run `invoke stack.create` to build the CloudFormation stack
 1. Run `invoke generate-resource-policy` and paste the output into the API Gateway's "Resource Policy" field in the web console.
+1. Enable CORS on the ingest endpoint:
+    1. Navigate to the `/ingest` POST method in the api gateway UI
+    1. In the "Actions" menu choose "Enable CORS"
+    1. In the "Access-Control-Allow-Headers" field enter the following value, including the "'" marks:
+       `'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept-Language,X-Requested-With'`
+    1. Click "Enable" and confirm
+    1. The follow-up screen will show the changes being applied. The last one will show a red X instead of a green checkmark.
+       Apparently this is fine for our purposes and doesn't cause problems, so safe to ignore.
 1. Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
     1. Export the DCE Zoom schedule google spreadsheet to a CSV file
     1. Run `invoke schedule.import -c [csv file] -s [semester] -y [year]`
