@@ -4,16 +4,20 @@ import pytest
 
 
 @pytest.fixture
-def handler(mocker):
+def aws_request_id():
+    return "12345-abcde"
+
+@pytest.fixture
+def handler(mocker, aws_request_id):
     """
     this fixture provides a way to call the function handlers so as
     to insert a canned context (which is assumed by the logger setup)
     """
     def _handler(func_module, event, context=None):
         if context is None:
-            context = mocker.Mock(aws_request_id='12345-abcde')
+            context = mocker.Mock(aws_request_id=aws_request_id)
         else:
-            context.aws_request_id = '12345-abcde'
+            context.aws_request_id = aws_request_id
         return getattr(func_module, 'handler')(event, context)
 
     return _handler
@@ -38,4 +42,68 @@ def upload_message(mocker):
         )
    return _upload_message_maker
 
+def deep_merge(dict1, dict2):
+    """
+    Recursive merge dictionaries.
+    """
+    for key, val in dict1.items():
+        if isinstance(val, dict):
+            dict2_node = dict2.setdefault(key, {})
+            deep_merge(val, dict2_node)
+        else:
+            if key not in dict2:
+                dict2[key] = val
+    return dict2
 
+@pytest.fixture
+def webhook_payload():
+    def _payload_maker(payload_extras = None):
+        payload = {
+            "payload": {
+                "object": {
+                    "id": 1,
+                    "uuid": "abc",
+                    "host_id": "efg",
+                    "topic": "Class Section Meeting",
+                    "start_time": "2020-01-09T19:50:46Z",
+                    "duration": 10,
+                    "recording_files": [
+                        {"id": "123456-789",
+                         "recording_start": "2020-01-09T19:50:46Z",
+                         "recording_end": "2020-01-09T20:50:46Z",
+                         "download_url": "https://zoom.us/rec/play/some-long-id",
+                         "file_type": "MP4",
+                         "recording_type": "shared_screen_with_speaker_view"}
+                    ]
+                }
+            },
+            "event": "recording.completed"
+        }
+
+        if payload_extras is not None:
+            payload = deep_merge(payload, payload_extras)
+        return payload
+    return _payload_maker
+
+@pytest.fixture
+def sqs_message_from_webhook_payload(webhook_payload, aws_request_id):
+    def _message_maker(frozen_time):
+        payload_obj = webhook_payload()["payload"]["object"]
+        msg = {
+            "uuid": payload_obj["uuid"],
+            "zoom_series_id": payload_obj["id"],
+            "topic": payload_obj["topic"],
+            "start_time": payload_obj["start_time"],
+            "duration": payload_obj["duration"],
+            "host_id": payload_obj["host_id"],
+            "recording_files": payload_obj["recording_files"],
+            "received_time": frozen_time,
+            "correlation_id": aws_request_id
+        }
+
+        for file in msg["recording_files"]:
+            file["recording_id"] = file.pop("id")
+
+        return msg
+
+    return _message_maker

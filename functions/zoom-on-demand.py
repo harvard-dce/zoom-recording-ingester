@@ -84,6 +84,11 @@ def handler(event, context):
         return resp(500, "Something went wrong querying the zoom api: {}"
                     .format(str(e)))
 
+    if "recording_files" not in recording_data \
+            or not len(recording_data["recording_files"]):
+        return resp(503, "Zoom api response contained no recording files for {}"
+                    .format(uuid))
+
     # verify that all the recording files are actually "completed"
     not_completed = sum(
         1 for x in recording_data["recording_files"]
@@ -106,7 +111,7 @@ def handler(event, context):
     if "oc_series_id" in body:
         webhook_data["payload"]["on_demand_series_id"] = body["oc_series_id"]
 
-    logger.info("posting on-demand request: {}".format(webhook_data))
+    logger.info({"webhook_data": webhook_data})
     try:
         r = requests.post(WEBHOOK_ENDPOINT_URL,
                           data=json.dumps(webhook_data),

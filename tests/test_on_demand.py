@@ -44,6 +44,19 @@ def test_good_uuid_url(handler, mocker, caplog):
         for item in caplog.messages
     )
 
+def test_recordings_empty(handler, mocker):
+    mock_zoom_resp = mocker.Mock()
+    mock_zoom_resp.json.return_value = {
+        "recording_files": []
+    }
+    mock_zoom_api_request = mocker.Mock(return_value=mock_zoom_resp)
+    mocker.patch.object(on_demand, 'zoom_api_request', mock_zoom_api_request)
+    res = handler(on_demand, { "body": json.dumps({"uuid": "foo"})})
+    assert res["statusCode"] == 503
+    resp_body = json.loads(res["body"])
+    assert "Zoom api response contained no recording files for foo" \
+           in resp_body["message"]
+
 def test_recordings_not_completed(handler, mocker):
     mock_zoom_resp = mocker.Mock()
     mock_zoom_resp.json.return_value = {

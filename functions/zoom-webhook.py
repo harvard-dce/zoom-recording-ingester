@@ -130,6 +130,12 @@ def validate_payload(payload):
                     .format(field, obj.keys()))
 
         files = obj["recording_files"]
+
+        # make sure there's some mp4 files in here somewhere
+        mp4_files = any(x["file_type"].lower() == "mp4" for x in files)
+        if not mp4_files:
+            raise BadWebhookData("No mp4 files in request payload")
+
         for file in files:
             if "file_type" not in file:
                 raise BadWebhookData("Missing required file field 'file_type'")

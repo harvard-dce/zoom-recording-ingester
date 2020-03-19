@@ -18,49 +18,6 @@ webhook = import_module('zoom-webhook')
 tz = timezone(LOCAL_TIME_ZONE)
 FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 
-SAMPLE_NOTIFICATION = {
-    "payload": {
-        "object": {
-            "id": 1,
-            "uuid": "abc",
-            "host_id": "efg",
-            "topic": "Class Section Meeting",
-            "start_time": "2020-01-09T19:50:46Z",
-            "duration": 10,
-            "recording_files": [
-                {"id": "123456-789",
-                 "recording_start": "2020-01-09T19:50:46Z",
-                 "recording_end": "2020-01-09T20:50:46Z",
-                 "download_url": "https://zoom.us/rec/play/some-long-id",
-                 "file_type": "MP4",
-                 "recording_type": "shared_screen_with_speaker_view"}
-            ]
-
-        }
-    },
-    "event": "recording.completed"
-}
-
-MOCK_CORRELATION_ID = "12345-abcde"
-
-# file id renamed for sqs message
-files = copy.deepcopy(
-    SAMPLE_NOTIFICATION["payload"]["object"]["recording_files"]
-)
-files[0]["recording_id"] = files[0].pop("id")
-
-SAMPLE_SQS_MESSAGE_BODY = {
-    "uuid": SAMPLE_NOTIFICATION["payload"]["object"]["uuid"],
-    "zoom_series_id": SAMPLE_NOTIFICATION["payload"]["object"]["id"],
-    "topic": SAMPLE_NOTIFICATION["payload"]["object"]["topic"],
-    "start_time": SAMPLE_NOTIFICATION["payload"]["object"]["start_time"],
-    "duration": SAMPLE_NOTIFICATION["payload"]["object"]["duration"],
-    "host_id": SAMPLE_NOTIFICATION["payload"]["object"]["host_id"],
-    "recording_files": files,
-    "received_time": FROZEN_TIME,
-    "correlation_id": MOCK_CORRELATION_ID
-}
-
 
 class MockContext():
     def __init__(self, aws_request_id):
@@ -104,8 +61,8 @@ def test_invalid_payload(handler):
     assert "bad data" in res["body"].lower()
 
 
-def test_started_event(handler):
-    recording_started = copy.deepcopy(SAMPLE_NOTIFICATION)
+def test_started_event(handler, webhook_payload):
+    recording_started = webhook_payload()
     recording_started["event"] = "recording.started"
     event = {
         'body': json.dumps(recording_started)
@@ -115,25 +72,27 @@ def test_started_event(handler):
     assert res['statusCode'] == 204
 
 
-def test_validate_payload():
-    minimum_valid_payload = SAMPLE_NOTIFICATION["payload"]
+def test_validate_payload(webhook_payload):
 
     # should not raise an exception
+    minimum_valid_payload = webhook_payload()["payload"]
     webhook.validate_payload(minimum_valid_payload)
 
-    payload_copy = copy.deepcopy(minimum_valid_payload)
+    missing_file_id = webhook_payload()["payload"]
+    del missing_file_id["object"]["recording_files"][0]["id"]
 
-    del payload_copy["object"]["recording_files"][0]["id"]
-    missing_file_id = copy.deepcopy(payload_copy)
+    no_mp4_files = webhook_payload()["payload"]
+    no_mp4_files["object"]["recording_files"][0]["file_type"] = "foo"
 
-    del payload_copy["object"]["recording_files"]
-    missing_recording_files = copy.deepcopy(payload_copy)
+    missing_recording_files = webhook_payload()["payload"]
+    del missing_recording_files["object"]["recording_files"]
 
-    del payload_copy["object"]
-    missing_object_field = payload_copy
+    missing_object_field = webhook_payload()["payload"]
+    del missing_object_field["object"]
 
     payloads = [
         (missing_file_id, "Missing required file field 'id'"),
+        (no_mp4_files, "No mp4 files in request payload"),
         (missing_recording_files,
             "Missing required object field 'recording_files'"),
         (missing_object_field, "Missing required payload field 'object'")
@@ -142,51 +101,54 @@ def test_validate_payload():
     for payload, msg in payloads:
         with pytest.raises(webhook.BadWebhookData) as exc_info:
             webhook.validate_payload(payload)
-        assert exc_info.match(msg)
+        assert exc_info.match(msg), msg
 
 
 @freeze_time(FROZEN_TIME)
-def test_handler_happy_trail(handler, mocker):
+def test_handler_happy_trail(handler, mocker, webhook_payload,
+                             sqs_message_from_webhook_payload):
     event = {
-        'body': json.dumps(SAMPLE_NOTIFICATION)
+        'body': json.dumps(webhook_payload())
     }
     mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
-    context = MockContext(aws_request_id=MOCK_CORRELATION_ID)
 
-    resp = handler(webhook, event, context)
-    mock_sqs_send.assert_called_once_with(SAMPLE_SQS_MESSAGE_BODY)
+    resp = handler(webhook, event)
+    expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME)
+    mock_sqs_send.assert_called_once_with(expected_msg)
     assert resp['statusCode'] == 200
 
 
 @freeze_time(FROZEN_TIME)
-def test_delay_seconds(handler, mocker):
+def test_delay_seconds(handler, mocker, webhook_payload,
+                       sqs_message_from_webhook_payload):
     delay_seconds = 5
-    notification = copy.deepcopy(SAMPLE_NOTIFICATION)
-    notification["payload"]["delay_seconds"] = delay_seconds
+    payload = webhook_payload()
+    payload["payload"]["delay_seconds"] = delay_seconds
     event = {
-        "body": json.dumps(notification)
+        "body": json.dumps(payload)
     }
     mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
-    context = MockContext(aws_request_id=MOCK_CORRELATION_ID)
 
-    resp = handler(webhook, event, context)
+    resp = handler(webhook, event)
+    expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME)
     mock_sqs_send.assert_called_once_with(
-        SAMPLE_SQS_MESSAGE_BODY, delay=delay_seconds)
+        expected_msg, delay=delay_seconds)
     assert resp['statusCode'] == 200
 
 
 @freeze_time(FROZEN_TIME)
-def test_on_demand_no_delay(handler, mocker):
-    notification = copy.deepcopy(SAMPLE_NOTIFICATION)
-    notification["event"] = "on.demand.ingest"
+def test_on_demand_no_delay(handler, mocker, webhook_payload,
+                            sqs_message_from_webhook_payload):
+    payload = webhook_payload()
+    payload["event"] = "on.demand.ingest"
     event = {
-        "body": json.dumps(notification)
+        "body": json.dumps(payload)
     }
     mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
-    context = MockContext(aws_request_id=MOCK_CORRELATION_ID)
 
-    resp = handler(webhook, event, context)
+    resp = handler(webhook, event)
+    expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME)
     mock_sqs_send.assert_called_once_with(
-        SAMPLE_SQS_MESSAGE_BODY, delay=0)
+        expected_msg, delay=0)
     assert resp['statusCode'] == 200
 
