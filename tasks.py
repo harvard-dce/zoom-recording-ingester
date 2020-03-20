@@ -105,7 +105,8 @@ def codebuild(ctx, revision):
     res = ctx.run(cmd, hide='out')
     build_id = json.loads(res.stdout)["build"]["id"]
 
-    cmd = "aws codebuild batch-get-builds --ids={}".format(build_id)
+    cmd = "aws {} codebuild batch-get-builds --ids={}" \
+        .format(profile_arg(), build_id)
     current_phase = "IN_PROGRESS"
     print("Waiting for codebuild to finish...")
     while True:
