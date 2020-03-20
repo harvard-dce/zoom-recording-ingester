@@ -11,17 +11,20 @@ logger = logging.getLogger()
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
-INGEST_EVENT_TYPES = [
-    "recording.completed",
-    "on.demand.ingest"
-]
-
 
 class BadWebhookData(Exception):
     pass
 
+class NoMp4Files(Exception):
+    pass
+
 
 def resp_204(msg):
+    """
+    For requests from the zoom service, we return a 204 even in cases where
+    the recording is rejected (e.g., no mp4 files) because anything else will
+    be considered a retry-able error by Zoom
+    """
     logger.info("http 204 response: {}".format(msg))
     return {
         "statusCode": 204,
@@ -38,6 +41,11 @@ def resp_400(msg):
         "body": msg
     }
 
+INGEST_EVENT_TYPES = {
+    # event type            no mp4 files response callback
+    "recording.completed":  resp_204,
+    "on.demand.ingest":     resp_400
+}
 
 @setup_logging
 def handler(event, context):
@@ -74,6 +82,9 @@ def handler(event, context):
         validate_payload(payload)
     except BadWebhookData as e:
         return resp_400("Bad data: {}".format(str(e)))
+    except NoMp4Files as e:
+        resp_callback = INGEST_EVENT_TYPES[zoom_event]
+        return resp_callback(str(e))
 
     sqs_message = construct_sqs_message(payload, context)
     logger.info({"sqs_message": sqs_message})
@@ -134,7 +145,7 @@ def validate_payload(payload):
         # make sure there's some mp4 files in here somewhere
         mp4_files = any(x["file_type"].lower() == "mp4" for x in files)
         if not mp4_files:
-            raise BadWebhookData("No mp4 files in request payload")
+            raise NoMp4Files("No mp4 files in recording data")
 
         for file in files:
             if "file_type" not in file:
@@ -150,6 +161,10 @@ def validate_payload(payload):
                     "File with incomplete status {}".format(file["status"])
                 )
 
+    except NoMp4Files:
+        # let these bubble up as we handle them differently depending
+        # on who the caller is
+        raise
     except Exception as e:
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
