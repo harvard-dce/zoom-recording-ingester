@@ -81,9 +81,6 @@ def test_validate_payload(webhook_payload):
     missing_file_id = webhook_payload()["payload"]
     del missing_file_id["object"]["recording_files"][0]["id"]
 
-    no_mp4_files = webhook_payload()["payload"]
-    no_mp4_files["object"]["recording_files"][0]["file_type"] = "foo"
-
     missing_recording_files = webhook_payload()["payload"]
     del missing_recording_files["object"]["recording_files"]
 
@@ -92,7 +89,6 @@ def test_validate_payload(webhook_payload):
 
     payloads = [
         (missing_file_id, "Missing required file field 'id'"),
-        (no_mp4_files, "No mp4 files in request payload"),
         (missing_recording_files,
             "Missing required object field 'recording_files'"),
         (missing_object_field, "Missing required payload field 'object'")
@@ -102,6 +98,14 @@ def test_validate_payload(webhook_payload):
         with pytest.raises(webhook.BadWebhookData) as exc_info:
             webhook.validate_payload(payload)
         assert exc_info.match(msg), msg
+
+@freeze_time(FROZEN_TIME)
+def test_no_mp4s_validation(webhook_payload):
+    payload = webhook_payload()["payload"]
+    payload["object"]["recording_files"][0]["file_type"] = "foo"
+    with pytest.raises(webhook.NoMp4Files) as exc_info:
+        webhook.validate_payload(payload)
+    assert exc_info.match("No mp4 files in recording data")
 
 
 @freeze_time(FROZEN_TIME)
@@ -117,6 +121,22 @@ def test_handler_happy_trail(handler, mocker, webhook_payload,
     mock_sqs_send.assert_called_once_with(expected_msg)
     assert resp['statusCode'] == 200
 
+@freeze_time(FROZEN_TIME)
+def test_no_mp4s_response(handler, mocker, webhook_payload):
+    payload = webhook_payload()
+
+    payload["event"] = "recording.completed"
+    payload["payload"]["object"]["recording_files"][0]["file_type"] = "foo"
+    event = { "body": json.dumps(payload) }
+
+    resp = handler(webhook, event)
+    assert resp["statusCode"] == 204
+
+    payload["event"] = "on.demand.ingest"
+    event = { "body": json.dumps(payload) }
+
+    resp = handler(webhook, event)
+    assert resp["statusCode"] == 400
 
 @freeze_time(FROZEN_TIME)
 def test_delay_seconds(handler, mocker, webhook_payload,
