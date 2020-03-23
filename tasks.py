@@ -1,11 +1,13 @@
+import sys
 import json
 import boto3
 from botocore.exceptions import ClientError
 import jmespath
+import requests
 import time
 import csv
 import shutil
-import datetime
+from datetime import datetime, timedelta, date as datetime_date
 from invoke import task, Collection
 from invoke.exceptions import Exit
 from os import symlink, getenv as env
@@ -16,6 +18,11 @@ from pprint import pprint
 from functions.common import zoom_api_request
 from pytz import timezone
 from multiprocessing import Process
+from urllib.parse import urlparse
+
+# supress warnings for cases where we want to ingore dev cluster dummy certificates
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv(join(dirname(__file__), '.env'))
 
@@ -200,10 +207,13 @@ def release(ctx, function=None, description=None):
 
 
 @task
-def list_recordings(ctx, date=str(datetime.date.today())):
+def list_recordings(ctx, date=None):
     """
     Optional: --date='YYYY-MM-DD'
     """
+    if date is None:
+        date = datetime_date.today()
+
     meetings = __get_meetings(date)
 
     recordings_found = 0
@@ -235,7 +245,7 @@ def list_recordings(ctx, date=str(datetime.date.today())):
         local_tz = timezone(getenv('LOCAL_TIME_ZONE'))
         utc = timezone('UTC')
         utc_start_time = r.json()['recording_files'][0]['recording_start']
-        start_time = utc.localize(datetime.datetime.strptime(utc_start_time,
+        start_time = utc.localize(datetime.strptime(utc_start_time,
                                   "%Y-%m-%dT%H:%M:%SZ")).astimezone(local_tz)
 
         print("\n\tuuid: {}".format(uuid))
@@ -598,19 +608,74 @@ def view_uploads(ctx, limit=20):
 
 
 @task(pre=[production_failsafe])
-def import_schedule(ctx, filename="classes.csv", year=None, semester=None):
+def import_schedule_from_opencast(ctx, endpoint=None):
     """
-    Csv or json to dynamo. Optional: --filename, --year, --semester
+    Fetch schedule data from Opencast series endpoint
     """
+    if endpoint is None:
+        engage_host = oc_host(ctx, 'engage')
+        endpoint = "https://{}/otherpubs/search/series.json".format(engage_host)
+    try:
+        print("Fetching helixEvents from {}".format(endpoint))
+        r = requests.get(endpoint, verify=False)
+        r.raise_for_status()
+        helix_events = r.json()["helixEvents"]
+    except requests.HTTPError as e:
+        print("Failed fetching schedule from {}: {}".format(endpoint, str(e)))
+    except Exception as e:
+        raise Exit("Got bad response from endpoint: {}".format(str(e)))
 
-    if filename.endswith('.csv'):
-        __schedule_csv_to_json(filename, "classes.json", year=year, semester=semester)
-        filename = "classes.json"
+    if int(helix_events["total"]) == 0:
+        print("No helix events returned")
+        return
 
-    if not filename.endswith('.json'):
-        print("Invalid file type {}".format(filename))
+    # yes all these values really do show up in this column
+    day_of_week_map = {
+        "M": ("MON", "Mon"),
+        "T": ("TUES", "Tu", "Tues"),
+        "W": ("WED", "Wed"),
+        "R": ("THURS", "Th", "Thurs"),
+        "F": ("FRI")
+    }
+    def get_day_of_week_code(day):
+        if day in day_of_week_map:
+            return day
+        try:
+            return next(
+                k for k, v in day_of_week_map.items()
+                if day in v
+            )
+        except StopIteration:
+            raise Exit(
+                "Unable to map day of week '{}' from schedule".format(day)
+            )
 
-    __schedule_json_to_dynamo(ctx, filename)
+    schedule_data = {}
+    for event in helix_events["resultSet"]:
+        try:
+            zoom_link = urlparse(event["zoomLink"])
+            zoom_series_id = zoom_link.path.split('/')[-1]
+            schedule_data.setdefault(zoom_series_id, {})
+            schedule_data[zoom_series_id]["zoom_series_id"] = zoom_series_id
+            schedule_data[zoom_series_id]["opencast_series_id"] = event["seriesId"]
+            schedule_data[zoom_series_id]["opencast_topic"] = event["seriesNumber"]
+
+            day = get_day_of_week_code(event["day"])
+            schedule_data[zoom_series_id].setdefault("Days", [])
+            if day not in schedule_data[zoom_series_id]["Days"]:
+                schedule_data[zoom_series_id]["Days"].append(day)
+
+            schedule_data[zoom_series_id].setdefault("Time", [])
+            time_object = datetime.strptime(event["time"], "%I:%M %p")
+            schedule_data[zoom_series_id]["Time"] = [
+                datetime.strftime(time_object, "%H:%M"),
+                (time_object + timedelta(minutes=30)).strftime("%H:%M"),
+                (time_object + timedelta(hours=1)).strftime("%H:%M")
+            ]
+        except KeyError as e:
+            raise Exit("helix event missing data: {}\n{}" \
+                       .format(str(e), json.dumps(event, indent=2)))
+    __schedule_json_to_dynamo(ctx, schedule_data=schedule_data)
 
 
 @task
@@ -711,7 +776,7 @@ queue_ns.add_task(retry_uploads, 'retry-uploads')
 ns.add_collection(queue_ns)
 
 schedule_ns = Collection('schedule')
-schedule_ns.add_task(import_schedule, 'import')
+schedule_ns.add_task(import_schedule_from_opencast, 'opencast-import')
 ns.add_collection(schedule_ns)
 
 logs_ns = Collection('logs')
@@ -790,20 +855,28 @@ def vpc_components(ctx):
     return subnet_id, sg_id
 
 
-def oc_base_url(ctx):
+def oc_host(ctx, layer_name):
+
+    # this only works on layers with a single instance
+    if layer_name.lower() not in ['admin', 'engage']:
+        print("Not possible to determine the host for the '{}' layer".format(
+            layer_name))
 
     cmd = ("aws {} ec2 describe-instances "
            "--filters \"Name=tag:opsworks:stack,Values={}\" "
-           "\"Name=tag:opsworks:layer:admin,Values=Admin\" --query \"Reservations[].Instances[].PublicDnsName\" "
-           "--output text")\
-        .format(profile_arg(), OC_CLUSTER_NAME)
+           "\"Name=tag:opsworks:layer:{},Values={}\" --query "
+           "\"Reservations[].Instances[].PublicDnsName\" "
+           "--output text") \
+        .format(
+            profile_arg(),
+            OC_CLUSTER_NAME,
+            layer_name.lower(),
+            layer_name.lower().capitalize()
+        )
 
     res = ctx.run(cmd, hide=1)
-    url = "http://" + res.stdout.strip()
+    return res.stdout.strip()
 
-    print("OC BASE URL {}".format(url))
-
-    return url
 
 def oc_db_url(ctx):
 
@@ -857,6 +930,8 @@ def __create_or_update(ctx, op):
     if default_publisher is None:
         default_publisher = getenv('NOTIFICATION_EMAIL')
 
+    oc_admin_host = oc_host(ctx, 'admin')
+
     cmd = ("aws {} cloudformation {} {} "
            "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
            "--template-body file://{} "
@@ -899,7 +974,7 @@ def __create_or_update(ctx, op):
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
                 zoom_admin_id(),
-                oc_base_url(ctx),
+                "https://{}".format(oc_admin_host),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", required=False),
@@ -922,7 +997,7 @@ def __create_or_update(ctx, op):
                 )
 
     if op == 'create-change-set':
-        ts = time.mktime(datetime.datetime.utcnow().timetuple())
+        ts = time.mktime(datetime.utcnow().timetuple())
         change_set_name = "stack-update-{}".format(int(ts))
         cmd += ' --change-set-name ' + change_set_name
         cmd += ' --output text --query "Id"'
@@ -1238,9 +1313,9 @@ def __view_messages(queue_url, limit):
 
 def __schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
     if year is None:
-        year = str(datetime.datetime.now().year)
+        year = str(datetime.now().year)
     if semester is None:
-        month = datetime.datetime.now().month
+        month = datetime.now().month
         if month < 6:
             semester = "02"
         elif month < 9:
@@ -1292,24 +1367,31 @@ def __schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
     json_file.close()
 
 
-def __schedule_json_to_dynamo(ctx, json_name):
+def __schedule_json_to_dynamo(ctx, json_file=None, schedule_data=None):
 
-    dynamodb = boto3.resource('dynamodb')
+    if json_file is not None:
+        with open(json_file, "r") as file:
+            try:
+                schedule_data = json.load(file)
+            except Exception as e:
+                print("Unable to load {}: {}" \
+                      .format(json_file, str(e)))
+                return
+    elif schedule_data is None:
+        raise Exit("{} called with no json_file or schedule_data args".format(
+            sys._getframe().f_code.co_name
+        ))
 
-    table_name = STACK_NAME + '-schedule'
-    table = dynamodb.Table(table_name)
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table_name = STACK_NAME + '-schedule'
+        table = dynamodb.Table(table_name)
 
-    with open(json_name, "r") as file:
-        try:
-            classes = json.load(file)
-            for item in classes.values():
-                table.put_item(Item=item)
-        except ClientError as e:
-            error = e.response['Error']
-            print("{}: {}".format(error['Code'], error['Message']))
-            print("Modify {} and try again."
-                  .format(json_name))
-            return
+        for item in schedule_data.values():
+            table.put_item(Item=item)
+    except ClientError as e:
+        error = e.response['Error']
+        raise Exit("{}: {}".format(error['Code'], error['Message']))
 
     new_schedule = __get_dynamo_schedule(ctx, table_name)
 
@@ -1440,7 +1522,7 @@ def __show_sqs_status(ctx):
 
         res = json.loads(ctx.run(cmd, hide=True).stdout)["Attributes"]
 
-        last_modified = datetime.date.fromtimestamp(
+        last_modified = datetime_date.fromtimestamp(
             int(res["LastModifiedTimestamp"])).strftime("%Y-%m-%d %I:%M:%S")
 
         status_row = [queue_name,
