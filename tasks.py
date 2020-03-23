@@ -608,7 +608,7 @@ def view_uploads(ctx, limit=20):
 
 
 @task(pre=[production_failsafe])
-def import_schedule_from_opencast(ctx, endpoint=None):
+def import_dce_schedule_from_opencast(ctx, endpoint=None):
     """
     Fetch schedule data from Opencast series endpoint
     """
@@ -621,7 +621,8 @@ def import_schedule_from_opencast(ctx, endpoint=None):
         r.raise_for_status()
         helix_events = r.json()["helixEvents"]
     except requests.HTTPError as e:
-        print("Failed fetching schedule from {}: {}".format(endpoint, str(e)))
+        raise Exit("Failed fetching schedule from {}: {}".format(endpoint,
+                                                               str(e)))
     except Exception as e:
         raise Exit("Got bad response from endpoint: {}".format(str(e)))
 
@@ -658,14 +659,14 @@ def import_schedule_from_opencast(ctx, endpoint=None):
             schedule_data.setdefault(zoom_series_id, {})
             schedule_data[zoom_series_id]["zoom_series_id"] = zoom_series_id
             schedule_data[zoom_series_id]["opencast_series_id"] = event["seriesId"]
-            schedule_data[zoom_series_id]["opencast_topic"] = event["seriesNumber"]
+            schedule_data[zoom_series_id]["opencast_subject"] = event[
+                "seriesNumber"]
 
             day = get_day_of_week_code(event["day"])
             schedule_data[zoom_series_id].setdefault("Days", [])
             if day not in schedule_data[zoom_series_id]["Days"]:
                 schedule_data[zoom_series_id]["Days"].append(day)
 
-            schedule_data[zoom_series_id].setdefault("Time", [])
             time_object = datetime.strptime(event["time"], "%I:%M %p")
             schedule_data[zoom_series_id]["Time"] = [
                 datetime.strftime(time_object, "%H:%M"),
@@ -675,6 +676,77 @@ def import_schedule_from_opencast(ctx, endpoint=None):
         except KeyError as e:
             raise Exit("helix event missing data: {}\n{}" \
                        .format(str(e), json.dumps(event, indent=2)))
+        except Exception as e:
+            raise Exit("Failed converting to dynamo item format: {}\n{}" \
+                       .format(str(e), json.dumps(event, indent=2)))
+
+    __schedule_json_to_dynamo(ctx, schedule_data=schedule_data)
+
+
+@task(pre=[production_failsafe])
+def import_fas_schedule_from_csv(ctx, filepath):
+    columns = (
+        "course_code",
+        "title",
+        "day",
+        "start",
+        "end",
+        "zoom_link",
+        "opencast_series_link",
+        "crn",
+        "producer",
+        "sit_in"
+    )
+    day_of_week_map = {
+        "Monday": "M",
+        "Tuesday": "T",
+        "Wednesday": "W",
+        "Thursday": "R",
+        "Friday": "F"
+    }
+    with open(filepath, "r") as f:
+        reader = csv.reader(f)
+        next(reader)
+        rows = [ dict(zip(columns, row)) for row in reader]
+
+    schedule_data = {}
+    for row in rows:
+
+        zoom_link = urlparse(row["zoom_link"])
+        if not zoom_link.scheme.startswith("https"):
+            print("Invalid zoom link value for {}: {}" \
+                  .format(row["course_code"], row["zoom_link"]))
+            continue
+        zoom_series_id = urlparse(row["zoom_link"]).path.split("/")[-1]
+        schedule_data.setdefault(zoom_series_id, {})
+        schedule_data[zoom_series_id]["zoom_series_id"] = zoom_series_id
+
+        opencast_series_id = urlparse(row["opencast_series_link"]) \
+            .fragment.replace("/", "")
+        schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
+
+        subject = "{} - {}".format(row["course_code"], row["title"])
+        schedule_data[zoom_series_id]["opencast_subject"] = subject
+
+        day = day_of_week_map.get(row["day"])
+        if day is None:
+            raise Exit("Got bad day value: {}".format(row["day"]))
+
+        schedule_data[zoom_series_id].setdefault("Days", set())
+        schedule_data[zoom_series_id]["Days"].add(day)
+
+        schedule_data[zoom_series_id].setdefault("Time", set())
+        time_object = datetime.strptime(row["start"], "%H:%M")
+        schedule_data[zoom_series_id]["Time"].update([
+            datetime.strftime(time_object, "%H:%M"),
+            (time_object + timedelta(minutes=30)).strftime("%H:%M"),
+            (time_object + timedelta(hours=1)).strftime("%H:%M")
+        ])
+
+    for id, item in schedule_data.items():
+        item["Days"] = list(item["Days"])
+        item["Time"] = list(item["Time"])
+
     __schedule_json_to_dynamo(ctx, schedule_data=schedule_data)
 
 
@@ -776,7 +848,8 @@ queue_ns.add_task(retry_uploads, 'retry-uploads')
 ns.add_collection(queue_ns)
 
 schedule_ns = Collection('schedule')
-schedule_ns.add_task(import_schedule_from_opencast, 'opencast-import')
+schedule_ns.add_task(import_dce_schedule_from_opencast, 'dce-import')
+schedule_ns.add_task(import_fas_schedule_from_csv, 'fas-import')
 ns.add_collection(schedule_ns)
 
 logs_ns = Collection('logs')
@@ -974,7 +1047,7 @@ def __create_or_update(ctx, op):
                 getenv("ZOOM_API_KEY"),
                 getenv("ZOOM_API_SECRET"),
                 zoom_admin_id(),
-                "https://{}".format(oc_admin_host),
+                "http://{}".format(oc_admin_host),
                 getenv("OPENCAST_API_USER"),
                 getenv("OPENCAST_API_PASSWORD"),
                 getenv("DEFAULT_SERIES_ID", required=False),
@@ -1311,62 +1384,6 @@ def __view_messages(queue_url, limit):
             print()
 
 
-def __schedule_csv_to_json(csv_name, json_name, year=None, semester=None):
-    if year is None:
-        year = str(datetime.now().year)
-    if semester is None:
-        month = datetime.now().month
-        if month < 6:
-            semester = "02"
-        elif month < 9:
-            semester = "03"
-        else:
-            semester = "01"
-    elif semester not in ["01", "02", "03"]:
-        print("Semester must be '01' for fall. '02' for winter, or '03' for summer.")
-        return
-
-    csv_file = open(csv_name, "r")
-    json_file = open(json_name, "w")
-
-    reader = csv.DictReader(csv_file)
-
-    data = {}
-
-    for row in reader:
-        del row[""]
-
-        # filter out empty fields for dynamo
-        course = {}
-        for key, val in row.items():
-            if val != '':
-                course[key] = val
-
-        if 'https://zoom.us' not in row['Links']:
-            # not a zoom course (probably Adobe)
-            continue
-        else:
-            zoom_series_id = row['Links'].split('/')[-1]
-
-        opencast_series_id = year + semester + row["CRN"].strip()
-        opencast_subject = row["Subject"].strip()\
-                           + (" S-" if semester == "03" else " E-") \
-                           + row["Course Number"].strip()
-
-        course['opencast_series_id'] = opencast_series_id
-        course['opencast_subject'] = opencast_subject
-        course['zoom_series_id'] = zoom_series_id
-        course['Days'] = [x.strip() for x in course['Day'].split("/")]
-        del course['Day']
-
-        data[zoom_series_id] = course
-
-    json.dump(data, json_file, indent=2)
-
-    csv_file.close()
-    json_file.close()
-
-
 def __schedule_json_to_dynamo(ctx, json_file=None, schedule_data=None):
 
     if json_file is not None:
@@ -1393,33 +1410,25 @@ def __schedule_json_to_dynamo(ctx, json_file=None, schedule_data=None):
         error = e.response['Error']
         raise Exit("{}: {}".format(error['Code'], error['Message']))
 
-    new_schedule = __get_dynamo_schedule(ctx, table_name)
+    print("Schedule updated")
 
-    print("\nSCHEDULE UPDATED TO:")
-    pprint(new_schedule)
-    print()
+    # todo print diff using value from `__get_dyanmo_schedule`
+    # pprint(__get_dynamo_schedule(ctx, table_name))
 
 
 def __get_dynamo_schedule(ctx, table_name):
 
     cmd = "aws {} dynamodb scan --table-name {}".format(profile_arg(), table_name)
-
     res = ctx.run(cmd, hide=True).stdout
-
     res = json.loads(res)
 
-    def clean_dynamo_entry(entry):
-        result = {}
-        for key in entry:
-            value = list(entry[key].values())[0]
-            if type(value) == list:
-                value = [list(li.values())[0] for li in value]
-            result[key] = value
-        return result
+    from boto3.dynamodb.types import TypeDeserializer
+    tds = TypeDeserializer()
+    current_schedule = {}
 
-    current_schedule = []
-    for item in res['Items']:
-        current_schedule.append(clean_dynamo_entry(item))
+    for item in res["Items"]:
+        item = { k: tds.deserialize(v) for k, v in item.items() }
+        current_schedule[item["zoom_series_id"]] = item
 
     return current_schedule
 
