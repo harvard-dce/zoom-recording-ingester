@@ -194,6 +194,8 @@ class Download:
             return None
         else:
             schedule = r["Item"]
+            # DynamoDB sometimes returns type decimal.Decimal
+            schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
             return schedule
 
     @property
