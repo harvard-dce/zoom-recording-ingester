@@ -61,7 +61,8 @@ def handler(event, context):
         parsed_url = urlparse(uuid)
         query_params = parse_qs(parsed_url.query)
         if "meeting_id" not in query_params:
-            return resp(400, "Bad url: missing 'meeting_id' param.")
+            return resp(404, "Zoom URL is malformed or missing 'meeting_id' "
+                             "param.")
         uuid = query_params["meeting_id"][0]
 
     logger.info("Got recording uuid: '{}'".format(uuid))

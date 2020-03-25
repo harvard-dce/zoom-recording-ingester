@@ -28,9 +28,9 @@ def test_missing_uuid(handler):
 
 def test_bad_uuid_url(handler):
     res = handler(on_demand, {"body": json.dumps({"uuid": "https://blahblah"})})
-    assert res["statusCode"] == 400
+    assert res["statusCode"] == 404
     resp_body = json.loads(res["body"])
-    assert "Bad url" in resp_body["message"]
+    assert "Zoom URL is malformed" in resp_body["message"]
 
 def test_good_uuid_url(handler, mocker, caplog):
     # patch the zoom api requester so we don't actually make any calls
