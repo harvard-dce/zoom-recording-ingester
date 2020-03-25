@@ -344,8 +344,6 @@ class TestDownloader(unittest.TestCase):
         # expected ret val, expected log message
         cases = [
             # duration filtering cases
-            ({"duration": 0}, (override_id, False), None, False, skipped_msg),
-            ({"duration": 1}, (override_id, False), None, False, skipped_msg),
             ({"duration": 2}, (override_id, False), None, True, override_msg),
             ({"duration": 3}, (override_id, False), None, True, override_msg),
             ({"duration": 100}, (override_id, False), None, True, override_msg),
@@ -471,6 +469,40 @@ def test_zoom_filename(mocker):
             else:
                 assert(file.zoom_filename == expected)
 
+def test_handler_duration_check(handler, mocker):
+    downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 1
+    mocker.patch.object(downloader, 'sqs_resource', mocker.Mock())
+    mocker.patch.object(downloader.Download, 'oc_series_found', mocker.Mock(
+        return_value=False))
+
+    # duration should be good
+    mock_msg = mocker.Mock(body=json.dumps({"duration": 10}))
+    mocker.patch.object(downloader, 'retrieve_message', mocker.Mock(
+        return_value=mock_msg
+    ))
+    handler(downloader, {})
+
+    # if we got here it means we passed the duration check
+    assert downloader.Download.oc_series_found.call_count == 1
+    assert mock_msg.delete.call_count == 1
+
+    # Reset
+    downloader.Download.oc_series_found.reset_mock()
+
+    # duration should be too short
+    mock_msg = mocker.Mock(body=json.dumps({"duration": 1}))
+    mocker.patch.object(downloader, 'retrieve_message', mocker.Mock(
+        return_value=mock_msg
+    ))
+    handler(downloader, {})
+
+    # should not have gotten here past the duration check
+    assert downloader.Download.oc_series_found.call_count == 0
+    assert mock_msg.delete.call_count == 1
+
+
+
+
 @pytest.fixture
 def download(mocker):
     return downloader.Download(
@@ -483,32 +515,66 @@ def download(mocker):
     )
 
 
-def test_recording_files(mocker, download):
+def test_recording_files(download):
     download.data.update({
         "recording_files": [
-            { "recording_start": "2020-03-31T12:00:00Z", "recording_type": "foo" },
-            {"recording_start": "2020-03-31T12:00:00Z", "recording_type": "bar"}
+            {
+                "recording_start": "2020-03-31T12:00:00Z",
+                "recording_end": "2020-03-31T11:00:00Z",
+                "recording_type":"foo"
+            },
+            {
+                "recording_start": "2020-03-31T12:00:00Z",
+                "recording_end": "2020-03-31T11:00:00Z",
+                "recording_type": "bar"
+            }
         ]
     })
 
     zoom_files = download.recording_files
     assert len(zoom_files) == 2
-    assert all(x._track_sequence == 0 for x in zoom_files)
+    assert all(x._track_set == 0 for x in zoom_files)
 
-def test_recording_files_multi_sequence(mocker, download):
+def test_recording_files_multi_set(download):
+    test_data = [
+        ("2020-03-31T12:00:00Z", "2020-03-31T13:30:00Z", "foo"),
+        ("2020-03-31T12:00:00Z", "2020-03-31T13:30:00Z", "bar"),
+        ("2020-03-31T13:00:00Z", "2020-03-31T13:30:00Z", "foo"),
+        ("2020-03-31T13:00:00Z", "2020-03-31T13:30:00Z", "bar"),
+        ("2020-03-31T13:00:00Z", "2020-03-31T13:30:00Z", "baz"),
+    ]
     download.data.update({
         "recording_files": [
-            {"recording_start": "2020-03-31T12:00:00Z", "recording_type": "foo"},
-            {"recording_start": "2020-03-31T12:00:00Z", "recording_type": "bar"},
-            {"recording_start": "2020-03-31T13:40:00Z", "recording_type": "foo"},
-            {"recording_start": "2020-03-31T13:40:00Z", "recording_type": "bar"},
-            {"recording_start": "2020-03-31T13:40:00Z", "recording_type": "baz"},
+            {"recording_start": x, "recording_end": y, "recording_type": z}
+            for x, y, z in test_data
         ]
     })
 
     zoom_files = download.recording_files
     assert len(zoom_files) == 5
-    assert sum(1 for x in zoom_files if x._track_sequence == 1) == 3
+    assert sum(1 for x in zoom_files if x._track_set == 1) == 3
+
+def test_recording_files_multi_set_false_start(download):
+    test_data = [
+        # This set is at the beginning and too short of a duration
+        # so should get ignored
+        ("2020-03-31T12:00:00Z", "2020-03-31T12:01:00Z", "foo"),
+        ("2020-03-31T12:00:00Z", "2020-03-31T12:01:00Z", "bar"),
+
+        ("2020-03-31T12:03:00Z", "2020-03-31T13:30:00Z", "foo"),
+        ("2020-03-31T12:03:00Z", "2020-03-31T13:30:00Z", "bar"),
+        ("2020-03-31T12:03:00Z", "2020-03-31T13:30:00Z", "baz"),
+    ]
+    download.data.update({
+        "recording_files": [
+            {"recording_start": x, "recording_end": y, "recording_type": z}
+            for x, y, z in test_data
+        ]
+    })
+
+    zoom_files = download.recording_files
+    assert len(zoom_files) == 3
+    assert sum(1 for x in zoom_files if x._track_set == 1) == 3
 
 @pytest.fixture
 def zoomfile(mocker):
@@ -524,5 +590,4 @@ def test_zoom_filename_ext(mocker, zoomfile):
     ]:
         zoomfile._zoom_filename = filename
         assert zoomfile.file_extension == expected
-
 

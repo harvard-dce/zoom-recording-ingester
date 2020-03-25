@@ -41,14 +41,6 @@ session.headers.update({
 
 })
 
-MP4_VIEW_PRIORITY_LIST = [
-    "shared_screen_with_speaker_view",
-    "active_speaker",
-    "shared_screen",
-    "shared_screen_with_gallery_view",
-    "gallery_view"
-]
-
 UPLOAD_OP_TYPES = [
     'track',
     'uri-track'
@@ -108,7 +100,7 @@ def handler(event, context):
         upload_data = json.loads(upload_message.body)
         logger.info({
             "minutes_in_pipeline": minutes_in_pipeline(
-                                    upload_data["webhook_received_time"]),
+                upload_data["webhook_received_time"]),
             "body": upload_data
         })
 
@@ -130,6 +122,7 @@ def minutes_in_pipeline(webhook_received_time):
     duration = ingest_time - start_time
     return duration.total_seconds() // 60
 
+
 def get_current_upload_count():
     try:
         resp = aws_lambda.invoke(FunctionName=OC_OP_COUNT_FUNCTION)
@@ -142,6 +135,7 @@ def get_current_upload_count():
     except Exception as e:
         logger.exception(e)
         return None
+
 
 def process_upload(upload_data):
     upload = Upload(upload_data)
@@ -262,16 +256,6 @@ class Upload:
     def ingest(self):
         logger.info("Adding mediapackage and ingesting.")
 
-        video_files = None
-        for view_type in MP4_VIEW_PRIORITY_LIST:
-            if view_type in self.s3_filenames:
-                video_files = self.s3_filenames[view_type]
-                logger.info("Found '{}' view in files".format(view_type))
-                break
-
-        if not video_files:
-            raise Exception("No mp4 files available for upload.")
-
         endpoint = ("/ingest/addMediaPackage/{}"
                     .format(self.workflow_definition_id))
 
@@ -281,10 +265,7 @@ class Upload:
             ("title", (None, "Lecture")),
             ("type", (None, self.type_num)),
             ("isPartOf", (None, self.opencast_series_id)),
-            ("license",
-                (None,
-                 "Creative Commons 3.0: Attribution-NonCommercial-NoDerivs")
-             ),
+            ("license", (None, "Creative Commons 3.0: Attribution-NonCommercial-NoDerivs")),
             ("publisher", (None, escape(self.publisher))),
             ("created", (None, self.created)),
             ("language", (None, "en")),
@@ -293,18 +274,132 @@ class Upload:
             ("spatial", (None, "Zoom"))
         ]
 
-        for s3_filename in video_files:
-            url = self._generate_presigned_url(s3_filename)
-            params.extend([
-                ("flavor", (None, escape(ZOOM_OPENCAST_FLAVOR))),
-                ("mediaUri", (None, url))
-            ])
+        fpg = FileParamGenerator(self.s3_filenames)
+        try:
+            file_params = fpg.generate()
+        except Exception as e:
+            logger.exception("Failed to generate file upload params")
+            raise
 
+        params.extend(file_params)
         resp = oc_api_request("POST", endpoint, files=params)
-
         logger.debug({"addMediaPackage": resp.text})
-
         self.workflow_xml = resp.text
+
+
+class FileParamGenerator(object):
+
+    FLAVORS = {
+        # The workflow requires at least one of the files have this flavor
+        # It will be treated as the "primary" stream and cannot be dropped by
+        # the producer when choosing the views at the workflow edit/trim stage
+        "presenter": "multipart/chunked+source",
+        # if 2 or more streams there must always be a "presentation" flavor,
+        # even if it's the "gallery_view"
+        "presentation": "presentation/chunked+source",
+        # this will only ever be used for the pure "gallery_view" and only if
+        # it doesn't have to serve as the presentation flavor
+        "other": "other/chunked+source",
+    }
+
+    VIEW_PRIORITES = {
+        # if we have this...
+        "active_speaker": [
+            # then take these in this order...
+            "shared_screen",
+            "gallery_view",
+            "shared_screen_with_gallery_view",
+            "shared_screen_with_speaker_view"
+        ],
+        "shared_screen_with_speaker_view": [
+            "shared_screen",
+            "shared_screen_with_gallery_view",
+            "gallery_view",
+        ]
+    }
+
+    # if we don't have either of the above then there can only be three
+    # possible views left and we just try them all in this order
+    FALLBACK_PRIORITIES = [
+        "shared_screen",
+        "shared_screen_with_gallery_view",
+        "gallery_view",
+    ]
+
+    def __init__(self, s3_filenames):
+        self.s3_filenames = s3_filenames
+        self._used_views = []
+        self._params = []
+        # whatever the max length of any view's list of files is the number
+        # of sets of files we're dealing with. When hosts stop/start a meeting
+        # it results in multiple file sets being generated
+        self._file_sets = max(
+            (len(x) for x in s3_filenames.values()),
+            default=0
+        )
+
+    @property
+    def flavors(self):
+        return [x[1][1] for x in self._params if x[0] == "flavor"]
+
+    def _has_view(self, view):
+        if view in self.s3_filenames:
+            if self._file_sets == 1:
+                return True
+            # if there's more than one set of files and this particular view
+            # isn't present in all of them, then it's not ingestable
+            elif len(self.s3_filenames[view]) == self._file_sets:
+                return True
+        return False
+
+    def _has_presenter(self):
+        return any("multipart" in f for f in self.flavors)
+
+    def _has_presentation(self):
+        return any("presentation" in f for f in self.flavors)
+
+    def _add_presenter(self, view):
+        flavor = self.FLAVORS["presenter"]
+        self._add_view(flavor, view)
+
+    def _add_secondary(self, view):
+        if not self._has_presentation():
+            flavor = self.FLAVORS["presentation"]
+        else:
+            flavor = self.FLAVORS["other"]
+        self._add_view(flavor, view)
+
+    def _add_view(self, flavor, view):
+        """
+        params must be added in pairs
+        each "view" consists of a flavor (file type) param and
+        a mediaUri param the s3 url of the file
+        :param flavor:
+        :param view:
+        :return:
+        """
+
+        if view in self._used_views:
+            # we already got this view
+            return
+
+        if len(self._used_views) >= len(self.FLAVORS):
+            # we already got all the flavors
+            return
+
+        for s3_file in self.s3_filenames[view]:
+            logger.info({
+                "adding": {
+                    "s3_file": s3_file,
+                    "view": view,
+                    "flavor": flavor
+                }
+            })
+            self._params.extend([
+                ("flavor", (None, escape(flavor))),
+                ("mediaUri", (None, self._generate_presigned_url(s3_file)))
+            ])
+            self._used_views.append(view)
 
     def _generate_presigned_url(self, s3_filename):
         logger.info("Generate presigned url bucket {} key {}"
@@ -315,3 +410,28 @@ class Upload:
         )
         logger.info("Got presigned url {}".format(url))
         return url
+
+    def generate(self):
+        for primary_view, secondary_views in self.VIEW_PRIORITES.items():
+            if not self._has_view(primary_view) or self._has_presenter():
+                continue
+            self._add_presenter(primary_view)
+
+            for view in secondary_views:
+                if not self._has_view(view):
+                    continue
+                self._add_secondary(view)
+
+        for view in self.FALLBACK_PRIORITIES:
+            if not self._has_view(view):
+                continue
+            if not self._has_presenter():
+                self._add_presenter(view)
+            else:
+                self._add_secondary(view)
+
+        if not self._has_presenter():
+            raise RuntimeError("Unable to find a presenter view")
+
+        return self._params
+

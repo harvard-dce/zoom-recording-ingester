@@ -3,6 +3,7 @@ import os
 import site
 import json
 import pytest
+import inspect
 from os.path import dirname, join
 from importlib import import_module
 from datetime import datetime
@@ -31,6 +32,7 @@ def test_too_many_uploads(handler, mocker):
     assert uploader.process_upload.call_count == 0
 
 
+
 def test_unknown_uploads(handler, mocker):
     mocker.patch.object(uploader, 'sqs', mocker.Mock())
     uploader.sqs.get_queue_by_name = mocker.Mock()
@@ -46,6 +48,7 @@ def test_unknown_uploads(handler, mocker):
     mocker.patch.object(uploader, 'OC_TRACK_UPLOAD_MAX', 5)
     handler(uploader, {})
     assert uploader.process_upload.call_count == 0
+
 
 
 def test_upload_count_ok(handler, mocker):
@@ -66,6 +69,7 @@ def test_upload_count_ok(handler, mocker):
     mocker.patch.object(uploader, 'OC_TRACK_UPLOAD_MAX', 5)
     handler(uploader, {})
     assert uploader.process_upload.call_count == 1
+
 
 
 def test_no_messages_available(handler, mocker, caplog):
@@ -154,3 +158,206 @@ def test_get_current_upload_count(mocker):
         "Payload": io.StringIO("no json here either")
     }
     assert uploader.get_current_upload_count() == None
+
+
+def test_file_param_generator():
+    # each `cases` item is a list containing two iterables
+    # - first element in list gets turned into the s3_filenames data
+    # - 2nd element is the expected params that get generated
+    cases = [
+        [('active_speaker', 'gallery_view'), [
+            ("active_speaker", "multipart"),
+            ("gallery_view", "presentation")
+        ], 1],
+        [('active_speaker', 'shared_screen'), [
+            ("active_speaker", "multipart"),
+            ("shared_screen", "presentation")
+        ], 2],
+        [('active_speaker', 'shared_screen_with_speaker_view'), [
+            ("active_speaker", "multipart"),
+            ("shared_screen_with_speaker_view", "presentation")
+        ], 3],
+        [('active_speaker', 'shared_screen_with_gallery_view'), [
+            ("active_speaker", "multipart"),
+            ("shared_screen_with_gallery_view", "presentation")
+        ], 4],
+        [('gallery_view', 'shared_screen'), [
+            ("shared_screen", "multipart"),
+            ("gallery_view", "presentation")
+        ], 5],
+        [('gallery_view', 'shared_screen_with_speaker_view'), [
+            ("shared_screen_with_speaker_view", "multipart"),
+            ("gallery_view", "presentation")
+        ], 6],
+        [('gallery_view', 'shared_screen_with_gallery_view'), [
+            ("shared_screen_with_gallery_view", "multipart"),
+            ("gallery_view", "presentation")
+        ], 7],
+        [('shared_screen', 'shared_screen_with_speaker_view'), [
+            ("shared_screen_with_speaker_view", "multipart"),
+            ("shared_screen", "presentation")
+        ], 8],
+        [('shared_screen', 'shared_screen_with_gallery_view'), [
+            ("shared_screen", "multipart"),
+            ("shared_screen_with_gallery_view", "presentation")
+        ], 9],
+        [('shared_screen_with_speaker_view', 'shared_screen_with_gallery_view'), [
+            ("shared_screen_with_speaker_view", "multipart"),
+            ("shared_screen_with_gallery_view", "presentation")
+        ], 10],
+        [('active_speaker', 'gallery_view', 'shared_screen'), [
+            ("active_speaker", "multipart"),
+            ("shared_screen", "presentation"),
+            ("gallery_view", "other")
+        ], 11],
+         [('active_speaker', 'gallery_view', 'shared_screen_with_speaker_view'), [
+             ("active_speaker", "multipart"),
+             ("gallery_view", "presentation"),
+             ("shared_screen_with_speaker_view", "other"),
+         ], 12],
+         [('active_speaker', 'gallery_view', 'shared_screen_with_gallery_view'), [
+             ("active_speaker", "multipart"),
+             ("gallery_view", "presentation"),
+             ("shared_screen_with_gallery_view", "other"),
+         ], 13],
+         [('active_speaker', 'shared_screen', 'shared_screen_with_speaker_view'), [
+             ("active_speaker", "multipart"),
+             ("shared_screen", "presentation"),
+             ("shared_screen_with_speaker_view", "other"),
+         ], 14],
+         [('active_speaker', 'shared_screen', 'shared_screen_with_gallery_view'), [
+             ("active_speaker", "multipart"),
+             ("shared_screen", "presentation"),
+             ("shared_screen_with_gallery_view", "other"),
+         ], 15],
+         [('active_speaker', 'shared_screen_with_speaker_view', 'shared_screen_with_gallery_view'), [
+             ("active_speaker", "multipart"),
+             ("shared_screen_with_gallery_view", "presentation"),
+             ("shared_screen_with_speaker_view", "other"),
+         ], 16],
+         [('gallery_view', 'shared_screen', 'shared_screen_with_speaker_view'), [
+             ("shared_screen_with_speaker_view", "multipart"),
+             ("shared_screen", "presentation"),
+             ("gallery_view", "other"),
+         ], 17],
+         [('gallery_view', 'shared_screen', 'shared_screen_with_gallery_view'), [
+             ("shared_screen", "multipart"),
+             ("shared_screen_with_gallery_view", "presentation"),
+             ("gallery_view", "other"),
+         ], 18],
+         [('gallery_view', 'shared_screen_with_speaker_view', 'shared_screen_with_gallery_view'), [
+             ("shared_screen_with_speaker_view", "multipart"),
+             ("shared_screen_with_gallery_view", "presentation"),
+             ("gallery_view", "other"),
+         ], 19],
+        [('shared_screen', 'shared_screen_with_speaker_view', 'shared_screen_with_gallery_view'), [
+            ("shared_screen_with_speaker_view", "multipart"),
+            ("shared_screen", "presentation"),
+            ("shared_screen_with_gallery_view", "other"),
+        ], 20],
+        [('active_speaker',
+          'gallery_view',
+          'shared_screen',
+          'shared_screen_with_speaker_view'),
+         [
+             ("active_speaker", "multipart"),
+             ("shared_screen", "presentation"),
+             ("gallery_view", "other"),
+         ], 21],
+        [('active_speaker',
+          'gallery_view',
+          'shared_screen',
+          'shared_screen_with_gallery_view'),
+         [
+             ("active_speaker", "multipart"),
+             ("shared_screen", "presentation"),
+             ("gallery_view", "other"),
+         ], 22],
+        [('active_speaker',
+          'gallery_view',
+          'shared_screen_with_speaker_view',
+          'shared_screen_with_gallery_view'),
+         [
+             ("active_speaker", "multipart"),
+             ("gallery_view", "presentation"),
+             ("shared_screen_with_gallery_view", "other"),
+         ], 23],
+        [('active_speaker',
+          'shared_screen',
+          'shared_screen_with_speaker_view',
+          'shared_screen_with_gallery_view'),
+         [
+             ("active_speaker", "multipart"),
+             ("shared_screen", "presentation"),
+             ("shared_screen_with_gallery_view", "other"),
+         ], 24],
+        [('gallery_view',
+          'shared_screen',
+          'shared_screen_with_speaker_view',
+          'shared_screen_with_gallery_view'),
+         [
+             ("shared_screen_with_speaker_view", "multipart"),
+             ("shared_screen", "presentation"),
+             ("shared_screen_with_gallery_view", "other"),
+         ], 25],
+        [('active_speaker',
+          'gallery_view',
+          'shared_screen',
+          'shared_screen_with_speaker_view',
+          'shared_screen_with_gallery_view'),
+         [
+             ("active_speaker", "multipart"),
+             ("shared_screen", "presentation"),
+             ("gallery_view", "other"),
+         ], 26],
+        [tuple(), RuntimeError, 27]
+    ]
+
+    for (incoming, expected, case_no) in cases:
+        fpg = uploader.FileParamGenerator(s3_filenames={
+            x: ["{}.MP4".format(x)] for x in incoming
+        })
+        fpg._generate_presigned_url = lambda f: "signed-{}".format(f)
+        if inspect.isclass(expected):
+            with pytest.raises(expected):
+                upload_params = fpg.generate()
+        else:
+            expected_params = []
+            for view, flavor in expected:
+                expected_params.extend([
+                    ("flavor", (None, "{}/chunked+source".format(flavor))),
+                    ("mediaUri", (None, "signed-{}.MP4".format(view)))
+                ])
+            upload_params = fpg.generate()
+            assert upload_params == expected_params, "case {}".format(case_no)
+
+def test_file_param_generator_multi_set():
+    cases = [
+       # this one has 2 x speaker but only 1 shared screen
+       [{"active_speaker": ["speaker-000.mp4", "speaker-001.mp4"],
+         "shared_screen": ["screen-001.mp4"]},
+       # shared screen view should be ignored
+        [("flavor", (None, "multipart/chunked+source")),
+         ("mediaUri", (None, "signed-speaker-000.mp4")),
+         ("flavor", (None, "multipart/chunked+source")),
+         ("mediaUri", (None, "signed-speaker-001.mp4"))]
+       ],
+       # has 2x for both views
+       [{"active_speaker": ["speaker-000.mp4", "speaker-001.mp4"],
+         "shared_screen": ["screen-000.mp4", "screen-001.mp4"]},
+       # params should include both files for both views
+        [("flavor", (None, "multipart/chunked+source")),
+         ("mediaUri", (None, "signed-speaker-000.mp4")),
+         ("flavor", (None, "multipart/chunked+source")),
+         ("mediaUri", (None, "signed-speaker-001.mp4")),
+         ("flavor", (None, "presentation/chunked+source")),
+         ("mediaUri", (None, "signed-screen-000.mp4")),
+         ("flavor", (None, "presentation/chunked+source")),
+         ("mediaUri", (None, "signed-screen-001.mp4"))]
+        ],
+    ]
+    for incoming, expected in cases:
+        fpg = uploader.FileParamGenerator(s3_filenames=incoming)
+        fpg._generate_presigned_url = lambda f: "signed-{}".format(f)
+        upload_params = fpg.generate()
+        assert upload_params == expected
