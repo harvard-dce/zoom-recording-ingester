@@ -687,13 +687,13 @@ def import_dce_schedule_from_opencast(ctx, endpoint=None):
 def import_fas_schedule_from_csv(ctx, filepath):
     columns = (
         "course_code",
+        "crn",
         "title",
         "day",
         "start",
         "end",
         "zoom_link",
         "opencast_series_link",
-        "crn",
         "producer",
         "sit_in"
     )
