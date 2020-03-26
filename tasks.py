@@ -18,7 +18,7 @@ from pprint import pprint
 from functions.common import zoom_api_request
 from pytz import timezone
 from multiprocessing import Process
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 # supress warnings for cases where we want to ingore dev cluster dummy certificates
 import urllib3
@@ -306,9 +306,9 @@ def generate_resource_policy(ctx):
 @task(help={'uuid': 'meeting instance uuid',
             'ignore_schedule': ('ignore schedule, use default series if '
                                 'available'),
-            'override_series_id': ('opencast series id to use regardless of '
+            'on_demand_series_id': ('opencast series id to use regardless of '
                                    'schedule')})
-def exec_pipeline(ctx, uuid, ignore_schedule=False, override_series_id=None):
+def exec_pipeline(ctx, uuid, ignore_schedule=False, on_demand_series_id=None):
     """
     Manually trigger the webhook handler, downloader, and uploader.
     Positional arguments: uuid, host_id, series-id
@@ -316,14 +316,12 @@ def exec_pipeline(ctx, uuid, ignore_schedule=False, override_series_id=None):
     """
 
     print("\nTriggering webhook...\n")
-    exec_webhook(ctx, uuid)
+    exec_webhook(ctx, uuid, on_demand_series_id)
 
     # Keep retrying downloader until some messages are processed
     # or it fails.
     print("\nTriggering downloader...\n")
-    resp = exec_downloader(ctx,
-                           ignore_schedule=ignore_schedule,
-                           series_id=override_series_id)
+    resp = exec_downloader(ctx, ignore_schedule=ignore_schedule)
     wait = 1
     while not resp:
         resp = exec_downloader(ctx)
@@ -345,8 +343,8 @@ def exec_pipeline(ctx, uuid, ignore_schedule=False, override_series_id=None):
         return
 
 
-@task(help={'uuid': 'meeting instance uuid'})
-def exec_webhook(ctx, uuid):
+@task(help={'uuid': 'meeting instance uuid', 'on_demand_series_id': 'opencast series id'})
+def exec_webhook(ctx, uuid, on_demand_series_id=None):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
@@ -373,7 +371,10 @@ def exec_webhook(ctx, uuid):
         api_resources
     )
 
-    data = zoom_api_request("meetings/{}/recordings".format(uuid)).json()
+    double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
+    data = zoom_api_request(
+        "meetings/{}/recordings".format(double_urlencoded_uuid)
+        ).json()
 
     required_fields = ["host_id", "recording_files"]
     for field in required_fields:
@@ -389,13 +390,23 @@ def exec_webhook(ctx, uuid):
         if "id" not in file and file["file_type"].lower() != "mp4":
             data["recording_files"].remove(file)
 
-    event_body = {
-        "event": "recording.completed",
-        "payload": {
-            "object": data,
-            "delay_seconds": 0
+    if on_demand_series_id:
+        event_body = {
+            "event": "on.demand.ingest",
+            "payload": {
+                "on_demand_series_id": on_demand_series_id,
+                "object": data,
+                "delay_seconds": 0
+            }
         }
-    }
+    else:
+        event_body = {
+            "event": "recording.completed",
+            "payload": {
+                "object": data,
+                "delay_seconds": 0
+            }
+        }
 
     resp = apig.test_invoke_method(
         restApiId=api_id,
