@@ -1,7 +1,7 @@
 import json
 import requests
 from os import getenv as env
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 from common import setup_logging, zoom_api_request
 
 import logging
@@ -69,7 +69,10 @@ def handler(event, context):
 
     try:
         try:
-            zoom_endpoint = "/meetings/{}/recordings".format(uuid)
+            # zoom api can break if uuid is not double urlencoded
+            double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
+            zoom_endpoint = ("/meetings/{}/recordings"
+                             .format(double_urlencoded_uuid))
             logger.info("zoom api request to {}".format(zoom_endpoint))
             r = zoom_api_request(zoom_endpoint)
             recording_data = r.json()
@@ -129,4 +132,3 @@ def handler(event, context):
         return resp(500, err_msg);
 
     return resp(200, "Ingest accepted")
-
