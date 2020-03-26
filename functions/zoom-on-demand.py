@@ -132,7 +132,3 @@ def handler(event, context):
         return resp(500, err_msg);
 
     return resp(200, "Ingest accepted")
-
-
-def double_urlencode(param):
-    return quote(quote(param, safe=""), safe="")
