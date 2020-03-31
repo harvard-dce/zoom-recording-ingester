@@ -2,6 +2,7 @@ import boto3
 import json
 import requests
 from os import getenv as env
+from pathlib import Path
 from common import setup_logging, zoom_api_request, TIMESTAMP_FORMAT
 import subprocess
 from pytz import timezone
@@ -132,32 +133,32 @@ class Download:
         return self._host_name
 
     @property
+    def uuid(self):
+        return self.data["uuid"]
+
+    @property
+    def zoom_series_id(self):
+        return self.data["zoom_series_id"]
+
+    @property
     def recording_files(self):
         if not hasattr(self, "_recording_files"):
+
             files = self.data["recording_files"]
-            start_times = sorted(
-                set([file["recording_start"] for file in files])
-            )
-            track_numbers = {
-                start_times[i]: i for i in range(len(start_times))
-            }
+            start_times = sorted(set(
+                [file["recording_start"] for file in files]
+            ))
 
-            tracks = [{}] * len(start_times)
+            zoom_files = []
             for file in files:
-                track_number = track_numbers[file["recording_start"]]
-                tracks[track_number][file["recording_type"]] = file
+                track_seq = start_times.index(file["recording_start"])
+                file["meeting_uuid"] = self.uuid
+                file["zoom_series_id"] = self.zoom_series_id
+                file["created_local"] = self._created_local
+                zoom_files.append(ZoomFile(file, track_seq))
 
-            logger.info({"tracks": tracks})
+            self._recording_files = zoom_files
 
-            self._recording_files = []
-            for track_sequence in range(len(tracks)):
-                for file_data in tracks[track_sequence].values():
-                    file_data["meeting_uuid"] = self.data["uuid"]
-                    file_data["zoom_series_id"] = self.data["zoom_series_id"]
-                    file_data["created_local"] = self._created_local
-                    self._recording_files.append(
-                        ZoomFile(file_data, track_sequence)
-                    )
         return self._recording_files
 
     @property
@@ -494,7 +495,7 @@ class ZoomFile:
 
     @property
     def file_extension(self):
-        return self.zoom_filename.split(".")[-1]
+        return Path(self.zoom_filename).suffix[1:]
 
     def stream_file_to_s3(self):
         s3 = boto3.client("s3")

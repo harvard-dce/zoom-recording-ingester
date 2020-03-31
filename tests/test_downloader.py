@@ -470,3 +470,59 @@ def test_zoom_filename(mocker):
                     assert exc_info.match(msg)
             else:
                 assert(file.zoom_filename == expected)
+
+@pytest.fixture
+def download(mocker):
+    return downloader.Download(
+        sqs=mocker.Mock(),
+        data={
+            "uuid": "abcde-12345",
+            "zoom_series_id": "567890",
+            "start_time": "2020-01-01T00:00:00Z"
+        }
+    )
+
+
+def test_recording_files(mocker, download):
+    download.data.update({
+        "recording_files": [
+            { "recording_start": "2020-03-31T12:00:00Z", "recording_type": "foo" },
+            {"recording_start": "2020-03-31T12:00:00Z", "recording_type": "bar"}
+        ]
+    })
+
+    zoom_files = download.recording_files
+    assert len(zoom_files) == 2
+    assert all(x._track_sequence == 0 for x in zoom_files)
+
+def test_recording_files_multi_sequence(mocker, download):
+    download.data.update({
+        "recording_files": [
+            {"recording_start": "2020-03-31T12:00:00Z", "recording_type": "foo"},
+            {"recording_start": "2020-03-31T12:00:00Z", "recording_type": "bar"},
+            {"recording_start": "2020-03-31T13:40:00Z", "recording_type": "foo"},
+            {"recording_start": "2020-03-31T13:40:00Z", "recording_type": "bar"},
+            {"recording_start": "2020-03-31T13:40:00Z", "recording_type": "baz"},
+        ]
+    })
+
+    zoom_files = download.recording_files
+    assert len(zoom_files) == 5
+    assert sum(1 for x in zoom_files if x._track_sequence == 1) == 3
+
+@pytest.fixture
+def zoomfile(mocker):
+    return downloader.ZoomFile({"recording_type": "speaker"}, 0)
+
+def test_zoom_filename_ext(mocker, zoomfile):
+    for filename, expected in [
+        ("/foo/bar/baz", ""),
+        ("http://well.what.have.we/here.tar.gz", "gz"),
+        ("path/to/some.mp4", "mp4"),
+        ("https://s3.amazonaws.com/bucket/object.html", "html"),
+        ("/wtf/this.path/has a dot/in-the-midd.le", "le")
+    ]:
+        zoomfile._zoom_filename = filename
+        assert zoomfile.file_extension == expected
+
+
