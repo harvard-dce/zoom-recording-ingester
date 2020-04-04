@@ -307,7 +307,7 @@ def generate_resource_policy(ctx):
             'ignore_schedule': ('ignore schedule, use default series if '
                                 'available'),
             'on_demand_series_id': ('opencast series id to use regardless of '
-                                   'schedule')})
+                                    'schedule')})
 def exec_pipeline(ctx, uuid, ignore_schedule=False, on_demand_series_id=None):
     """
     Manually trigger the webhook handler, downloader, and uploader.
@@ -394,7 +394,7 @@ def exec_webhook(ctx, uuid, on_demand_series_id=None):
         event_body = {
             "event": "on.demand.ingest",
             "payload": {
-                "on_demand_series_id": on_demand_series_id,
+                "on_demand_series_id": on_demand_series_id.strip(),
                 "object": data,
                 "delay_seconds": 0
             }

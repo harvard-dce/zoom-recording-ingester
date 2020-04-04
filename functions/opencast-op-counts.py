@@ -9,6 +9,7 @@ logger = logging.getLogger()
 OPENCAST_DB_URL = env("OPENCAST_DB_URL");
 OPENCAST_RUNNING_JOB_STATUS = 2
 
+
 def parse_db_url():
     db_url = urlparse.urlparse(OPENCAST_DB_URL);
     return {
@@ -18,6 +19,7 @@ def parse_db_url():
         "password": db_url.password,
         "database": db_url.path[1:]
     }
+
 
 @setup_logging
 def handler(event, context):
@@ -46,6 +48,7 @@ def handler(event, context):
         logger.exception("Error establishing connection to the db: {}".format(str(e)))
     finally:
         logger.info({ "operation_counts": res})
+        cursor.close()
         cnx.close()
 
 

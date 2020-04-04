@@ -34,4 +34,4 @@ If there are new functions you must package and ensure the code is in s3:
 then
 
 	invoke stack.update
-	invoke codebuild --revision release-vX.X.X
+	invoke codebuild --revision=release-vX.X.X
