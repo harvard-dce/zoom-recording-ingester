@@ -270,8 +270,8 @@ class Upload:
             ("created", (None, self.created)),
             ("language", (None, "en")),
             ("seriesDCCatalog", (None, self.series_catalog)),
-            ("source", (None, "Zoom")),
-            ("spatial", (None, "Zoom"))
+            ("source", (None, "Zoom Ingester Pipeline")),
+            ("spatial", (None, "Zoom {}".format(self.zoom_series_id)))
         ]
 
         fpg = FileParamGenerator(self.s3_filenames)
