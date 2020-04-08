@@ -6,6 +6,7 @@ import jmespath
 import requests
 import time
 import csv
+import itertools
 import shutil
 from datetime import datetime, timedelta, date as datetime_date
 from invoke import task, Collection
@@ -696,18 +697,6 @@ def import_dce_schedule_from_opencast(ctx, endpoint=None):
 
 @task(pre=[production_failsafe])
 def import_fas_schedule_from_csv(ctx, filepath):
-    columns = (
-        "course_code",
-        "crn",
-        "title",
-        "day",
-        "start",
-        "end",
-        "zoom_link",
-        "opencast_series_link",
-        "producer",
-        "sit_in"
-    )
     day_of_week_map = {
         "Monday": "M",
         "Tuesday": "T",
@@ -715,28 +704,43 @@ def import_fas_schedule_from_csv(ctx, filepath):
         "Thursday": "R",
         "Friday": "F"
     }
+
+    # make it so we can use lower-case keys in our row dicts;
+    # there are lots of ways this spreadsheet data import could go wrong and
+    # this is only one, but we do what we can.
+    def lower_case_first_line(iter):
+        header = next(iter).lower()
+        return itertools.chain([header], iter)
+
     with open(filepath, "r") as f:
-        reader = csv.reader(f)
-        next(reader)
-        rows = [ dict(zip(columns, row)) for row in reader]
+        reader = csv.DictReader(lower_case_first_line(f))
+        rows = list(reader)
 
     schedule_data = {}
     for row in rows:
 
-        zoom_link = urlparse(row["zoom_link"])
-        if not zoom_link.scheme.startswith("https"):
+        # try the new link+password column first
+        for col in ("meeting id with password", "meeting id"):
+            try:
+                zoom_link = urlparse(row[col])
+                assert zoom_link.scheme.startswith("https")
+            except AssertionError:
+                zoom_link = None
+
+        if zoom_link is None:
             print("Invalid zoom link value for {}: {}" \
-                  .format(row["course_code"], row["zoom_link"]))
+                  .format(row["course code"], zoom_link))
             continue
-        zoom_series_id = urlparse(row["zoom_link"]).path.split("/")[-1]
+
+        zoom_series_id = zoom_link.path.split("/")[-1]
         schedule_data.setdefault(zoom_series_id, {})
         schedule_data[zoom_series_id]["zoom_series_id"] = zoom_series_id
 
-        opencast_series_id = urlparse(row["opencast_series_link"]) \
+        opencast_series_id = urlparse(row["oc series"]) \
             .fragment.replace("/", "")
         schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
 
-        subject = "{} - {}".format(row["course_code"], row["title"])
+        subject = "{} - {}".format(row["course code"], row["type"])
         schedule_data[zoom_series_id]["opencast_subject"] = subject
 
         day = day_of_week_map.get(row["day"])
