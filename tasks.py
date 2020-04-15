@@ -724,6 +724,7 @@ def import_fas_schedule_from_csv(ctx, filepath):
             try:
                 zoom_link = urlparse(row[col])
                 assert zoom_link.scheme.startswith("https")
+                break
             except AssertionError:
                 zoom_link = None
 
