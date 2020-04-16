@@ -1,7 +1,7 @@
 import json
 from os import getenv as env
 from common import setup_logging, TIMESTAMP_FORMAT
-from datetime import datetime
+from datetime import datetime, timedelta
 from pytz import timezone
 import boto3
 
@@ -41,11 +41,13 @@ def resp_400(msg):
         "body": msg
     }
 
+
 INGEST_EVENT_TYPES = {
     # event type            no mp4 files response callback
     "recording.completed":  resp_204,
     "on.demand.ingest":     resp_400
 }
+
 
 @setup_logging
 def handler(event, context):
@@ -200,8 +202,21 @@ def construct_sqs_message(payload, context):
 
     if "on_demand_series_id" in payload:
         sqs_message["on_demand_series_id"] = payload["on_demand_series_id"]
+    else:
+        zoom_processing_mins = estimated_processing_mins(
+            payload["object"]["start_time"],
+            payload["object"]["duration"]
+        )
+        sqs_message["zoom_processing_time"] = zoom_processing_mins
 
     return sqs_message
+
+
+def estimated_processing_mins(start_ts, duration_in_minutes):
+    rec_start = datetime.strptime(start_ts, TIMESTAMP_FORMAT)
+    rec_end = rec_start + timedelta(minutes=duration_in_minutes)
+    processing_time = datetime.utcnow() - rec_end
+    return processing_time.total_seconds() // 60
 
 
 def send_sqs_message(message, delay=DEFAULT_MESSAGE_DELAY):
