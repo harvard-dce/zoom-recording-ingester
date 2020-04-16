@@ -207,7 +207,7 @@ def construct_sqs_message(payload, context):
             payload["object"]["start_time"],
             payload["object"]["duration"]
         )
-        sqs_message["zoom_processing_time"] = zoom_processing_mins
+        sqs_message["zoom_processing_minutes"] = zoom_processing_mins
 
     return sqs_message
 
