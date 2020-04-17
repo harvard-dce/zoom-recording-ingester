@@ -88,16 +88,11 @@ def handler(event, context):
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
 
-    sqs_message = construct_sqs_message(payload, context)
+    sqs_message = construct_sqs_message(payload, context, zoom_event)
     logger.info({"sqs_message": sqs_message})
 
-    if "delay_seconds" in payload:
-        logger.debug("Override default message delay.")
-        send_sqs_message(sqs_message, delay=payload["delay_seconds"])
-    elif zoom_event == "on.demand.ingest":
-        send_sqs_message(sqs_message, delay=0)
-    else:
-        send_sqs_message(sqs_message)
+    delay = 0 if zoom_event == "on.demand.ingest" else DEFAULT_MESSAGE_DELAY
+    send_sqs_message(sqs_message, delay=delay)
 
     return {
         "statusCode": 200,
@@ -171,7 +166,7 @@ def validate_payload(payload):
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
 
-def construct_sqs_message(payload, context):
+def construct_sqs_message(payload, context, zoom_event):
     now = datetime.strftime(
                 timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
                 TIMESTAMP_FORMAT)
@@ -202,10 +197,11 @@ def construct_sqs_message(payload, context):
 
     if "on_demand_series_id" in payload:
         sqs_message["on_demand_series_id"] = payload["on_demand_series_id"]
-    else:
+
+    if zoom_event == "recording.completed":
         zoom_processing_mins = estimated_processing_mins(
-            payload["object"]["start_time"],
-            payload["object"]["duration"]
+            sqs_message["start_time"],
+            sqs_message["duration"]
         )
         sqs_message["zoom_processing_minutes"] = zoom_processing_mins
 
@@ -220,7 +216,6 @@ def estimated_processing_mins(start_ts, duration_in_minutes):
 
 
 def send_sqs_message(message, delay=DEFAULT_MESSAGE_DELAY):
-
     logger.debug("SQS sending start...")
     sqs = boto3.resource("sqs")
 

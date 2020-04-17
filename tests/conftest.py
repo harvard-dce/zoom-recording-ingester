@@ -1,7 +1,10 @@
 
+import os
 import json
 import pytest
+from datetime import datetime, timedelta
 
+TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 
 @pytest.fixture
 def aws_request_id():
@@ -87,7 +90,7 @@ def webhook_payload():
 
 @pytest.fixture
 def sqs_message_from_webhook_payload(webhook_payload, aws_request_id):
-    def _message_maker(frozen_time):
+    def _message_maker(frozen_time, zoom_event):
         payload_obj = webhook_payload()["payload"]["object"]
         msg = {
             "uuid": payload_obj["uuid"],
@@ -100,6 +103,13 @@ def sqs_message_from_webhook_payload(webhook_payload, aws_request_id):
             "received_time": frozen_time,
             "correlation_id": aws_request_id
         }
+
+        if zoom_event == "recording.completed":
+            rec_start = datetime.strptime(msg["start_time"], TIMESTAMP_FORMAT)
+            rec_end = rec_start + timedelta(minutes=msg["duration"])
+            msg["zoom_processing_minutes"] = (
+                (datetime.utcnow() - rec_end).total_seconds() // 60
+            )
 
         for file in msg["recording_files"]:
             file["recording_id"] = file.pop("id")

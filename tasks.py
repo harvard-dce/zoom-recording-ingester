@@ -396,8 +396,7 @@ def exec_webhook(ctx, uuid, on_demand_series_id=None):
             "event": "on.demand.ingest",
             "payload": {
                 "on_demand_series_id": on_demand_series_id.strip(),
-                "object": data,
-                "delay_seconds": 0
+                "object": data
             }
         }
     else:
