@@ -91,8 +91,11 @@ def handler(event, context):
     sqs_message = construct_sqs_message(payload, context, zoom_event)
     logger.info({"sqs_message": sqs_message})
 
-    delay = 0 if zoom_event == "on.demand.ingest" else DEFAULT_MESSAGE_DELAY
-    send_sqs_message(sqs_message, delay=delay)
+    if zoom_event == "on.demand.ingest":
+        delay = 0
+    else:
+        delay = DEFAULT_MESSAGE_DELAY
+    send_sqs_message(sqs_message, delay)
 
     return {
         "statusCode": 200,
@@ -215,7 +218,7 @@ def estimated_processing_mins(start_ts, duration_in_minutes):
     return processing_time.total_seconds() // 60
 
 
-def send_sqs_message(message, delay=DEFAULT_MESSAGE_DELAY):
+def send_sqs_message(message, delay):
     logger.debug("SQS sending start...")
     sqs = boto3.resource("sqs")
 

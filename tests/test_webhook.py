@@ -121,7 +121,7 @@ def test_handler_happy_trail(handler, mocker, webhook_payload,
         FROZEN_TIME, "recording.completed"
     )
     mock_sqs_send.assert_called_once_with(
-        expected_msg, delay=webhook.DEFAULT_MESSAGE_DELAY
+        expected_msg, webhook.DEFAULT_MESSAGE_DELAY
     )
     assert resp['statusCode'] == 200
 
@@ -156,6 +156,6 @@ def test_on_demand_no_delay(handler, mocker, webhook_payload,
 
     resp = handler(webhook, event)
     expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME, payload["event"])
-    mock_sqs_send.assert_called_once_with(expected_msg, delay=0)
+    mock_sqs_send.assert_called_once_with(expected_msg, 0)
     assert resp['statusCode'] == 200
 
