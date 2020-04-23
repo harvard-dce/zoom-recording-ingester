@@ -117,9 +117,14 @@ def test_handler_happy_trail(handler, mocker, webhook_payload,
     mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
 
     resp = handler(webhook, event)
-    expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME)
-    mock_sqs_send.assert_called_once_with(expected_msg)
+    expected_msg = sqs_message_from_webhook_payload(
+        FROZEN_TIME, "recording.completed"
+    )
+    mock_sqs_send.assert_called_once_with(
+        expected_msg, webhook.DEFAULT_MESSAGE_DELAY
+    )
     assert resp['statusCode'] == 200
+
 
 @freeze_time(FROZEN_TIME)
 def test_no_mp4s_response(handler, mocker, webhook_payload):
@@ -138,23 +143,6 @@ def test_no_mp4s_response(handler, mocker, webhook_payload):
     resp = handler(webhook, event)
     assert resp["statusCode"] == 400
 
-@freeze_time(FROZEN_TIME)
-def test_delay_seconds(handler, mocker, webhook_payload,
-                       sqs_message_from_webhook_payload):
-    delay_seconds = 5
-    payload = webhook_payload()
-    payload["payload"]["delay_seconds"] = delay_seconds
-    event = {
-        "body": json.dumps(payload)
-    }
-    mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
-
-    resp = handler(webhook, event)
-    expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME)
-    mock_sqs_send.assert_called_once_with(
-        expected_msg, delay=delay_seconds)
-    assert resp['statusCode'] == 200
-
 
 @freeze_time(FROZEN_TIME)
 def test_on_demand_no_delay(handler, mocker, webhook_payload,
@@ -167,8 +155,7 @@ def test_on_demand_no_delay(handler, mocker, webhook_payload,
     mock_sqs_send = mocker.patch.object(webhook, 'send_sqs_message')
 
     resp = handler(webhook, event)
-    expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME)
-    mock_sqs_send.assert_called_once_with(
-        expected_msg, delay=0)
+    expected_msg = sqs_message_from_webhook_payload(FROZEN_TIME, payload["event"])
+    mock_sqs_send.assert_called_once_with(expected_msg, 0)
     assert resp['statusCode'] == 200
 
