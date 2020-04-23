@@ -1,9 +1,11 @@
 ## Release Process
 
+### Step 1: Update master
+
 Merge all changes for release into master.  
 Checkout master branch, git pull.
 
-### In a dev instance
+### Step 2: Test release in dev instance
 
 First check that the codebuild runs with the new changes on a dev stack:
 
@@ -23,7 +25,7 @@ Tag release:
     git tag release-vX.X.X
     git push --tags
 
-### In prod
+### Step 3: Release to production
 
 Make sure you are working on the correct zoom ingester stack, double check environment variables. Then:
 
