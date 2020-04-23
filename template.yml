@@ -397,7 +397,7 @@ Resources:
       Handler: zoom-downloader.handler
       Runtime: python3.8
       MemorySize: 512
-      Timeout: 600
+      Timeout: 900
       Role: !GetAtt [ZoomIngesterRole, Arn]
       FunctionName: !Sub "${AWS::StackName}-zoom-downloader-function"
       Environment:
