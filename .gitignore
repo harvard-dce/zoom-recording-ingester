@@ -1,4 +1,5 @@
 .env
+venv
 dist/
 *.zip
 __pycache__
@@ -6,3 +7,10 @@ __pycache__
 .tox/
 outfile.txt
 .coverage
+*.egg-info
+*.swp
+.vscode
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
