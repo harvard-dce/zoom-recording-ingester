@@ -627,7 +627,22 @@ def view_uploads(ctx, limit=20):
 
 
 @task(pre=[production_failsafe])
+<<<<<<< HEAD
 def import_schedule_from_opencast(ctx, endpoint=None):
+=======
+def import_schedule_from_file(ctx, filename):
+    """
+    Import schedule from file. Used for testing.
+    """
+    if not filename.endswith(".json"):
+        print("Invalid file type {}. File must be .json".format(filename))
+
+    __schedule_json_to_dynamo(ctx, filename)
+
+
+@task(pre=[production_failsafe])
+def import_dce_schedule_from_opencast(ctx, endpoint=None):
+>>>>>>> setting up cdk
     """
     Fetch schedule data from Opencast series endpoint
     """

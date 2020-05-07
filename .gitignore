@@ -6,5 +6,9 @@ __pycache__
 .tox/
 outfile.txt
 .coverage
-venv/
-.gitconfig
+*.egg-info
+*.swp
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out

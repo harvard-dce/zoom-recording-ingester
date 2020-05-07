@@ -13,6 +13,12 @@ requests-mock
 freezegun
 tabulate
 awslogs
+aws-cdk.core
+aws-cdk.aws_s3
+aws-cdk.aws_lambda
+aws-cdk.aws_dynamodb
+aws-cdk.aws_apigateway
+aws-cdk.aws_events_targets==1.32.0
 
 -r function_requirements/zoom-webhook.in
 -r function_requirements/zoom-downloader.in
