@@ -37,8 +37,11 @@ session = requests.Session()
 session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
 session.headers.update({
     "X-REQUESTED-AUTH": "Digest",
+    # TODO: it's possible this header is not necessary for the endpoints being
+    # used here. It seems like for Opencast endpoints where the header *is*
+    # necessary the correct value is actually
+    # "X-Opencast-Matterhorn-Authorization"
     "X-Opencast-Matterhorn-Authentication": "true",
-
 })
 
 UPLOAD_OP_TYPES = [

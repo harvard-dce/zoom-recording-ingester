@@ -4,6 +4,7 @@ import boto3
 from botocore.exceptions import ClientError
 import jmespath
 import requests
+from requests.auth import HTTPDigestAuth
 import time
 import csv
 import itertools
@@ -624,11 +625,21 @@ def import_dce_schedule_from_opencast(ctx, endpoint=None):
     Fetch schedule data from Opencast series endpoint
     """
     if endpoint is None:
-        engage_host = oc_host(ctx, 'engage')
+        engage_host = oc_host(ctx, "engage")
         endpoint = "https://{}/otherpubs/search/series.json".format(engage_host)
+
+    session = requests.Session()
+    api_user = getenv("OPENCAST_API_USER")
+    api_pass = getenv("OPENCAST_API_PASSWORD")
+    session.auth = HTTPDigestAuth(api_user, api_pass)
+    session.headers.update({
+        "X-REQUESTED-AUTH": "Digest",
+        "X-Opencast-Matterhorn-Authorization": "true",
+    })
+
     try:
         print("Fetching helixEvents from {}".format(endpoint))
-        r = requests.get(endpoint, verify=False)
+        r = session.get(endpoint, verify=False)
         r.raise_for_status()
         helix_events = r.json()["helixEvents"]
     except requests.HTTPError as e:
