@@ -7,7 +7,12 @@ from aws_cdk import (
     aws_sqs as sqs,
     aws_events as events,
     aws_events_targets as events_targets,
-    aws_dynamodb as dynamodb
+    aws_dynamodb as dynamodb,
+    aws_codebuild as codebuild,
+    aws_sns as sns,
+    aws_sns_subscriptions as sns_subscriptions,
+    aws_cloudwatch as cloudwatch,
+    aws_cloudwatch_actions as cloudwatch_actions
 )
 import boto3
 # from ssm_dotenv import getenv
@@ -34,6 +39,8 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         # Lambda alias that points to the "live" version of the function
         self.lambda_release_alias = self.get_ssm_param("LAMBDA_RELEASE_ALIAS")
 
+        self.notification_email = self.get_ssm_param("NOTIFICATION_EMAIL")
+
         # S3 bucket that stores packaged lambda functions
         self.lambda_code_bucket_name = self.get_ssm_param("LAMBDA_CODE_BUCKET")
         self.lambda_code_bucket = s3.Bucket.from_bucket_name(
@@ -46,15 +53,15 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         two_week_lifecycle_rule = s3.LifecycleRule(
             id="DeleteAfterTwoWeeks",
+            prefix="", # for development, remove later
             enabled=True,
             expiration=core.Duration.days(14),
-            abort_incomplete_multipart_upload_after=core.Duration.days(2)
+            abort_incomplete_multipart_upload_after=core.Duration.days(1)
         )
 
         zoom_videos_bucket = s3.Bucket(
             self, "ZoomVideosBucket",
             bucket_name="{}-zoom-recording-files".format(self.name),
-            versioned=True,
             encryption=s3.BucketEncryption.KMS_MANAGED,
             lifecycle_rules=[two_week_lifecycle_rule],
             removal_policy=core.RemovalPolicy.DESTROY
@@ -64,8 +71,9 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         SQS queues
         """
 
-        downloads_queue, downloads_dlq = self._create_queue("downloads")
-        uploads_queue, uploads_dlq = self._create_queue("uploads", fifo=True)
+        downloads_queue, downloads_dlq = self._create_queue("downloader")
+        uploads_queue, uploads_dlq = self._create_queue("upload", fifo=True)
+
 
         """
         Class schedule
@@ -83,9 +91,15 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             removal_policy=core.RemovalPolicy.DESTROY
         )
 
+
         """
         Lambda functions
         """
+
+        on_demand_function = self._create_lambda_function(
+            "zoom-on-demand", {}
+        )
+
         # webhook lambda handles incoming webhook notifications
         webhook_environment = {
             "DOWNLOAD_QUEUE_NAME": downloads_queue.queue_name,
@@ -137,6 +151,15 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         uploader_function = self._create_lambda_function(
             "zoom-uploader", uploader_environment)
 
+        op_counts_function = self._create_lambda_function(
+            "opencast-op-counts", {}
+        )
+
+        log_notification_function = self._create_lambda_function(
+            "zoom-log-notifications", {}
+        )
+
+
         """
         API definition
         """
@@ -146,6 +169,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             handler=webhook_function,
             rest_api_name=self.name,
             proxy=False,
+            deploy=True,
             deploy_options=apigw.StageOptions(
                 data_trace_enabled=True,
                 metrics_enabled=True,
@@ -154,16 +178,16 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             )
         )
 
-        api_resource = apigw.Resource(
+        api_resource_new_recording = apigw.Resource(
             self, "ZoomIngesterResource",
             parent=api.root,
             path_part="new_recording"
         )
 
-        apigw.Method(
+        api_method_new_recording = apigw.Method(
             self, "ZoomIngesterWebhook",
             http_method="POST",
-            resource=api_resource,
+            resource=api_resource_new_recording,
             options=apigw.MethodOptions(
                 request_parameters={
                     "method.request.querystring.type": True,
@@ -180,16 +204,136 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             )
         )
 
+        api_resource_on_demand_ingest = apigw.Resource(
+            self, "ZoomIngesterOnDemandResource",
+            parent=api.root,
+            path_part="ingest"
+        )
+
+        api_method_on_demand_ingest = apigw.Method(
+            self, "ZoomIngesterOnDemandEndpoint",
+            http_method="POST",
+            resource=api_resource_on_demand_ingest,
+            options=apigw.MethodOptions(
+                request_parameters={
+                    "method.request.querystring.uuid": True,
+                    "method.request.querystring.oc_series_id": True
+                },
+                method_responses=[
+                    apigw.MethodResponse(
+                        status_code="200",
+                        response_models={
+                            "application/json": apigw.Model.EMPTY_MODEL
+                        }
+                    )
+                ]
+            )
+        )
+
+        api_key = apigw.ApiKey(
+            self, "ZoomIngesterApiKey",
+            resources=[api]
+        )
+
         """
         CloudWatch Events
         """
 
-        self._create_event_rule(
+        download_trigger = self._create_event_rule(
             downloader_function, "downloader", rate_in_minutes=5
         )
-        self._create_event_rule(
+        upload_trigger = self._create_event_rule(
             uploader_function, "uploader", rate_in_minutes=20
         )
+
+
+        """
+        CodeBuild project
+        """
+
+        codebuild_project = codebuild.Project(
+            self, "CodeBuildProject",
+            project_name="{}-codebuild".format(self.stack_name),
+            source=codebuild.Source.git_hub_enterprise(
+                https_clone_url="https://github.com/harvard-dce/zoom-recording-ingester.git",
+                clone_depth=1
+            ),
+            environment=codebuild.BuildEnvironment(
+                build_image=codebuild.LinuxBuildImage.AMAZON_LINUX_2_2,
+                compute_type=codebuild.ComputeType.SMALL
+            ),
+            artifacts=codebuild.Artifacts.s3(
+                name=self.stack_name,
+                bucket=self.lambda_code_bucket
+            ),
+            badge=True,
+            timeout=core.Duration.minutes(5)
+        )
+
+        """
+        SNS Topic
+        """
+
+        sns_topic = sns.Topic(
+            self, "ZoomIngesterNotificationTopic",
+            topic_name="{}-notification-topic".format(self.stack_name)
+        )
+
+        sns_topic.add_subscription(
+            sns_subscriptions.EmailSubscription(self.notification_email)
+        )
+
+
+        """
+        CloudWatch Alarms
+        """
+
+        self._create_metric_alarm(webhook_function, "zoom-webhook", "Errors", sns_topic)
+        self._create_metric_alarm(webhook_function, "zoom-webhook", "4xx", sns_topic)
+        self._create_metric_alarm(webhook_function, "zoom-webhook", "5xx", sns_topic)
+        self._create_metric_alarm(webhook_function, "zoom-webhook", "Latency", sns_topic)
+
+        self._create_metric_alarm(downloader_function, "zoom-downloader", "Errors", sns_topic)
+        self._create_metric_alarm(downloader_function, "zoom-downloader", "Invocations", sns_topic)
+
+        self._create_metric_alarm(uploader_function, "zoom-uploader", "Errors", sns_topic)
+
+        """
+        Metric Filters
+        """
+
+
+        # TEMPORARY!
+        # remove random hash from logical id
+        # for development, remove later
+        resources = [
+            zoom_videos_bucket,
+            downloads_queue,
+            downloads_dlq,
+            uploads_queue,
+            uploads_dlq,
+            class_schedule_table,
+            webhook_function,
+            downloader_function,
+            uploader_function,
+            op_counts_function,
+            on_demand_function,
+            log_notification_function,
+            codebuild_project,
+            api,
+            api_key,
+            api_resource_new_recording,
+            api_method_new_recording,
+            api_resource_on_demand_ingest,
+            api_method_on_demand_ingest,
+            download_trigger,
+            upload_trigger,
+            sns_topic
+        ]
+        for resource in resources:
+            cfn_resource = resource.node.default_child
+            cfn_id = resource.node.id
+            cfn_resource.override_logical_id(cfn_id)
 
     def get_ssm_param(self, param_name, required=True):
         return getenv(param_name, required)
@@ -265,6 +409,16 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             alias_name=self.lambda_release_alias
         )
 
+        # remove random hash from logical id
+        # temporary, for development, remove later
+        resources = [
+            alias
+        ]
+        for resource in resources:
+            cfn_resource = resource.node.default_child
+            cfn_id = resource.node.id
+            cfn_resource.override_logical_id(cfn_id)
+
         return function
 
     def _create_queue(self, queue_name, fifo=False):
@@ -277,7 +431,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         dlq = sqs.Queue(
             self,
-            "ZoomIngester{}DeadletterQueue".format(queue_name.capitalize()),
+            "ZoomIngester{}DeadLetterQueue".format(queue_name.capitalize()),
             queue_name=dlq_name,
             retention_period=core.Duration.days(14)
         )
@@ -312,3 +466,29 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             )
 
         return queue, dlq
+
+    def _create_metric_alarm(self, function, function_name, metric_name, sns_topic):
+
+        metric_alarm_id = "{}{}MetricAlarm".format(
+                ''.join([x.capitalize() for x in function_name.split('-')]),
+                metric_name
+        )
+
+        metric_alarm = cloudwatch.Alarm(
+            self, metric_alarm_id,
+            metric=function.metric(metric_name),
+            evaluation_periods=1,
+            threshold=1,
+            period=core.Duration.seconds(60),
+            statistic="sum",
+            alarm_name=function_name
+        )
+
+        metric_alarm.add_alarm_action(
+            cloudwatch_actions.SnsAction(sns_topic)
+        )
+
+        # Temporary, for development, remove later
+        cfn_resource = metric_alarm.node.default_child
+        cfn_resource.override_logical_id(metric_alarm_id)
+
