@@ -12,13 +12,17 @@ from aws_cdk import (
     aws_sns as sns,
     aws_sns_subscriptions as sns_subscriptions,
     aws_cloudwatch as cloudwatch,
-    aws_cloudwatch_actions as cloudwatch_actions
+    aws_cloudwatch_actions as cloudwatch_actions,
+    aws_ec2 as ec2
 )
 import boto3
+import jmespath
+import sys
 # from ssm_dotenv import getenv
 from dotenv import load_dotenv
 from os import getenv
 from os.path import join, dirname
+from functions.common import zoom_api_request
 
 load_dotenv(join(dirname(dirname(__file__)), '.env'))
 
@@ -47,10 +51,15 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             self, "LambdaCodeBucket", self.lambda_code_bucket_name
         )
 
+        vpc_id, sg_id = self.vpc_components()
+        self.oc_vpc = ec2.Vpc.from_lookup(self, "OcVpc", vpc_id=vpc_id)
+        self.oc_sg = ec2.SecurityGroup.from_security_group_id(
+            self, "OcSecurityGroup", security_group_id=sg_id
+        )
+
         """
         S3 bucket to store zoom recording files
         """
-
         two_week_lifecycle_rule = s3.LifecycleRule(
             id="DeleteAfterTwoWeeks",
             prefix="", # for development, remove later
@@ -71,8 +80,8 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         SQS queues
         """
 
-        downloads_queue, downloads_dlq = self._create_queue("downloader")
-        uploads_queue, uploads_dlq = self._create_queue("upload", fifo=True)
+        downloads_queue, downloads_dlq = self._create_queue("downloads")
+        uploads_queue, uploads_dlq = self._create_queue("uploads", fifo=True)
 
 
         """
@@ -91,7 +100,6 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             removal_policy=core.RemovalPolicy.DESTROY
         )
 
-
         """
         Lambda functions
         """
@@ -109,6 +117,9 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         webhook_function = self._create_lambda_function(
             "zoom-webhook", webhook_environment)
 
+        # grant webhook lambda permission to send messages to downloads queue
+        downloads_queue.grant_send_messages(webhook_function)
+
         # downloader lambda checks for matches with the course schedule
         # and uploads matching recordings to S3
         downloader_environment = {
@@ -118,26 +129,40 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             "UPLOAD_QUEUE_NAME": uploads_queue.queue_name,
             "CLASS_SCHEDULE_TABLE": class_schedule_table.table_name,
             "DEBUG": "0",
-            "ZOOM_ADMIN_EMAIL": self.get_ssm_param("ZOOM_ADMIN_EMAIL"),
+            "ZOOM_ADMIN_ID": self.zoom_admin_id(),
             "ZOOM_API_KEY": self.get_ssm_param("ZOOM_API_KEY"),
             "ZOOM_API_SECRET": self.get_ssm_param("ZOOM_API_SECRET"),
             "LOCAL_TIME_ZONE": self.get_ssm_param("LOCAL_TIME_ZONE"),
             "DEFAULT_SERIES_ID": self.get_ssm_param(
                 "DEFAULT_SERIES_ID", required=False
+            ),
+            "DOWNLOAD_MESSAGES_PER_INVOCATION": self.get_ssm_param(
+                "DOWNLOAD_MESSAGES_PER_INVOCATION"
             )
         }
         downloader_function = self._create_lambda_function(
-            "zoom-downloader", downloader_environment)
+            "zoom-downloader", downloader_environment, timeout=900)
+        
+        # grant downloader function permissions
+        downloads_queue.grant_consume_messages(downloader_function)
+        uploads_queue.grant_send_messages(downloader_function)
+        class_schedule_table.grant_read_write_data(downloader_function)
+        zoom_videos_bucket.grant_write(downloader_function)
+
+        op_counts_function = self._create_lambda_function(
+            "opencast-op-counts", {}
+        )
 
         # uploader lambda uploads recordings to opencast
         uploader_ssm_params = [
-            "OPENCAST_BASE_USER",
+            "OPENCAST_API_USER",
+            "OPENCAST_API_PASSWORD",
             "DEFAULT_PUBLISHER",
             "OVERRIDE_PUBLISHER",
             "OVERRIDE_CONTRIBUTOR",
             "OC_WORKFLOW",
             "OC_FLAVOR",
-            "UPLOAD_MESSAGES_PER_INVOCATION"
+            "OC_TRACK_UPLOAD_MAX"
         ]
         uploader_environment = {
             var: self.get_ssm_param(var) for var in uploader_ssm_params
@@ -146,14 +171,18 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             "OPENCAST_BASE_URL": self._oc_base_url,
             "ZOOM_VIDEOS_BUCKET": zoom_videos_bucket.bucket_name,
             "UPLOAD_QUEUE_NAME": uploads_queue.queue_name,
-            "DEBUG": "0"
+            "DEBUG": "0",
+            "OC_OP_COUNT_FUNCTION": op_counts_function.function_name, 
+            "ZOOM_RECORDING_TYPE_NUM": "L01"
         })
         uploader_function = self._create_lambda_function(
-            "zoom-uploader", uploader_environment)
-
-        op_counts_function = self._create_lambda_function(
-            "opencast-op-counts", {}
+            "zoom-uploader", uploader_environment,
+            timeout=300, vpc=self.oc_vpc, security_group=self.oc_sg
         )
+
+        # grant uploader function permissions
+        uploads_queue.grant_consume_messages(uploader_function)
+        op_counts_function.grant_invoke(uploader_function)
 
         log_notification_function = self._create_lambda_function(
             "zoom-log-notifications", {}
@@ -288,15 +317,56 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         CloudWatch Alarms
         """
 
-        self._create_metric_alarm(webhook_function, "zoom-webhook", "Errors", sns_topic)
-        self._create_metric_alarm(webhook_function, "zoom-webhook", "4xx", sns_topic)
-        self._create_metric_alarm(webhook_function, "zoom-webhook", "5xx", sns_topic)
-        self._create_metric_alarm(webhook_function, "zoom-webhook", "Latency", sns_topic)
+        alarms = []
 
-        self._create_metric_alarm(downloader_function, "zoom-downloader", "Errors", sns_topic)
-        self._create_metric_alarm(downloader_function, "zoom-downloader", "Invocations", sns_topic)
+        # Webhook Function Alarm
+        alarms.append(
+            self._create_metric_alarm(
+                "ZoomWebhookErrorsMetricAlarm",
+                webhook_function.metric_errors()
+            )
+        )
 
-        self._create_metric_alarm(uploader_function, "zoom-uploader", "Errors", sns_topic)
+        # alarms.append(
+        #     self._create_metric_alarm(
+        #         "ZoomWebhook4xxMetricAlarm",
+        #         api.metric("4XXError")
+        #     )
+        # )
+
+        alarms.append(
+            self._create_metric_alarm(
+                "ZoomDownloaderInvocationsMetricAlarm",
+                downloader_function.metric_invocations(),
+                period_minutes=1440,
+                comparison="<"
+            )
+        )
+
+        # Uploader Function Alarm
+        alarms.append(
+            self._create_metric_alarm(
+                "ZoomUploaderErrorsMetricAlarm",
+                uploader_function.metric("Errors")
+            )
+        )
+
+        # Upload Queue Alarm
+        upload_queue_alarm = self._create_metric_alarm(
+            "ZoomUploadQueueDepthMetricAlarm",
+            uploads_queue.metric("ApproximateNumberOfMessagesVisible"),
+            comparison=">",
+            period_minutes=5,
+            threshold=40
+        )
+        upload_queue_alarm.add_insufficient_data_action(
+            cloudwatch_actions.SnsAction(sns_topic)
+        )
+        alarms.append(upload_queue_alarm)
+
+        for alarm in alarms:
+            alarm.add_alarm_action(cloudwatch_actions.SnsAction(sns_topic))
+
 
         """
         Metric Filters
@@ -330,10 +400,39 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             upload_trigger,
             sns_topic
         ]
+        resources.extend(alarms)
         for resource in resources:
             cfn_resource = resource.node.default_child
             cfn_id = resource.node.id
             cfn_resource.override_logical_id(cfn_id)
+
+    def zoom_admin_id(self):
+        # get admin user id from admin email
+        r = zoom_api_request("users/{}".format(self.get_ssm_param("ZOOM_ADMIN_EMAIL")))
+        return r.json()["id"]
+
+    def vpc_components(self):
+
+        oc_cluster_name = self.get_ssm_param("OC_CLUSTER_NAME")
+        opsworks = boto3.client("opsworks")
+
+        stacks = opsworks.describe_stacks()
+        vpc_id = jmespath.search(
+            f"Stacks[?Name=='{oc_cluster_name}'].VpcId",
+            stacks
+        )[0]
+
+        ec2_boto = boto3.client("ec2")
+        security_groups = ec2_boto.describe_security_groups(
+            Filters=[
+                {"Name": "vpc-id", "Values": [vpc_id]},
+                {"Name": "tag:aws:cloudformation:logical-id", 
+                 "Values": ["OpsworksLayerSecurityGroupCommon"]}
+            ]
+        )
+        sg_id = jmespath.search("SecurityGroups[0].GroupId", security_groups)
+
+        return vpc_id, sg_id
 
     def get_ssm_param(self, param_name, required=True):
         return getenv(param_name, required)
@@ -379,7 +478,10 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             targets=[events_targets.LambdaFunction(function)]
         )
 
-    def _create_lambda_function(self, function_name, environment):
+    def _create_lambda_function(
+        self, function_name, environment, timeout=30,
+        vpc=None, security_group=None
+    ):
         lambda_id = "{}Function".format(
             ''.join([x.capitalize() for x in function_name.split('-')])
         )
@@ -396,8 +498,10 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
                 "{}/{}.zip".format(self.name, function_name)
                 ),
             handler="{}.handler".format(function_name),
-            timeout=core.Duration.seconds(30),
-            environment=environment
+            timeout=core.Duration.seconds(timeout),
+            environment=environment,
+            vpc=vpc,
+            security_group=security_group
         )
 
         latest = function.add_version("$LATEST")
@@ -423,15 +527,15 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
     def _create_queue(self, queue_name, fifo=False):
 
-        primary_queue_name = "{}-{}".format(self.name, queue_name)
-        dlq_name = "{}-deadletter".format(primary_queue_name)
+        primary_queue_name = f"{self.stack_name}-{queue_name}"
+        dlq_name = f"{primary_queue_name}-deadletter"
         if fifo:
             primary_queue_name += ".fifo"
             dlq_name += ".fifo"
 
         dlq = sqs.Queue(
             self,
-            "ZoomIngester{}DeadLetterQueue".format(queue_name.capitalize()),
+            f"ZoomIngester{queue_name.capitalize()}DeadLetterQueue",
             queue_name=dlq_name,
             retention_period=core.Duration.days(14)
         )
@@ -442,7 +546,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         # rollback.
         if fifo:
             queue = sqs.Queue(
-                self, "ZoomIngester{}Queue".format(queue_name.capitalize()),
+                self, f"ZoomIngester{queue_name.capitalize()}Queue",
                 queue_name=primary_queue_name,
                 fifo=fifo,
                 retention_period=core.Duration.days(14),
@@ -455,7 +559,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             )
         else:
             queue = sqs.Queue(
-                self, "ZoomIngester{}Queue".format(queue_name.capitalize()),
+                self, f"ZoomIngester{queue_name.capitalize()}Queue",
                 queue_name=primary_queue_name,
                 retention_period=core.Duration.days(14),
                 visibility_timeout=core.Duration.seconds(300),
@@ -467,28 +571,29 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         return queue, dlq
 
-    def _create_metric_alarm(self, function, function_name, metric_name, sns_topic):
+    def _create_metric_alarm(
+            self, alarm_id, metric,
+            statistic="sum", comparison=">=", period_minutes=1, threshold=1
+            ):
 
-        metric_alarm_id = "{}{}MetricAlarm".format(
-                ''.join([x.capitalize() for x in function_name.split('-')]),
-                metric_name
-        )
+        if comparison == "<":
+            comparison_operator = cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD
+        elif comparison == "<=":
+            comparison_operator = cloudwatch.ComparisonOperator.LESS_THAN_OR_EQUAL_TO_THRESHOLD
+        elif comparison == ">":
+            comparison_operator = cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD
+        else:
+            comparison_operator = cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
 
-        metric_alarm = cloudwatch.Alarm(
-            self, metric_alarm_id,
-            metric=function.metric(metric_name),
+        alarm = cloudwatch.Alarm(
+            self, alarm_id,
+            alarm_name=f"{self.stack_name}-{alarm_id}",
+            metric=metric,
+            statistic=statistic,
+            comparison_operator=comparison_operator,
             evaluation_periods=1,
-            threshold=1,
-            period=core.Duration.seconds(60),
-            statistic="sum",
-            alarm_name=function_name
+            threshold=threshold,
+            period=core.Duration.minutes(period_minutes)
         )
 
-        metric_alarm.add_alarm_action(
-            cloudwatch_actions.SnsAction(sns_topic)
-        )
-
-        # Temporary, for development, remove later
-        cfn_resource = metric_alarm.node.default_child
-        cfn_resource.override_logical_id(metric_alarm_id)
-
+        return alarm

@@ -18,7 +18,6 @@ aws-cdk.aws-cloudfront==1.32.0  # via aws-cdk.aws-route53-targets
 aws-cdk.aws-codecommit==1.32.0  # via aws-cdk.aws-codebuild
 aws-cdk.aws-codepipeline==1.32.0  # via aws-cdk.aws-events-targets
 aws-cdk.aws-dynamodb==1.32.0  # via -r requirements.in
-aws-cdk.aws-ec2==1.32.0   # via aws-cdk.aws-apigateway, aws-cdk.aws-autoscaling, aws-cdk.aws-batch, aws-cdk.aws-codebuild, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancing, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events-targets, aws-cdk.aws-lambda, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-secretsmanager, aws-cdk.aws-servicediscovery, aws-cdk.aws-stepfunctions-tasks
 aws-cdk.aws-ecr-assets==1.32.0  # via aws-cdk.aws-codebuild, aws-cdk.aws-ecs, aws-cdk.aws-stepfunctions-tasks
 aws-cdk.aws-ecr==1.32.0   # via aws-cdk.aws-batch, aws-cdk.aws-codebuild, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-stepfunctions-tasks
 aws-cdk.aws-ecs==1.32.0   # via aws-cdk.aws-batch, aws-cdk.aws-events-targets, aws-cdk.aws-stepfunctions-tasks
@@ -44,6 +43,7 @@ aws-cdk.aws_apigateway==1.32.0  # via -r requirements.in, aws-cdk.aws-route53-ta
 aws-cdk.aws_cloudwatch==1.32.0  # via -r requirements.in, aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-codebuild, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-sns, aws-cdk.aws-sqs, aws-cdk.aws-stepfunctions, aws-cdk.aws-stepfunctions-tasks
 aws-cdk.aws_cloudwatch_actions==1.32.0  # via -r requirements.in
 aws-cdk.aws_codebuild==1.32.0  # via -r requirements.in, aws-cdk.aws-events-targets
+aws-cdk.aws_ec2==1.32.0   # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-autoscaling, aws-cdk.aws-batch, aws-cdk.aws-codebuild, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancing, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events-targets, aws-cdk.aws-lambda, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-secretsmanager, aws-cdk.aws-servicediscovery, aws-cdk.aws-stepfunctions-tasks
 aws-cdk.aws_events_targets==1.32.0  # via -r requirements.in
 aws-cdk.aws_lambda==1.32.0  # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-certificatemanager, aws-cdk.aws-cloudformation, aws-cdk.aws-dynamodb, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events-targets, aws-cdk.aws-secretsmanager, aws-cdk.aws-sns-subscriptions, aws-cdk.aws-stepfunctions-tasks, aws-cdk.custom-resources
 aws-cdk.aws_s3==1.32.0    # via -r requirements.in, aws-cdk.aws-cloudformation, aws-cdk.aws-codebuild, aws-cdk.aws-codepipeline, aws-cdk.aws-ec2, aws-cdk.aws-ecr-assets, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-lambda, aws-cdk.aws-route53-targets, aws-cdk.aws-s3-assets, aws-cdk.aws-stepfunctions-tasks
