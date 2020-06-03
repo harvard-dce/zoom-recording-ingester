@@ -209,6 +209,7 @@ def release(ctx, function=None, description=None):
 
 
 @task
+<<<<<<< HEAD
 def list_recordings(ctx, date=None):
     """
     Optional: --date='YYYY-MM-DD'
@@ -263,6 +264,8 @@ def list_recordings(ctx, date=None):
 
 
 @task
+=======
+>>>>>>> remove now unecessary tasks
 def update_requirements(ctx):
     """
     Run a `pip-compile -U` on all requirements files
@@ -481,69 +484,6 @@ def exec_uploader(ctx, qualifier=None):
         ctx.run("cat outfile.txt && echo")
 
     return res
-
-
-@task(pre=[production_failsafe])
-def create(ctx):
-    """
-    Build the CloudFormation stack identified by $STACK_NAME
-    """
-    if stack_exists(ctx):
-        raise Exit("Stack already exists!")
-
-    code_bucket = getenv('LAMBDA_CODE_BUCKET')
-    cmd = "aws {} s3 ls {}".format(profile_arg(), code_bucket)
-    exists = ctx.run(cmd, hide=True, warn=True)
-    if not exists.ok:
-        print("Specified lambda code bucket does not exist!")
-        return
-
-    package(ctx, upload_to_s3=True)
-    __create_or_update(ctx, "create-stack")
-    release(ctx, description="initial release")
-
-
-@task(pre=[production_failsafe])
-def update(ctx):
-    """
-    Update the CloudFormation stack identified by $STACK_NAME
-    """
-    __create_or_update(ctx, "create-change-set")
-
-
-@task(pre=[production_failsafe])
-def delete(ctx):
-    """
-    Delete the CloudFormation stack identified by $STACK_NAME
-    """
-    if not stack_exists(ctx):
-        raise Exit("Stack doesn't exist!")
-
-    delete_files = "aws {} s3 rm s3://{}-recording-files --recursive"\
-                   .format(profile_arg(), STACK_NAME)
-
-    delete_stack = ("aws {} cloudformation delete-stack "
-                    "--stack-name {}").format(profile_arg(), STACK_NAME)
-    if input('\nAre you sure you want to delete stack "{}"?\n'
-             'WARNING: This will also delete all recording files saved '
-             'in the S3 bucket "{}-recording-files".\n'
-             'Type stack name to confirm deletion: '.format(STACK_NAME, STACK_NAME))\
-            == STACK_NAME:
-        ctx.run(delete_files, echo=True)
-        ctx.run(delete_stack, echo=True)
-        __wait_for(ctx, 'stack-delete-complete')
-
-        files = ["zoom-webhook.zip",
-                 "zoom-downloader.zip",
-                 "zoom-uploader.zip",
-                 "zoom-log-notifications.zip"]
-
-        for file in files:
-            cmd = "aws {} s3 rm s3://{}/{}/{}" \
-                .format(profile_arg(), getenv("LAMBDA_CODE_BUCKET"), STACK_NAME, file)
-            ctx.run(cmd, echo=True)
-    else:
-        print("Stack deletion canceled.")
 
 
 @task
@@ -849,7 +789,6 @@ ns.add_task(test)
 ns.add_task(codebuild)
 ns.add_task(package)
 ns.add_task(release)
-ns.add_task(list_recordings)
 ns.add_task(update_requirements)
 ns.add_task(generate_resource_policy)
 
@@ -876,9 +815,6 @@ debug_ns.add_task(debug_off, 'off')
 ns.add_collection(debug_ns)
 
 stack_ns = Collection('stack')
-stack_ns.add_task(create)
-stack_ns.add_task(update)
-stack_ns.add_task(delete)
 stack_ns.add_task(status)
 ns.add_collection(stack_ns)
 
@@ -920,56 +856,6 @@ def profile_arg():
     return ""
 
 
-def zoom_admin_id():
-    # get admin user id from admin email
-    r = zoom_api_request("users/{}".format(getenv("ZOOM_ADMIN_EMAIL")))
-    return r.json()["id"]
-
-
-def stack_tags():
-    tags = "Key=cfn-stack,Value={}".format(STACK_NAME)
-    extra_tags = getenv("STACK_TAGS")
-    if extra_tags is not None:
-        tags += " " + extra_tags
-    return "--tags {}".format(tags)
-
-
-def vpc_components(ctx):
-
-    cmd = ("aws {} opsworks describe-stacks "
-           "--query \"Stacks[?Name=='{}'].VpcId\" --output text")\
-        .format(profile_arg(), OC_CLUSTER_NAME)
-    res = ctx.run(cmd, hide=1)
-    vpc_id = res.stdout.strip()
-
-    if vpc_id is None:
-        confirm = ("No VPC found "
-                   "Uploader will not be able to communicate with "
-                   "the opencast admin. Do you wish to proceed? [y/N] ")
-        if not input(confirm).lower().strip().startswith('y'):
-            print("aborting")
-            raise Exit(0)
-        return "", ""
-
-    cmd = ("aws {} ec2 describe-subnets --filters "
-           "'Name=vpc-id,Values={}' "
-           "'Name=tag:aws:cloudformation:logical-id,Values=Private*' "
-           "--query \"Subnets[0].SubnetId\" --output text") \
-        .format(profile_arg(), vpc_id)
-    res = ctx.run(cmd, hide=1)
-    subnet_id = res.stdout
-
-    cmd = ("aws {} ec2 describe-security-groups --filters "
-           "'Name=vpc-id,Values={}' "
-           "'Name=tag:aws:cloudformation:logical-id,Values=OpsworksLayerSecurityGroupCommon' "
-           "--query \"SecurityGroups[0].GroupId\" --output text") \
-        .format(profile_arg(), vpc_id)
-    res = ctx.run(cmd, hide=1)
-    sg_id = res.stdout
-
-    return subnet_id, sg_id
-
-
 def oc_host(ctx, layer_name):
 
     # this only works on layers with a single instance
@@ -993,23 +879,6 @@ def oc_host(ctx, layer_name):
     return res.stdout.strip()
 
 
-def oc_db_url(ctx):
-
-    cmd = ("aws {} rds describe-db-clusters "
-           "--db-cluster-identifier '{}-cluster' --output text "
-           "--query 'DBClusters[0].ReaderEndpoint' ") \
-        .format(profile_arg(), OC_CLUSTER_NAME)
-
-    res = ctx.run(cmd, hide=True)
-    endpoint = res.stdout.strip()
-
-    db_password = getenv('OC_DB_PASSWORD')
-    if db_password is None:
-        raise Exception("Missing OC_DB_PASSWORD env var")
-
-    return "mysql://root:{}@{}:3306/opencast".format(db_password, endpoint)
-
-
 def account_id(ctx):
 
     cmd = ("aws {} sts get-caller-identity "
@@ -1025,13 +894,6 @@ def api_gateway_id(ctx):
             .format(profile_arg(), STACK_NAME)
     res = ctx.run(cmd, hide=1)
     return res.stdout.strip()
-
-
-def stack_exists(ctx):
-    cmd = "aws {} cloudformation describe-stacks --stack-name {}" \
-        .format(profile_arg(), STACK_NAME)
-    res = ctx.run(cmd, hide=True, warn=True, echo=False)
-    return res.exited == 0
 
 
 def __invoke_api(ctx, endpoint, event_body):
@@ -1065,142 +927,6 @@ def __invoke_api(ctx, endpoint, event_body):
     )
 
     return resp
-
-
-def __create_or_update(ctx, op):
-
-    template_path = join(dirname(__file__), 'template.yml')
-
-    subnet_id, sg_id = vpc_components(ctx)
-    db_url = oc_db_url(ctx)
-
-    default_publisher = getenv('DEFAULT_PUBLISHER', required=False)
-    if default_publisher is None:
-        default_publisher = getenv('NOTIFICATION_EMAIL')
-
-    oc_admin_host = oc_host(ctx, 'admin')
-
-    cmd = ("aws {} cloudformation {} {} "
-           "--capabilities CAPABILITY_NAMED_IAM --stack-name {} "
-           "--template-body file://{} "
-           "--parameters "
-           "ParameterKey=LambdaCodeBucket,ParameterValue={} "
-           "ParameterKey=NotificationEmail,ParameterValue='{}' "
-           "ParameterKey=ZoomApiBaseUrl,ParameterValue='{}' "
-           "ParameterKey=ZoomApiKey,ParameterValue='{}' "
-           "ParameterKey=ZoomApiSecret,ParameterValue='{}' "
-           "ParameterKey=ZoomAdminId,ParameterValue='{}' "
-           "ParameterKey=OpencastBaseUrl,ParameterValue='{}' "
-           "ParameterKey=OpencastApiUser,ParameterValue='{}' "
-           "ParameterKey=OpencastApiPassword,ParameterValue='{}' "
-           "ParameterKey=DefaultOpencastSeriesId,ParameterValue='{}' "
-           "ParameterKey=DefaultPublisher,ParameterValue='{}' "
-           "ParameterKey=OverridePublisher,ParameterValue='{}' "
-           "ParameterKey=OverrideContributor,ParameterValue='{}' "
-           "ParameterKey=LocalTimeZone,ParameterValue='{}' "
-           "ParameterKey=VpcSecurityGroupId,ParameterValue='{}' "
-           "ParameterKey=VpcSubnetId,ParameterValue='{}' "
-           "ParameterKey=LambdaReleaseAlias,ParameterValue='{}' "
-           "ParameterKey=LogNotificationsFilterLogLevel,ParameterValue='{}' "
-           "ParameterKey=OCWorkflow,ParameterValue='{}' "
-           "ParameterKey=OCFlavor,ParameterValue='{}' "
-           "ParameterKey=ParallelEndpoint,ParameterValue='{}' "
-           "ParameterKey=DownloadMessagesPerInvocation,ParameterValue='{}' "
-           "ParameterKey=OpencastDatabaseUrl,ParameterValue='{}' "
-           "ParameterKey=BufferMinutes,ParameterValue='{}' "
-           "ParameterKey=MinimumDuration,ParameterValue='{}' "
-           "ParameterKey=OCTrackUploadMax,ParameterValue='{}' "
-           ).format(
-                profile_arg(),
-                op,
-                stack_tags(),
-                STACK_NAME,
-                template_path,
-                getenv("LAMBDA_CODE_BUCKET"),
-                getenv("NOTIFICATION_EMAIL"),
-                getenv("ZOOM_API_BASE_URL"),
-                getenv("ZOOM_API_KEY"),
-                getenv("ZOOM_API_SECRET"),
-                zoom_admin_id(),
-                "http://{}".format(oc_admin_host),
-                getenv("OPENCAST_API_USER"),
-                getenv("OPENCAST_API_PASSWORD"),
-                getenv("DEFAULT_SERIES_ID", required=False),
-                default_publisher,
-                getenv("OVERRIDE_PUBLISHER", required=False),
-                getenv("OVERRIDE_CONTRIBUTOR", required=False),
-                getenv("LOCAL_TIME_ZONE"),
-                sg_id,
-                subnet_id,
-                getenv("LAMBDA_RELEASE_ALIAS"),
-                getenv("LOG_NOTIFICATIONS_FILTER_LOG_LEVEL", required=False),
-                getenv("OC_WORKFLOW"),
-                getenv("OC_FLAVOR"),
-                getenv("PARALLEL_ENDPOINT", required=False),
-                getenv('DOWNLOAD_MESSAGES_PER_INVOCATION'),
-                db_url,
-                getenv("BUFFER_MINUTES"),
-                getenv("MINIMUM_DURATION"),
-                getenv("OC_TRACK_UPLOAD_MAX")
-                )
-
-    if op == 'create-change-set':
-        ts = time.mktime(datetime.utcnow().timetuple())
-        change_set_name = "stack-update-{}".format(int(ts))
-        cmd += ' --change-set-name ' + change_set_name
-        cmd += ' --output text --query "Id"'
-
-    res = ctx.run(cmd)
-
-    if res.failed:
-        return
-
-    if op == 'create-stack':
-        __wait_for(ctx, 'stack-create-complete')
-    else:
-        change_set_id = res.stdout.strip()
-        wait_res = __wait_for(ctx, "change-set-create-complete --change-set-name {} ".format(change_set_id))
-
-        if wait_res.failed:
-            cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
-                   "--output text --query 'StatusReason'").format(
-                profile_arg(),
-                change_set_id
-            )
-            ctx.run(cmd)
-        else:
-            print("\nCloudFormation stack changeset created.\n")
-            cmd = ("aws {} cloudformation describe-change-set --change-set-name {} "
-                   "--query 'Changes[*].ResourceChange.{{ID:LogicalResourceId,Change:Details[*].CausingEntity}}' "
-                   "--output text").format(
-                profile_arg(),
-                change_set_id
-            )
-            ctx.run(cmd)
-            ok = input('\nView the full changeset details on the CloudFormation stack page.'
-                       '\nAfter reviewing would you like to proceed? [y/N] ').lower().strip().startswith('y')
-            if not ok:
-                cmd = ("aws {} cloudformation delete-change-set "
-                       "--change-set-name {}").format(profile_arg(), change_set_id)
-                ctx.run(cmd, hide=True)
-                print("Update cancelled.")
-                return
-            else:
-                cmd = ("aws {} cloudformation execute-change-set "
-                       "--change-set-name {}").format(profile_arg(), change_set_id)
-                print("Executing update...")
-                res = ctx.run(cmd)
-                if res.exited == 0:
-                    __wait_for(ctx, 'stack-update-complete')
-    print("Done")
-
-
-def __wait_for(ctx, wait_op):
-
-    wait_cmd = ("aws {} cloudformation wait {} "
-                "--stack-name {}").format(profile_arg(), wait_op, STACK_NAME)
-    print("Waiting for stack operation to complete...")
-    return ctx.run(wait_cmd, warn=True)
 
 
 def __update_release_alias(ctx, func, version, description):
@@ -1619,55 +1345,6 @@ def __show_sqs_status(ctx):
 
     print()
     print(tabulate(status_table, headers="firstrow", tablefmt="grid"))
-
-
-def __get_meetings(date):
-    print("Requesting meeting data for {}...".format(date))
-    requested_page_size = 300
-    zoom_dashboard_rate_limit_secs = 5
-    meetings = []
-
-    for mtg_type in ["past", "pastOne"]:
-        base_path = ("metrics/meetings/?page_size={}&type={}&from={}&to={}"
-                     .format(requested_page_size, mtg_type, date, date))
-
-        next_page_token = None
-        count = 0
-        while True:
-            if next_page_token:
-                path = ("{}&next_page_token={}"
-                        .format(base_path, next_page_token))
-            else:
-                path = base_path
-
-            r = zoom_api_request(path, ignore_failure=True)
-            if r.status_code == 429:
-                print("API rate limited, waiting {} seconds to retry..."
-                      .format(zoom_dashboard_rate_limit_secs))
-                time.sleep(zoom_dashboard_rate_limit_secs)
-                continue
-            else:
-                r.raise_for_status
-
-            resp_data = r.json()
-            if 'next_page_token' not in resp_data:
-                break
-            next_page_token = resp_data['next_page_token'].strip()
-            if not next_page_token:
-                break
-            meetings.extend(r.json()['meetings'])
-
-            count += min(requested_page_size, resp_data["page_size"])
-            print("Retrieved {} of {} '{}' meetings."
-                  .format(count, resp_data["total_records"], mtg_type))
-            print("Waiting {} seconds for next request "
-                  "to avoid Zoom API rate limit..."
-                  .format(zoom_dashboard_rate_limit_secs))
-            time.sleep(zoom_dashboard_rate_limit_secs)
-
-        time.sleep(1)
-
-    return meetings
 
 
 def __find_recording_log_events(ctx, function, uuid):
