@@ -18,7 +18,6 @@ from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
 from functions.common import zoom_api_request
-from pytz import timezone
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
 
