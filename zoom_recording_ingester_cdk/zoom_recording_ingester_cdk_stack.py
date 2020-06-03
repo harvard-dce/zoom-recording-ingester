@@ -13,12 +13,11 @@ from aws_cdk import (
     aws_sns_subscriptions as sns_subscriptions,
     aws_cloudwatch as cloudwatch,
     aws_cloudwatch_actions as cloudwatch_actions,
-    aws_ec2 as ec2
+    aws_ec2 as ec2,
+    aws_logs as logs
 )
 import boto3
 import jmespath
-import sys
-# from ssm_dotenv import getenv
 from dotenv import load_dotenv
 from os import getenv
 from os.path import join, dirname
@@ -26,27 +25,19 @@ from functions.common import zoom_api_request
 
 load_dotenv(join(dirname(dirname(__file__)), '.env'))
 
-PROJECT_NAME = "zoom-ingester"
-
 
 class ZoomRecordingIngesterCdkStack(core.Stack):
 
     def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
-        # Name of this stack
-        self.name = core.Stack.of(self).stack_name
-
-        # Path in which variables are stored in ssm parameter store
-        self.param_path = "/{}/{}/".format(PROJECT_NAME, self.name)
-
         # Lambda alias that points to the "live" version of the function
-        self.lambda_release_alias = self.get_ssm_param("LAMBDA_RELEASE_ALIAS")
+        self.lambda_release_alias = self._getenv("LAMBDA_RELEASE_ALIAS")
 
-        self.notification_email = self.get_ssm_param("NOTIFICATION_EMAIL")
+        self.notification_email = self._getenv("NOTIFICATION_EMAIL")
 
         # S3 bucket that stores packaged lambda functions
-        self.lambda_code_bucket_name = self.get_ssm_param("LAMBDA_CODE_BUCKET")
+        self.lambda_code_bucket_name = self._getenv("LAMBDA_CODE_BUCKET")
         self.lambda_code_bucket = s3.Bucket.from_bucket_name(
             self, "LambdaCodeBucket", self.lambda_code_bucket_name
         )
@@ -70,7 +61,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         zoom_videos_bucket = s3.Bucket(
             self, "ZoomVideosBucket",
-            bucket_name="{}-zoom-recording-files".format(self.name),
+            bucket_name="{}-zoom-recording-files".format(self.stack_name),
             lifecycle_rules=[two_week_lifecycle_rule],
             removal_policy=core.RemovalPolicy.DESTROY
         )
@@ -79,8 +70,8 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         SQS queues
         """
 
-        downloads_queue, downloads_dlq = self._create_queue("downloads")
-        uploads_queue, uploads_dlq = self._create_queue("uploads", fifo=True)
+        downloads_queue, downloads_dlq = self._create_queue("downloader")
+        uploads_queue, uploads_dlq = self._create_queue("upload", fifo=True)
 
 
         """
@@ -89,7 +80,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         class_schedule_table = dynamodb.Table(
             self, "ClassScheduleDynamoTable",
-            table_name="{}-schedule".format(self.name),
+            table_name="{}-schedule".format(self.stack_name),
             partition_key=dynamodb.Attribute(
                 name="zoom_series_id",
                 type=dynamodb.AttributeType.STRING
@@ -110,7 +101,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         # webhook lambda handles incoming webhook notifications
         webhook_environment = {
             "DOWNLOAD_QUEUE_NAME": downloads_queue.queue_name,
-            "LOCAL_TIME_ZONE": self.get_ssm_param("LOCAL_TIME_ZONE"),
+            "LOCAL_TIME_ZONE": self._getenv("LOCAL_TIME_ZONE"),
             "DEBUG": "0"
         }
         webhook_function = self._create_lambda_function(
@@ -129,13 +120,13 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             "CLASS_SCHEDULE_TABLE": class_schedule_table.table_name,
             "DEBUG": "0",
             "ZOOM_ADMIN_ID": self.zoom_admin_id(),
-            "ZOOM_API_KEY": self.get_ssm_param("ZOOM_API_KEY"),
-            "ZOOM_API_SECRET": self.get_ssm_param("ZOOM_API_SECRET"),
-            "LOCAL_TIME_ZONE": self.get_ssm_param("LOCAL_TIME_ZONE"),
-            "DEFAULT_SERIES_ID": self.get_ssm_param(
+            "ZOOM_API_KEY": self._getenv("ZOOM_API_KEY"),
+            "ZOOM_API_SECRET": self._getenv("ZOOM_API_SECRET"),
+            "LOCAL_TIME_ZONE": self._getenv("LOCAL_TIME_ZONE"),
+            "DEFAULT_SERIES_ID": self._getenv(
                 "DEFAULT_SERIES_ID", required=False
             ),
-            "DOWNLOAD_MESSAGES_PER_INVOCATION": self.get_ssm_param(
+            "DOWNLOAD_MESSAGES_PER_INVOCATION": self._getenv(
                 "DOWNLOAD_MESSAGES_PER_INVOCATION"
             )
         }
@@ -164,7 +155,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             "OC_TRACK_UPLOAD_MAX"
         ]
         uploader_environment = {
-            var: self.get_ssm_param(var) for var in uploader_ssm_params
+            var: self._getenv(var) for var in uploader_ssm_params
         }
         uploader_environment.update({
             "OPENCAST_BASE_URL": self._oc_base_url,
@@ -198,7 +189,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         api = apigw.LambdaRestApi(
             self, "ZoomIngesterApi",
             handler=webhook_function,
-            rest_api_name=self.name,
+            rest_api_name=self.stack_name,
             proxy=False,
             deploy=True,
             deploy_options=apigw.StageOptions(
@@ -321,7 +312,61 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         alarms = []
 
-        # Webhook Function Alarm
+        webhook_4xx_metric = cloudwatch.Metric(
+            metric_name="ZoomWebhook4xxMetricAlarm",
+            namespace="AWS/ApiGateway",
+            dimensions={
+                "ApiName": self.stack_name,
+                "Stage": self.lambda_release_alias
+            },
+            period=core.Duration.minutes(1)
+        )
+
+        alarms.append(
+            self._create_metric_alarm(
+                webhook_4xx_metric.metric_name,
+                metric=webhook_4xx_metric
+            )
+        )
+
+        webhook_5xx_metric = cloudwatch.Metric(
+            metric_name="ZoomWebhook5xxMetricAlarm",
+            namespace="AWS/ApiGateway",
+            dimensions={
+                "ApiName": self.stack_name,
+                "Stage": self.lambda_release_alias
+            },
+            period=core.Duration.minutes(1)
+        )
+
+        alarms.append(
+            self._create_metric_alarm(
+                webhook_5xx_metric.metric_name,
+                metric=webhook_5xx_metric
+            )
+        )
+
+        webhook_latency_metric = cloudwatch.Metric(
+            metric_name="ZoomWebhookLatencyMetricAlarm",
+            namespace="AWS/ApiGateway",
+            dimensions={
+                "ApiName": self.stack_name,
+                "Stage": self.lambda_release_alias
+            },
+            period=core.Duration.minutes(1)
+        )
+
+        alarms.append(
+            self._create_metric_alarm(
+                webhook_latency_metric.metric_name,
+                metric=webhook_latency_metric,
+                statistic="avg",
+                threshold=10000,
+                evaluation_periods=3
+            )
+        )
+
+        # Webhook function Alarm
         alarms.append(
             self._create_metric_alarm(
                 "ZoomWebhookErrorsMetricAlarm",
@@ -329,12 +374,13 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             )
         )
 
-        # alarms.append(
-        #     self._create_metric_alarm(
-        #         "ZoomWebhook4xxMetricAlarm",
-        #         api.metric("4XXError")
-        #     )
-        # )
+        # Downloader function alarms
+        alarms.append(
+            self._create_metric_alarm(
+                "ZoomDownloaderErrorsMetricAlarm",
+                downloader_function.metric_errors()
+            )
+        )
 
         alarms.append(
             self._create_metric_alarm(
@@ -345,11 +391,11 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             )
         )
 
-        # Uploader Function Alarm
+        # Uploader function Alarm
         alarms.append(
             self._create_metric_alarm(
                 "ZoomUploaderErrorsMetricAlarm",
-                uploader_function.metric("Errors")
+                uploader_function.metric_errors()
             )
         )
 
@@ -369,13 +415,72 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         for alarm in alarms:
             alarm.add_alarm_action(cloudwatch_actions.SnsAction(sns_topic))
 
-
         """
         Metric Filters
         """
 
+        metric_filters = []
+
+        metric_filters.append(self._metric_filter(
+            "RecordingCompleted",
+            webhook_function.log_group,
+            logs.FilterPattern.all(logs.JsonPattern(
+                "$.message.payload.status = \"RECORDING_MEETING_COMPLETED\""
+            )),
+            "1"
+        ))
+
+        metric_filters.append(self._metric_filter(
+            "MeetingStarted",
+            webhook_function.log_group,
+            logs.FilterPattern.all(logs.JsonPattern(
+                "$.message.payload.status= \"STARTED\""
+            )),
+            "1"
+        ))
+
+        metric_filters.append(self._metric_filter(
+           "MeetingEnded",
+           webhook_function.log_group,
+           logs.FilterPattern.all(logs.JsonPattern(
+               "$.message.payload.status= \"ENDED\""
+           )),
+           "1"
+        ))
+
+        metric_filters.append(self._metric_filter(
+            "RecordingDuration",
+            downloader_function.log_group,
+            logs.FilterPattern.all(logs.JsonPattern("$.message.duration > 0")),
+            "$.message.duration"
+        ))
+
+        metric_filters.append(self._metric_filter(
+            "SkippedForDuration",
+            downloader_function.log_group,
+            logs.FilterPattern.literal("Skipping"),
+            "1"
+        ))
+
+        metric_filters.append(self._metric_filter(
+            "MinutesInPipeline",
+            uploader_function.log_group,
+            logs.FilterPattern.all(logs.JsonPattern(
+                "$.message.minutes_in_pipeline > 0"
+            )),
+            "$.message.minutes_in_pipeline"
+        ))
+
+        metric_filters.append(self._metric_filter(
+            "WorkflowInitiated",
+            uploader_function.log_group,
+            logs.FilterPattern.literal("Workflow"),
+            "1"
+        ))
 
         # TEMPORARY!
+        # makes it possible to diff resources with
+        # template.yml generated resources
         # remove random hash from logical id
         # for development, remove later
         resources = [
@@ -400,9 +505,10 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             api_method_on_demand_ingest,
             download_trigger,
             upload_trigger,
-            sns_topic
+            sns_topic,
         ]
         resources.extend(alarms)
+        resources.extend(metric_filters)
         for resource in resources:
             cfn_resource = resource.node.default_child
             cfn_id = resource.node.id
@@ -410,12 +516,12 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
     def zoom_admin_id(self):
         # get admin user id from admin email
-        r = zoom_api_request("users/{}".format(self.get_ssm_param("ZOOM_ADMIN_EMAIL")))
+        r = zoom_api_request("users/{}".format(self._getenv("ZOOM_ADMIN_EMAIL")))
         return r.json()["id"]
 
     def vpc_components(self):
 
-        oc_cluster_name = self.get_ssm_param("OC_CLUSTER_NAME")
+        oc_cluster_name = self._getenv("OC_CLUSTER_NAME")
         opsworks = boto3.client("opsworks")
 
         stacks = opsworks.describe_stacks()
@@ -436,13 +542,13 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         return vpc_id, sg_id
 
-    def get_ssm_param(self, param_name, required=True):
+    def _getenv(self, param_name, required=True):
         return getenv(param_name, required)
 
     @property
     def _oc_base_url(self):
 
-        oc_cluster_name = self.get_ssm_param("OC_CLUSTER_NAME")
+        oc_cluster_name = self._getenv("OC_CLUSTER_NAME")
 
         ec2 = boto3.client('ec2')
 
@@ -472,7 +578,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
     def _create_event_rule(self, function, rule_name, rate_in_minutes):
         return events.Rule(
             self, "Zoom{}EventRule".format(rule_name.capitalize()),
-            rule_name="{}-{}-rule".format(self.name, rule_name),
+            rule_name="{}-{}-rule".format(self.stack_name, rule_name),
             enabled=True,
             schedule=events.Schedule.rate(
                 core.Duration.minutes(rate_in_minutes)
@@ -493,11 +599,11 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         function = _lambda.Function(
             self, lambda_id,
             function_name="{}-{}-function"
-                          .format(self.name, function_name),
+                          .format(self.stack_name, function_name),
             runtime=_lambda.Runtime.PYTHON_3_8,
             code=_lambda.Code.from_bucket(
                 self.lambda_code_bucket,
-                "{}/{}.zip".format(self.name, function_name)
+                "{}/{}.zip".format(self.stack_name, function_name)
                 ),
             handler="{}.handler".format(function_name),
             timeout=core.Duration.seconds(timeout),
@@ -575,7 +681,8 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
     def _create_metric_alarm(
             self, alarm_id, metric,
-            statistic="sum", comparison=">=", period_minutes=1, threshold=1
+            statistic="sum", comparison=">=",
+            period_minutes=1, threshold=1, evaluation_periods=1
             ):
 
         if comparison == "<":
@@ -593,9 +700,20 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             metric=metric,
             statistic=statistic,
             comparison_operator=comparison_operator,
-            evaluation_periods=1,
+            evaluation_periods=evaluation_periods,
             threshold=threshold,
             period=core.Duration.minutes(period_minutes)
         )
 
         return alarm
+
+    def _metric_filter(self, filter_name, log_group, pattern, metric_value):
+
+        return logs.MetricFilter(
+            self, f"{filter_name}MetricFilter",
+            log_group=log_group,
+            filter_pattern=pattern,
+            metric_name=filter_name,
+            metric_namespace=f"{self.stack_name}-ZoomIngesterLogMetrics",
+            metric_value=metric_value
+        )
