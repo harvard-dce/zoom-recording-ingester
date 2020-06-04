@@ -243,20 +243,9 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         on_demand_function.add_environment(
             "WEBHOOK_ENDPOINT_URL",
-            new_recording_method.method_arn
+            (f"https://{api.rest_api_id}.execute-api.{self.region}"
+             f".amazonaws.com/{self.lambda_release_alias}/new_recording")
         )
-
-        # attempts at manually setting dependencies...
-
-        # ingest_method.node.add_dependency(ingest)
-        # ingest.node.add_dependency(on_demand_function)
-        # on_demand_function.node.add_dependency(new_recording_method)
-
-        # new_recording_method.node.add_dependency(new_recording)
-        # new_recording.node.add_dependency(api)
-
-        # # api.deployment_stage.node.add_dependency(api.latest_deployment)
-        # # api.latest_deployment.node.add_dependency(new_recording_method)
 
         """
         CloudWatch Events
