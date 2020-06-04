@@ -53,7 +53,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         """
         two_week_lifecycle_rule = s3.LifecycleRule(
             id="DeleteAfterTwoWeeks",
-            prefix="", # for development, remove later
+            prefix="",  # for development, remove later
             enabled=True,
             expiration=core.Duration.days(14),
             abort_incomplete_multipart_upload_after=core.Duration.days(1)
@@ -61,7 +61,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         zoom_videos_bucket = s3.Bucket(
             self, "ZoomVideosBucket",
-            bucket_name="{}-zoom-recording-files".format(self.stack_name),
+            bucket_name=f"{self.stack_name}-zoom-recording-files",
             lifecycle_rules=[two_week_lifecycle_rule],
             removal_policy=core.RemovalPolicy.DESTROY
         )
@@ -73,14 +73,13 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         downloads_queue, downloads_dlq = self._create_queue("downloader")
         uploads_queue, uploads_dlq = self._create_queue("upload", fifo=True)
 
-
         """
         Class schedule
         """
 
         class_schedule_table = dynamodb.Table(
             self, "ClassScheduleDynamoTable",
-            table_name="{}-schedule".format(self.stack_name),
+            table_name=f"{self.stack_name}-schedule",
             partition_key=dynamodb.Attribute(
                 name="zoom_series_id",
                 type=dynamodb.AttributeType.STRING
@@ -94,8 +93,13 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         Lambda functions
         """
 
+        # on demand function handles on demand requests for ingests
         on_demand_function = self._create_lambda_function(
-            "zoom-on-demand", {}
+            "zoom-on-demand",
+            {
+                "ZOOM_API_KEY": self._getenv("ZOOM_API_KEY"),
+                "ZOOM_API_SECRET": self._getenv("ZOOM_API_SECRET")
+            }
         )
 
         # webhook lambda handles incoming webhook notifications
@@ -181,14 +185,13 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             "zoom-log-notifications", {}
         )
 
-
         """
         API definition
         """
 
         api = apigw.LambdaRestApi(
             self, "ZoomIngesterApi",
-            handler=webhook_function,
+            handler=webhook_function,  # default handler
             rest_api_name=self.stack_name,
             proxy=False,
             deploy=True,
@@ -200,62 +203,60 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             )
         )
 
-        api_resource_new_recording = apigw.Resource(
-            self, "ZoomIngesterResource",
-            parent=api.root,
-            path_part="new_recording"
+        api.add_api_key("ZoomIngesterApiKey")
+
+        new_recording = api.root.add_resource("new_recording")
+        new_recording_method = new_recording.add_method(
+            "POST",
+            request_parameters={
+                "method.request.querystring.type": True,
+                "method.request.querystring.content": True
+            },
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    }
+                )
+            ]
         )
 
-        api_method_new_recording = apigw.Method(
-            self, "ZoomIngesterWebhook",
-            http_method="POST",
-            resource=api_resource_new_recording,
-            options=apigw.MethodOptions(
-                request_parameters={
-                    "method.request.querystring.type": True,
-                    "method.request.querystring.content": True
-                },
-                method_responses=[
-                    apigw.MethodResponse(
-                        status_code="200",
-                        response_models={
-                            "application/json": apigw.Model.EMPTY_MODEL
-                        }
-                    )
-                ]
-            )
+        ingest = api.root.add_resource("ingest")
+        on_demand_integration = apigw.LambdaIntegration(on_demand_function)
+        ingest_method = ingest.add_method(
+            "POST",
+            on_demand_integration,
+            request_parameters={
+                "method.request.querystring.uuid": True,
+                "method.request.querystring.oc_series_id": True
+            },
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    }
+                )
+            ]
         )
 
-        api_resource_on_demand_ingest = apigw.Resource(
-            self, "ZoomIngesterOnDemandResource",
-            parent=api.root,
-            path_part="ingest"
+        on_demand_function.add_environment(
+            "WEBHOOK_ENDPOINT_URL",
+            new_recording_method.method_arn
         )
 
-        api_method_on_demand_ingest = apigw.Method(
-            self, "ZoomIngesterOnDemandEndpoint",
-            http_method="POST",
-            resource=api_resource_on_demand_ingest,
-            options=apigw.MethodOptions(
-                request_parameters={
-                    "method.request.querystring.uuid": True,
-                    "method.request.querystring.oc_series_id": True
-                },
-                method_responses=[
-                    apigw.MethodResponse(
-                        status_code="200",
-                        response_models={
-                            "application/json": apigw.Model.EMPTY_MODEL
-                        }
-                    )
-                ]
-            )
-        )
+        # attempts at manually setting dependencies...
 
-        api_key = apigw.ApiKey(
-            self, "ZoomIngesterApiKey",
-            resources=[api]
-        )
+        # ingest_method.node.add_dependency(ingest)
+        # ingest.node.add_dependency(on_demand_function)
+        # on_demand_function.node.add_dependency(new_recording_method)
+
+        # new_recording_method.node.add_dependency(new_recording)
+        # new_recording.node.add_dependency(api)
+
+        # # api.deployment_stage.node.add_dependency(api.latest_deployment)
+        # # api.latest_deployment.node.add_dependency(new_recording_method)
 
         """
         CloudWatch Events
@@ -275,7 +276,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         codebuild_project = codebuild.Project(
             self, "CodeBuildProject",
-            project_name="{}-codebuild".format(self.stack_name),
+            project_name=f"{self.stack_name}-codebuild",
             source=codebuild.Source.git_hub_enterprise(
                 https_clone_url="https://github.com/harvard-dce/zoom-recording-ingester.git",
                 clone_depth=1
@@ -298,7 +299,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
         sns_topic = sns.Topic(
             self, "ZoomIngesterNotificationTopic",
-            topic_name="{}-notification-topic".format(self.stack_name)
+            topic_name=f"{self.stack_name}-notification-topic"
         )
 
         sns_topic.add_subscription(
@@ -478,45 +479,9 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             "1"
         ))
 
-        # TEMPORARY!
-        # makes it possible to diff resources with
-        # template.yml generated resources
-        # remove random hash from logical id
-        # for development, remove later
-        resources = [
-            zoom_videos_bucket,
-            downloads_queue,
-            downloads_dlq,
-            uploads_queue,
-            uploads_dlq,
-            class_schedule_table,
-            webhook_function,
-            downloader_function,
-            uploader_function,
-            op_counts_function,
-            on_demand_function,
-            log_notification_function,
-            codebuild_project,
-            api,
-            api_key,
-            api_resource_new_recording,
-            api_method_new_recording,
-            api_resource_on_demand_ingest,
-            api_method_on_demand_ingest,
-            download_trigger,
-            upload_trigger,
-            sns_topic,
-        ]
-        resources.extend(alarms)
-        resources.extend(metric_filters)
-        for resource in resources:
-            cfn_resource = resource.node.default_child
-            cfn_id = resource.node.id
-            cfn_resource.override_logical_id(cfn_id)
-
     def zoom_admin_id(self):
         # get admin user id from admin email
-        r = zoom_api_request("users/{}".format(self._getenv("ZOOM_ADMIN_EMAIL")))
+        r = zoom_api_request(f"users/{self._getenv('ZOOM_ADMIN_EMAIL')}")
         return r.json()["id"]
 
     def vpc_components(self):
@@ -566,8 +531,7 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         )
         if "Reservations" not in result or len(result["Reservations"]) == 0:
             raise Exception(
-                "No dns name found for OC_CLUSTER_NAME {}"
-                .format(oc_cluster_name)
+                f"No dns name found for OC_CLUSTER_NAME {oc_cluster_name}"
             )
         dns_name = result["Reservations"][0]["Instances"][0]["PublicDnsName"]
 
@@ -577,8 +541,8 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
 
     def _create_event_rule(self, function, rule_name, rate_in_minutes):
         return events.Rule(
-            self, "Zoom{}EventRule".format(rule_name.capitalize()),
-            rule_name="{}-{}-rule".format(self.stack_name, rule_name),
+            self, f"Zoom{rule_name.capitalize()}EventRule",
+            rule_name=f"{self.stack_name}-{rule_name}-rule",
             enabled=True,
             schedule=events.Schedule.rate(
                 core.Duration.minutes(rate_in_minutes)
@@ -590,22 +554,23 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         self, function_name, environment, timeout=30,
         vpc=None, security_group=None
     ):
-        lambda_id = "{}Function".format(
-            ''.join([x.capitalize() for x in function_name.split('-')])
-        )
 
-        environment = {key:str(val) for key,val in environment.items() if val}
+        lambda_id_prefix = ''.join(
+            [x.capitalize() for x in function_name.split('-')]
+        )
+        lambda_id = f"{lambda_id_prefix}Function"
+
+        environment = {key: str(val) for key,val in environment.items() if val}
 
         function = _lambda.Function(
             self, lambda_id,
-            function_name="{}-{}-function"
-                          .format(self.stack_name, function_name),
+            function_name=f"{self.stack_name}-{function_name}-function",
             runtime=_lambda.Runtime.PYTHON_3_8,
             code=_lambda.Code.from_bucket(
                 self.lambda_code_bucket,
-                "{}/{}.zip".format(self.stack_name, function_name)
-                ),
-            handler="{}.handler".format(function_name),
+                f"{self.stack_name}/{function_name}.zip"
+            ),
+            handler=f"{function_name}.handler",
             timeout=core.Duration.seconds(timeout),
             environment=environment,
             vpc=vpc,
@@ -615,21 +580,11 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
         latest = function.add_version("$LATEST")
 
         alias = _lambda.Alias(
-            self, "{}Alias".format(lambda_id),
+            self, f"{lambda_id}Alias",
             version=latest,
             description="initial release",
             alias_name=self.lambda_release_alias
         )
-
-        # remove random hash from logical id
-        # temporary, for development, remove later
-        resources = [
-            alias
-        ]
-        for resource in resources:
-            cfn_resource = resource.node.default_child
-            cfn_id = resource.node.id
-            cfn_resource.override_logical_id(cfn_id)
 
         return function
 
