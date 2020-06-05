@@ -9,6 +9,7 @@ from pytz import timezone
 from datetime import datetime
 from collections import OrderedDict
 import logging
+import concurrent.futures
 
 logger = logging.getLogger()
 
@@ -552,8 +553,17 @@ class ZoomFile:
     def file_extension(self):
         return Path(self.zoom_filename).suffix[1:]
 
+    def upload_part(self, part_number, chunk):
+        part = self.s3.upload_part(Body=chunk,
+                              Bucket=ZOOM_VIDEOS_BUCKET,
+                              Key=self.s3_filename,
+                              PartNumber=part_number,
+                              UploadId=self.upload_id)
+
+        return part
+
     def stream_file_to_s3(self):
-        s3 = boto3.client("s3")
+        self.s3 = boto3.client("s3")
 
         metadata = {
             "uuid": self.file_data["meeting_uuid"],
@@ -565,41 +575,52 @@ class ZoomFile:
             {"uploading file to S3": self.s3_filename,
              "metadata": metadata}
         )
-        part_info = {"Parts": []}
-        mpu = s3.create_multipart_upload(
+        parts = []
+        mpu = self.s3.create_multipart_upload(
                     Bucket=ZOOM_VIDEOS_BUCKET,
                     Key=self.s3_filename,
                     Metadata=metadata)
+        self.upload_id = mpu["UploadId"]
 
         try:
             chunks = enumerate(
                         self.stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1
                      )
-            for part_number, chunk in chunks:
-                part = s3.upload_part(Body=chunk,
-                                      Bucket=ZOOM_VIDEOS_BUCKET,
-                                      Key=self.s3_filename,
-                                      PartNumber=part_number,
-                                      UploadId=mpu["UploadId"])
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future_map = {}
+                for part_number, chunk in chunks:
+                    f = executor.submit(self.upload_part, part_number, chunk)
+                    future_map[f] = part_number
+                
+                for future in concurrent.futures.as_completed(future_map):
+                    part_number = future_map[future]
+                    part = future.result()
+                    parts.append({
+                        "PartNumber": part_number,
+                        "ETag": part["ETag"]
+                    })
 
-                part_info["Parts"].append({
-                    "PartNumber": part_number,
-                    "ETag": part["ETag"]
-                })
+            # complete_multipart_upload requires parts in order by part number
+            parts = sorted(parts, key=lambda i: i["PartNumber"])
 
-            s3.complete_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET,
-                                         Key=self.s3_filename,
-                                         UploadId=mpu["UploadId"],
-                                         MultipartUpload=part_info)
+            self.s3.complete_multipart_upload(
+                Bucket=ZOOM_VIDEOS_BUCKET,
+                Key=self.s3_filename,
+                UploadId=mpu["UploadId"],
+                MultipartUpload={"Parts": parts}
+            )
             print("Completed multipart upload of {}.".format(self.s3_filename))
         except Exception as e:
             logger.exception(
                 "Something went wrong with upload of {}:{}"
                 .format(self.s3_filename, e)
             )
-            s3.abort_multipart_upload(Bucket=ZOOM_VIDEOS_BUCKET,
-                                      Key=self.s3_filename,
-                                      UploadId=mpu["UploadId"])
+            self.s3.abort_multipart_upload(
+                Bucket=ZOOM_VIDEOS_BUCKET,
+                Key=self.s3_filename,
+                UploadId=mpu["UploadId"]
+            )
+            raise
 
         if self.file_extension == "mp4":
             if not self.valid_mp4_file:
