@@ -14,7 +14,8 @@ from aws_cdk import (
     aws_cloudwatch as cloudwatch,
     aws_cloudwatch_actions as cloudwatch_actions,
     aws_ec2 as ec2,
-    aws_logs as logs
+    aws_logs as logs,
+    aws_iam as iam
 )
 import boto3
 import jmespath
@@ -280,6 +281,24 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             ),
             badge=True,
             timeout=core.Duration.minutes(5)
+        )
+
+        codebuild_project.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "lambda:UpdateFunctionCode",
+                    "lambda:PublishVersion",
+                    "lambda:UpdateAlias"
+                ],
+                resources=[
+                    on_demand_function.function_arn,
+                    webhook_function.function_arn,
+                    downloader_function.function_arn,
+                    uploader_function.function_arn,
+                    op_counts_function.function_arn,
+                    log_notification_function.function_arn
+                ]
+            )
         )
 
         """
