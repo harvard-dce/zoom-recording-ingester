@@ -112,8 +112,11 @@ def handler(event, context):
     # series id is an optional param. if not present the download function will
     # attempt to determine the series id by matching the recording times against
     # it's known schedule as usual.
-    if "oc_series_id" in body:
+    if "oc_series_id" in body and body["oc_series_id"]:
         webhook_data["payload"]["on_demand_series_id"] = body["oc_series_id"]
+
+    if "allow_multiple_ingests" in body:
+        webhook_data["payload"]["allow_multiple_ingests"] = body["allow_multiple_ingests"]
 
     logger.info({"webhook_data": webhook_data})
     try:
@@ -127,8 +130,8 @@ def handler(event, context):
     except Exception as e:
         err_msg = str(e)
         logger.exception(
-            "Something went wrong calling the webook: {}".format(err_msg)
+            "Something went wrong calling the webhook: {}".format(err_msg)
         )
-        return resp(500, err_msg);
+        return resp(500, err_msg)
 
     return resp(200, "Ingest accepted")

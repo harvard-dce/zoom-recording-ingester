@@ -256,6 +256,7 @@ Resources:
       RequestParameters:
         method.request.querystring.uuid: true
         method.request.querystring.oc_series_id: false
+        method.request.querystring.allow_multiple_ingests: false
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST

@@ -27,5 +27,8 @@
   ],
   // webhook function's aws request id
   "correlation_id": "cab436d8-64bc-11ea-bc55-0242ac130003",
-  "received_time": "2020-03-12T22:40:00Z"
+  "received_time": "2020-03-12T22:40:00Z",
+  // optional fields
+  "on_demand_series_id": "2020019999",
+  "allow_multiple_ingests": true
 }

@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 from datetime import datetime
 from hashlib import md5
-from uuid import UUID
+from uuid import UUID, uuid4
 from common import TIMESTAMP_FORMAT, setup_logging
 
 
@@ -166,9 +166,29 @@ class Upload:
     @property
     def mediapackage_id(self):
         if not hasattr(self, "_opencast_mpid"):
+
+            # first uuid generated should be deterministic
+            # regardless of the allow_multiple_ingests flag
             mpid = str(UUID(md5(self.meeting_uuid.encode()).hexdigest()))
-            logger.debug("Created mediapackage id {} from uuid {}"
-                         .format(mpid, self.meeting_uuid))
+            if self.already_ingested(mpid):
+                mpid = None
+                if self.data["allow_multiple_ingests"]:
+                    # random uuid
+                    mpid = str(uuid4())
+                    logger.info(
+                        f"Created random mediapackage id {mpid}"
+                    )
+                else:
+                    logger.warning(
+                        "Episode with deterministic mediapackage id"
+                        f" {self.mediapackage_id} already ingested"
+                    )
+            else:
+                logger.info(
+                    f"Created mediapackage id {mpid} "
+                    f"from uuid {self.meeting_uuid}"
+                )
+
             self._opencast_mpid = mpid
         return self._opencast_mpid
 
@@ -225,20 +245,18 @@ class Upload:
     def upload(self):
         if not self.opencast_series_id:
             raise Exception("No opencast series id found!")
-        if self.already_ingested():
-            logger.warning("Episode with mediapackage id {} already ingested"
-                           .format(self.mediapackage_id))
+        if not self.mediapackage_id:
             return None
         self.get_series_catalog()
         self.ingest()
         return self.workflow_id
 
-    def already_ingested(self):
-        endpoint = "/workflow/instances.json?mp={}".format(self.mediapackage_id)
+    def already_ingested(self, mpid):
+        endpoint = "/workflow/instances.json?mp={}".format(mpid)
         try:
             resp = oc_api_request("GET", endpoint)
             logger.debug("Lookup for mpid: {}, {}"
-                         .format(self.mediapackage_id, resp.json()))
+                         .format(mpid, resp.json()))
             return int(resp.json()["workflows"]["totalCount"]) > 0
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == "404":
@@ -305,7 +323,7 @@ class FileParamGenerator(object):
         "other": "other/chunked+source",
     }
 
-    VIEW_PRIORITES = {
+    VIEW_PRIORITIES = {
         # if we have this...
         "active_speaker": [
             # then take these in this order...
@@ -415,7 +433,7 @@ class FileParamGenerator(object):
         return url
 
     def generate(self):
-        for primary_view, secondary_views in self.VIEW_PRIORITES.items():
+        for primary_view, secondary_views in self.VIEW_PRIORITIES.items():
             if not self._has_view(primary_view) or self._has_presenter():
                 continue
             self._add_presenter(primary_view)

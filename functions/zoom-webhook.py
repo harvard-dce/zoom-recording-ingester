@@ -174,6 +174,11 @@ def construct_sqs_message(payload, context, zoom_event):
                 timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
                 TIMESTAMP_FORMAT)
 
+    if "allow_multiple_ingests" in payload:
+        allow_multiple_ingests = payload["allow_multiple_ingests"]
+    else:
+        allow_multiple_ingests = False
+
     recording_files = []
     for file in payload["object"]["recording_files"]:
         if file["file_type"].lower() == "mp4":
@@ -194,6 +199,7 @@ def construct_sqs_message(payload, context, zoom_event):
         "duration": payload["object"]["duration"],
         "host_id": payload["object"]["host_id"],
         "recording_files": recording_files,
+        "allow_multiple_ingests": allow_multiple_ingests,
         "correlation_id": context.aws_request_id,
         "received_time": now
     }
