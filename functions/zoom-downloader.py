@@ -440,6 +440,7 @@ class ZoomFile:
         self.recording_type = self.__standardized_recording_type(
             file_data["recording_type"]
         )
+        self.s3 = boto3.client("s3")
 
     def __standardized_recording_type(self, name):
         """
@@ -553,17 +554,16 @@ class ZoomFile:
     def file_extension(self):
         return Path(self.zoom_filename).suffix[1:]
 
-    def upload_part(self, part_number, chunk):
+    def upload_part(self, upload_id, part_number, chunk):
         part = self.s3.upload_part(Body=chunk,
                               Bucket=ZOOM_VIDEOS_BUCKET,
                               Key=self.s3_filename,
                               PartNumber=part_number,
-                              UploadId=self.upload_id)
+                              UploadId=upload_id)
 
         return part
 
     def stream_file_to_s3(self):
-        self.s3 = boto3.client("s3")
 
         metadata = {
             "uuid": self.file_data["meeting_uuid"],
@@ -580,7 +580,6 @@ class ZoomFile:
                     Bucket=ZOOM_VIDEOS_BUCKET,
                     Key=self.s3_filename,
                     Metadata=metadata)
-        self.upload_id = mpu["UploadId"]
 
         try:
             chunks = enumerate(
@@ -589,7 +588,9 @@ class ZoomFile:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future_map = {}
                 for part_number, chunk in chunks:
-                    f = executor.submit(self.upload_part, part_number, chunk)
+                    f = executor.submit(
+                        self.upload_part, mpu["UploadId"], part_number, chunk
+                    )
                     future_map[f] = part_number
                 
                 for future in concurrent.futures.as_completed(future_map):
