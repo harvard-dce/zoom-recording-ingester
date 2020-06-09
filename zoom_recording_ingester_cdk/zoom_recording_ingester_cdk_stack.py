@@ -230,7 +230,8 @@ class ZoomRecordingIngesterCdkStack(core.Stack):
             on_demand_integration,
             request_parameters={
                 "method.request.querystring.uuid": True,
-                "method.request.querystring.oc_series_id": True
+                "method.request.querystring.oc_series_id": False,
+                "method.request.querystring.allow_multiple_ingests": False
             },
             method_responses=[
                 apigw.MethodResponse(
