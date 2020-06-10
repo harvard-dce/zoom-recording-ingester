@@ -230,7 +230,12 @@ class Upload:
 
     @property
     def s3_filenames(self):
-        return self.data["s3_filenames"]
+        if not hasattr(self, "_s3_filenames"):
+            self._s3_filenames = {}
+            for view, file in self.data["s3_files"].items():
+                self._s3_filenames[view] = [data["filename"] for data in file["segments"]]
+
+        return self._s3_filenames
 
     @property
     def workflow_id(self):
