@@ -261,6 +261,7 @@ def list_recordings(ctx, date=None):
     else:
         print("Done!")
 
+
 @task
 def update_requirements(ctx):
     """
@@ -305,6 +306,35 @@ def generate_resource_policy(ctx):
     print(json.dumps(resource_policy, indent=2))
 
 
+@task(help={"uuid": "meeting instance uuid",
+            "oc_series_id": "opencast series id",
+            "allow_multiple_ingests": ("whether to allow this recording to "
+                                       "be ingested multiple times")})
+def exec_on_demand(ctx, uuid, oc_series_id=None, allow_multiple_ingests=False):
+    """
+    Manually trigger an on demand ingest.
+    """
+
+    event_body = {
+        "uuid": uuid.strip()
+    }
+
+    if oc_series_id:
+        event_body["oc_series_id"] = oc_series_id.strip()
+
+    if allow_multiple_ingests:
+        event_body["allow_multiple_ingests"] = allow_multiple_ingests
+
+    print(event_body)
+    
+    resp = __invoke_api(ctx, "ingest", event_body)
+
+    print("Returned with status code: {}. {}".format(
+        resp["status"],
+        resp["body"])
+    )
+
+
 @task(help={'uuid': 'meeting instance uuid',
             'ignore_schedule': ('ignore schedule, use default series if '
                                 'available'),
@@ -313,8 +343,6 @@ def generate_resource_policy(ctx):
 def exec_pipeline(ctx, uuid, ignore_schedule=False, on_demand_series_id=None):
     """
     Manually trigger the webhook handler, downloader, and uploader.
-    Positional arguments: uuid, host_id, series-id
-    Options: --ignore-schedule
     """
 
     print("\nTriggering webhook...\n")
@@ -354,25 +382,6 @@ def exec_webhook(ctx, uuid, on_demand_series_id=None):
     if not uuid:
         raise Exit("You must provide a recording uuid")
 
-    apig = boto3.client('apigateway')
-
-    apis = apig.get_rest_apis()
-    api_id = jmespath.search(
-        "items[?name=='{}'].id | [0]".format(STACK_NAME),
-        apis
-    )
-    if not api_id:
-        raise Exit(
-            "No api found, double check that your environment variables "
-            "are correct."
-        )
-
-    api_resources = apig.get_resources(restApiId=api_id)
-    resource_id = jmespath.search(
-        "items[?pathPart=='new_recording'].id | [0]",
-        api_resources
-    )
-
     double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
     data = zoom_api_request(
         "meetings/{}/recordings".format(double_urlencoded_uuid)
@@ -409,12 +418,7 @@ def exec_webhook(ctx, uuid, on_demand_series_id=None):
             }
         }
 
-    resp = apig.test_invoke_method(
-        restApiId=api_id,
-        resourceId=resource_id,
-        httpMethod="POST",
-        body=json.dumps(event_body)
-    )
+    resp = __invoke_api(ctx, "new_recording", event_body)
 
     print("Returned with status code: {}. {}".format(
         resp["status"],
@@ -848,6 +852,7 @@ deploy_ns.add_task(deploy_on_demand, 'on-demand')
 ns.add_collection(deploy_ns)
 
 exec_ns = Collection('exec')
+exec_ns.add_task(exec_on_demand, 'on-demand')
 exec_ns.add_task(exec_webhook, 'webhook')
 exec_ns.add_task(exec_downloader, 'downloader')
 exec_ns.add_task(exec_uploader, 'uploader')
@@ -1016,6 +1021,39 @@ def stack_exists(ctx):
         .format(profile_arg(), STACK_NAME)
     res = ctx.run(cmd, hide=True, warn=True, echo=False)
     return res.exited == 0
+
+
+def __invoke_api(ctx, endpoint, event_body):
+    """
+    Test invoke a zoom ingester endpoint method
+    """
+    apig = boto3.client('apigateway')
+
+    apis = apig.get_rest_apis()
+    api_id = jmespath.search(
+        "items[?name=='{}'].id | [0]".format(STACK_NAME),
+        apis
+    )
+    if not api_id:
+        raise Exit(
+            "No api found, double check that your environment variables "
+            "are correct."
+        )
+
+    api_resources = apig.get_resources(restApiId=api_id)
+    resource_id = jmespath.search(
+        f"items[?pathPart=='{endpoint}'].id | [0]",
+        api_resources
+    )
+
+    resp = apig.test_invoke_method(
+        restApiId=api_id,
+        resourceId=resource_id,
+        httpMethod="POST",
+        body=json.dumps(event_body)
+    )
+
+    return resp
 
 
 def __create_or_update(ctx, op):

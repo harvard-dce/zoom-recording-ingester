@@ -364,6 +364,10 @@ class Download:
                 "correlation_id": self.data["correlation_id"],
                 "s3_filenames": s3_filenames
             }
+
+            if "allow_multiple_ingests" in self.data:
+                self._upload_message["allow_multiple_ingests"] = self.data["allow_multiple_ingests"]
+
         return self._upload_message
 
     def upload_to_s3(self):

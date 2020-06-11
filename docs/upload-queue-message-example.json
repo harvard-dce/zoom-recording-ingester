@@ -17,6 +17,8 @@
           "shared_screen_with_speaker_view": [
               "123456789/1584045816/000-shared_screen_with_speaker_view.mp4"
           ]
-      }
+      },
+      // optional field
+      "allow_multiple_ingests": true
   }
 }

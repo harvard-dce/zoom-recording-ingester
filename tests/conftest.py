@@ -80,7 +80,8 @@ def webhook_payload():
                     ]
                 }
             },
-            "event": "recording.completed"
+            "event": "recording.completed",
+            "allow_multiple_ingests": False
         }
 
         if payload_extras is not None:
@@ -101,7 +102,8 @@ def sqs_message_from_webhook_payload(webhook_payload, aws_request_id):
             "host_id": payload_obj["host_id"],
             "recording_files": payload_obj["recording_files"],
             "received_time": frozen_time,
-            "correlation_id": aws_request_id
+            "correlation_id": aws_request_id,
+            "allow_multiple_ingests": False
         }
 
         if zoom_event == "recording.completed":
