@@ -13,10 +13,23 @@
       "webhook_received_time": "2020-03-13T00:34:12Z",
       // webhook function's aws request id
       "correlation_id": "cab436d8-64bc-11ea-bc55-0242ac130003",
-      "s3_filenames": {
-          "shared_screen_with_speaker_view": [
-              "123456789/1584045816/000-shared_screen_with_speaker_view.mp4"
-          ]
+      "s3_files": {
+          "shared_screen_with_speaker_view": {
+            "segments": [
+                {
+                    "filename": "123456789/1584045816/000-shared_screen_with_speaker_view.mp4",
+                    "recording_start": "2020-06-09T13:43:30Z",
+                    "recording_end": "2020-06-09T14:07:26Z",
+                    "ffprobe_bytes": 12345678,
+                    "ffprobe_seconds": 500.4
+                }
+            ],
+            "view_bytes": 12345678,
+            "view_seconds": 500.4
+        },
+        "total_file_bytes": 12345678,
+        "total_file_seconds": 500.4,
+        "total_segment_seconds": 500.4
       },
       // optional field
       "allow_multiple_ingests": true

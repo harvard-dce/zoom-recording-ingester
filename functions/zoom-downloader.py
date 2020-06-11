@@ -341,12 +341,39 @@ class Download:
     @property
     def upload_message(self):
         if not hasattr(self, "self._upload_message"):
-            s3_filenames = {}
+            s3_files = {}
+            segment_durations = {}
             for file in self.recording_files:
-                if file.recording_type in s3_filenames:
-                    s3_filenames[file.recording_type].append(file.s3_filename)
+                segment = {
+                    "filename": file.s3_filename,
+                    "recording_start": file.file_data["recording_start"],
+                    "recording_end": file.file_data["recording_end"],
+                    "ffprobe_bytes": file.file_data["ffprobe_bytes"],
+                    "ffprobe_seconds": file.file_data["ffprobe_seconds"]
+                }
+                segment_durations[segment["recording_start"]] = segment["ffprobe_seconds"]
+                if file.recording_type in s3_files:
+                    s3_files[file.recording_type]["segments"].append(segment)
                 else:
-                    s3_filenames[file.recording_type] = [file.s3_filename]
+                    s3_files[file.recording_type] = {
+                        "segments": [segment]
+                    }
+
+            all_file_bytes = 0
+            all_file_seconds = 0
+            for view_data in s3_files.values():
+                view_data["view_bytes"] = sum(
+                    s["ffprobe_bytes"] for s in view_data["segments"]
+                )
+                view_data["view_seconds"] = sum(
+                    s["ffprobe_seconds"] for s in view_data["segments"]
+                )
+                all_file_bytes += view_data["view_bytes"]
+                all_file_seconds += view_data["view_seconds"]
+
+            recording_seconds = sum(
+                duration for duration in segment_durations.values()
+            )
 
             self._upload_message = {
                 "uuid": self.data["uuid"],
@@ -362,7 +389,10 @@ class Download:
                 ),
                 "webhook_received_time": self.data["received_time"],
                 "correlation_id": self.data["correlation_id"],
-                "s3_filenames": s3_filenames
+                "s3_files": s3_files,
+                "total_file_bytes": all_file_bytes,
+                "total_file_seconds": all_file_seconds,
+                "total_segment_seconds": recording_seconds
             }
 
             if "allow_multiple_ingests" in self.data:
@@ -525,17 +555,35 @@ class ZoomFile:
 
     def valid_mp4_file(self):
         # TODO: if file not found, add appropriate error
-        s3 = boto3.client("s3")
-        url = s3.generate_presigned_url(
+        url = self.s3.generate_presigned_url(
             "get_object",
             Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": self.s3_filename}
         )
 
-        command = ["/var/task/ffprobe", "-of", "json", url]
-        if subprocess.call(command) == 1:
+        cmd = f"/var/task/ffprobe -of json -show_format {url}"
+        r = subprocess.run(
+                cmd.split(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+        )
+        stdout = json.loads(r.stdout)
+        logger.info({
+            "ffprobe": {
+                "command": cmd,
+                "return_code": r.returncode,
+                "stdout": stdout,
+                "stderr": r.stderr
+            }
+        })
+
+        if r.returncode == 1 or stdout["format"]["probe_score"] < 100:
             logger.warning("Corrupt MP4, need to retry download "
-                           "from zoom to S3. {}".format(url))
+                           "from zoom to S3. {}\n{}".format(url, r.stderr))
             return False
+
+        self.file_data["ffprobe_seconds"] = float(stdout["format"]["duration"])
+        self.file_data["ffprobe_bytes"] = int(stdout["format"]["size"])
 
         logger.debug("Successfully verified mp4 {}".format(url))
         return True
@@ -628,7 +676,7 @@ class ZoomFile:
             raise
 
         if self.file_extension == "mp4":
-            if not self.valid_mp4_file:
+            if not self.valid_mp4_file():
                 self.stream.close()
                 raise Exception("MP4 failed to transfer.")
 
