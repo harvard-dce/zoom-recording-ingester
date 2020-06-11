@@ -208,63 +208,6 @@ def release(ctx, function=None, description=None):
 
 
 @task
-<<<<<<< HEAD
-def list_recordings(ctx, date=None):
-    """
-    Optional: --date='YYYY-MM-DD'
-    """
-    if date is None:
-        date = datetime_date.today()
-
-    meetings = __get_meetings(date)
-
-    recordings_found = 0
-
-    for meeting in meetings:
-        uuid = meeting['uuid']
-        series_id = meeting['id']
-
-        r = zoom_api_request(
-            "meetings/{}".format(series_id), ignore_failure=True,
-        )
-        if r.status_code == 404:
-            continue
-        r.raise_for_status()
-
-        r = zoom_api_request(
-            "meetings/{}/recordings".format(uuid), ignore_failure=True
-        )
-        if r.status_code == 404:
-            continue
-        r.raise_for_status()
-
-        # sometimes this zoom endpoint sends an empty list of recording files
-        if not len(r.json()['recording_files']):
-            continue
-
-        recordings_found += 1
-
-        local_tz = timezone(getenv('LOCAL_TIME_ZONE'))
-        utc = timezone('UTC')
-        utc_start_time = r.json()['recording_files'][0]['recording_start']
-        start_time = utc.localize(datetime.strptime(utc_start_time,
-                                  "%Y-%m-%dT%H:%M:%SZ")).astimezone(local_tz)
-
-        print("\n\tuuid: {}".format(uuid))
-        print("\tSeries id: {}".format(r.json()["id"]))
-        print("\tTopic: {}".format(r.json()["topic"]))
-        print("\tStart time: {}".format(start_time))
-        print("\tDuration: {} minutes".format(r.json()["duration"]))
-
-    if recordings_found == 0:
-        print("No recordings found on {}".format(date))
-    else:
-        print("Done!")
-
-
-@task
-=======
->>>>>>> remove now unecessary tasks
 def update_requirements(ctx):
     """
     Run a `pip-compile -U` on all requirements files
