@@ -22,7 +22,7 @@ from pytz import timezone
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
 
-# supress warnings for cases where we want to ingore dev cluster dummy certificates
+# surpress warnings for cases where we want to ingore dev cluster dummy certificates
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -711,13 +711,7 @@ def import_dce_schedule_from_opencast(ctx, endpoint=None):
 
 @task(pre=[production_failsafe])
 def import_fas_schedule_from_csv(ctx, filepath):
-    day_of_week_map = {
-        "Monday": "M",
-        "Tuesday": "T",
-        "Wednesday": "W",
-        "Thursday": "R",
-        "Friday": "F"
-    }
+    valid_days = ["M", "T", "W", "R", "F"]
 
     # make it so we can use lower-case keys in our row dicts;
     # there are lots of ways this spreadsheet data import could go wrong and
@@ -733,14 +727,11 @@ def import_fas_schedule_from_csv(ctx, filepath):
     schedule_data = {}
     for row in rows:
 
-        # try the new link+password column first
-        for col in ("meeting id with password", "meeting id"):
-            try:
-                zoom_link = urlparse(row[col])
-                assert zoom_link.scheme.startswith("https")
-                break
-            except AssertionError:
-                zoom_link = None
+        try:
+            zoom_link = urlparse(row["meeting id with password"])
+            assert zoom_link.scheme.startswith("https")
+        except AssertionError:
+            zoom_link = None
 
         if zoom_link is None:
             print("Invalid zoom link value for {}: {}" \
@@ -757,13 +748,12 @@ def import_fas_schedule_from_csv(ctx, filepath):
 
         subject = "{} - {}".format(row["course code"], row["type"])
         schedule_data[zoom_series_id]["opencast_subject"] = subject
-
-        day = day_of_week_map.get(row["day"])
-        if day is None:
-            raise Exit("Got bad day value: {}".format(row["day"]))
-
+        
         schedule_data[zoom_series_id].setdefault("Days", set())
-        schedule_data[zoom_series_id]["Days"].add(day)
+        for day in row["day"].strip():
+            if day not in valid_days:
+                raise Exit("Got bad day value: {}".format(letter))
+            schedule_data[zoom_series_id]["Days"].add(day)
 
         schedule_data[zoom_series_id].setdefault("Time", set())
         time_object = datetime.strptime(row["start"], "%H:%M")
