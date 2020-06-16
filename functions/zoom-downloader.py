@@ -448,7 +448,6 @@ class SQSMessage():
                 message_sent = self.queue.send_message(
                     MessageBody=json.dumps(self.message),
                     MessageGroupId=self.message["uuid"],
-                    MessageDeduplicationId=self.message["uuid"],
                     MessageAttributes=message_attributes
                 )
             else:
