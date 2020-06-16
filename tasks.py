@@ -22,7 +22,7 @@ from pytz import timezone
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
 
-# surpress warnings for cases where we want to ingore dev cluster dummy certificates
+# suppress warnings for cases where we want to ingore dev cluster dummy certificates
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
