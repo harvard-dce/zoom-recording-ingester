@@ -171,7 +171,6 @@ class Upload:
             # regardless of the allow_multiple_ingests flag
             mpid = str(UUID(md5(self.meeting_uuid.encode()).hexdigest()))
             if self.already_ingested(mpid):
-                mpid = None
                 if self.data["allow_multiple_ingests"]:
                     # random uuid
                     mpid = str(uuid4())
@@ -181,8 +180,9 @@ class Upload:
                 else:
                     logger.warning(
                         "Episode with deterministic mediapackage id"
-                        f" {self.mediapackage_id} already ingested"
+                        f" {mpid} already ingested"
                     )
+                    mpid = None
             else:
                 logger.info(
                     f"Created mediapackage id {mpid} "

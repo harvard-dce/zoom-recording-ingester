@@ -1,4 +1,4 @@
-.env
+.env*
 dist/
 *.zip
 __pycache__
@@ -6,3 +6,8 @@ __pycache__
 .tox/
 outfile.txt
 .coverage
+venv/
+.idea/
+.gitconfig
+.ipynb*
+.vscode*
