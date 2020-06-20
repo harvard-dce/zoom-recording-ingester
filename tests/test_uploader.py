@@ -7,6 +7,8 @@ import inspect
 from os.path import dirname, join
 from importlib import import_module
 from datetime import datetime
+from uuid import UUID
+from hashlib import md5
 
 TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 
@@ -32,7 +34,6 @@ def test_too_many_uploads(handler, mocker):
     assert uploader.process_upload.call_count == 0
 
 
-
 def test_unknown_uploads(handler, mocker):
     mocker.patch.object(uploader, 'sqs', mocker.Mock())
     uploader.sqs.get_queue_by_name = mocker.Mock()
@@ -48,7 +49,6 @@ def test_unknown_uploads(handler, mocker):
     mocker.patch.object(uploader, 'OC_TRACK_UPLOAD_MAX', 5)
     handler(uploader, {})
     assert uploader.process_upload.call_count == 0
-
 
 
 def test_upload_count_ok(handler, mocker):
@@ -69,7 +69,6 @@ def test_upload_count_ok(handler, mocker):
     mocker.patch.object(uploader, 'OC_TRACK_UPLOAD_MAX', 5)
     handler(uploader, {})
     assert uploader.process_upload.call_count == 1
-
 
 
 def test_no_messages_available(handler, mocker, caplog):
@@ -139,6 +138,39 @@ def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
     uploader.process_upload = mocker.Mock(return_value=None)
     handler(uploader, {})
     assert "No workflow initiated." == caplog.messages[-1]
+
+
+def test_first_ingest_mpid_from_uuid(mocker):
+    mock_uuid = "mock_uuid"
+    upload_data = {
+        "uuid": mock_uuid,
+        "allow_multiple_ingests": False
+    }
+    upload = uploader.Upload(upload_data)
+    upload.already_ingested = mocker.Mock(return_value=False)
+    expected_mpid = str(UUID(md5(mock_uuid.encode()).hexdigest()))
+    assert upload.mediapackage_id == expected_mpid
+
+
+def test_multiple_ingests_not_allowed(mocker):
+    upload_data = {
+        "uuid": "mock_uuid",
+        "allow_multiple_ingests": False
+    }
+    upload = uploader.Upload(upload_data)
+    upload.already_ingested = mocker.Mock(return_value=True)
+    assert not upload.mediapackage_id
+
+
+def test_multiple_ingests_allowed(mocker):
+    upload_data = {
+        "uuid": "mock_uuid",
+        "allow_multiple_ingests": True
+    }
+    upload = uploader.Upload(upload_data)
+    upload.already_ingested = mocker.Mock(return_value=True)
+    # mock already_ingested to return true
+    assert upload.mediapackage_id
 
 
 def test_get_current_upload_count(mocker):
