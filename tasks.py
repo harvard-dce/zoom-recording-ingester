@@ -84,6 +84,9 @@ def production_failsafe(ctx):
     It is meant to be prepended to the execution of other tasks to force a confirmation
     when a task is being executed that could have an impact on a production stack
     """
+    if not STACK_NAME:
+        raise Exit("No STACK_NAME specified")
+
     if not NONINTERACTIVE and PROD_IDENTIFIER in STACK_NAME.lower():
         print("You are about to run this task on a production system")
         ok = input('are you sure? [y/N] ').lower().strip().startswith('y')
@@ -338,15 +341,15 @@ def exec_on_demand(ctx, uuid, oc_series_id=None, allow_multiple_ingests=False):
 @task(help={'uuid': 'meeting instance uuid',
             'ignore_schedule': ('ignore schedule, use default series if '
                                 'available'),
-            'on_demand_series_id': ('opencast series id to use regardless of '
+            'oc_series_id': ('opencast series id to use regardless of '
                                     'schedule')})
-def exec_pipeline(ctx, uuid, ignore_schedule=False, on_demand_series_id=None):
+def exec_pipeline(ctx, uuid, ignore_schedule=False, oc_series_id=None):
     """
     Manually trigger the webhook handler, downloader, and uploader.
     """
 
     print("\nTriggering webhook...\n")
-    exec_webhook(ctx, uuid, on_demand_series_id)
+    exec_webhook(ctx, uuid, oc_series_id)
 
     # Keep retrying downloader until some messages are processed
     # or it fails.
@@ -373,8 +376,8 @@ def exec_pipeline(ctx, uuid, ignore_schedule=False, on_demand_series_id=None):
         return
 
 
-@task(help={'uuid': 'meeting instance uuid', 'on_demand_series_id': 'opencast series id'})
-def exec_webhook(ctx, uuid, on_demand_series_id=None):
+@task(help={'uuid': 'meeting instance uuid', 'oc_series_id': 'opencast series id'})
+def exec_webhook(ctx, uuid, oc_series_id=None):
     """
     Manually call the webhook endpoint. Positional arguments: uuid, host_id
     """
@@ -401,11 +404,11 @@ def exec_webhook(ctx, uuid, on_demand_series_id=None):
         if "id" not in file and file["file_type"].lower() != "mp4":
             data["recording_files"].remove(file)
 
-    if on_demand_series_id:
+    if oc_series_id:
         event_body = {
             "event": "on.demand.ingest",
             "payload": {
-                "on_demand_series_id": on_demand_series_id.strip(),
+                "on_demand_series_id": oc_series_id.strip(),
                 "object": data
             }
         }
@@ -1214,6 +1217,7 @@ def __publish_version(ctx, func, description):
 
 
 def __build_function(ctx, func, upload_to_s3=False):
+    print(f"Building {func} function")
     req_file = join(dirname(__file__), 'function_requirements/{}.txt'.format(func))
 
     zip_path = join(dirname(__file__), 'dist/{}.zip'.format(func))
@@ -1223,7 +1227,7 @@ def __build_function(ctx, func, upload_to_s3=False):
         shutil.rmtree(build_path)
 
     if exists(req_file):
-        ctx.run("pip install -U -r {} -t {}".format(req_file, build_path))
+        ctx.run("pip install -U -r {} -t {}".format(req_file, build_path), hide=1)
 
     for module in [func, 'common']:
         module_path = join(dirname(__file__), 'functions/{}.py'.format(module))
@@ -1244,7 +1248,7 @@ def __build_function(ctx, func, upload_to_s3=False):
             pass
 
     with ctx.cd(build_path):
-        ctx.run("zip -r {} .".format(zip_path))
+        ctx.run("zip -r {} .".format(zip_path), hide=1)
 
     if upload_to_s3:
         ctx.run("aws {} s3 cp {} s3://{}/{}/{}.zip".format(
@@ -1252,11 +1256,13 @@ def __build_function(ctx, func, upload_to_s3=False):
             zip_path,
             getenv("LAMBDA_CODE_BUCKET"),
             STACK_NAME,
-            func)
+            func),
+            hide=1
         )
 
 
 def __update_function(ctx, func):
+    print(f"Updating {func} function")
     lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
     zip_path = join(dirname(__file__), 'dist', func + '.zip')
 
@@ -1270,7 +1276,7 @@ def __update_function(ctx, func):
                 lambda_function_name,
                 zip_path
             )
-    ctx.run(cmd)
+    ctx.run(cmd, hide=1)
 
 
 def __set_debug(ctx, debug_val):

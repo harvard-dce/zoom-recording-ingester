@@ -94,26 +94,22 @@ def handler(event, context):
     upload_message = messages[0]
     logger.debug({
         "queue_message": {
-            "attributes": upload_message.attributes,
             "body": upload_message.body
         }
     })
 
     try:
         upload_data = json.loads(upload_message.body)
-        logger.info({
-            "minutes_in_pipeline": minutes_in_pipeline(
-                upload_data["webhook_received_time"]),
-            "body": upload_data
-        })
+        logger.debug({"processing": upload_data})
 
         wf_id = process_upload(upload_data)
         upload_message.delete()
         if wf_id:
-            logger.info("Workflow id {} initiated".format(wf_id))
+            logger.info(f"Workflow id {wf_id} initiated.")
             # only ingest one per invocation
         else:
             logger.info("No workflow initiated.")
+
     except Exception as e:
         logger.exception(e)
         raise
@@ -142,8 +138,8 @@ def get_current_upload_count():
 
 def process_upload(upload_data):
     upload = Upload(upload_data)
-    upload.upload()
-    return upload.workflow_id
+    wf_id = upload.upload()
+    return wf_id
 
 
 class Upload:
@@ -239,10 +235,10 @@ class Upload:
 
     @property
     def workflow_id(self):
-        if not hasattr(self, "workflow_xml"):
-            logger.warning("No workflow xml yet!")
-            return None
         if not hasattr(self, "_workflow_id"):
+            if not hasattr(self, "workflow_xml"):
+                logger.warning("No workflow xml yet!")
+                return None
             root = ET.fromstring(self.workflow_xml)
             self._workflow_id = root.attrib["id"]
         return self._workflow_id
@@ -254,7 +250,16 @@ class Upload:
             return None
         self.get_series_catalog()
         self.ingest()
-        return self.workflow_id
+
+        wf_id = self.workflow_id
+        logger.info({
+            "workflow_id": wf_id,
+            "mediapackage_id": self.mediapackage_id,
+            "minutes_in_pipeline": minutes_in_pipeline(
+                    self.data["webhook_received_time"]),
+            "recording_data": self.data
+        })
+        return wf_id
 
     def already_ingested(self, mpid):
         endpoint = "/workflow/instances.json?mp={}".format(mpid)
