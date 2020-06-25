@@ -34,10 +34,14 @@ class ZipFunction(core.Construct):
         }
 
         if vpc_id is not None and security_group_id is not None:
-            function_props["vpc"] = ec2.Vpc.from_lookup(self, "vpc", vpc_id=vpc_id),
-            function_props["security_group"] = ec2.SecurityGroup.from_security_group_id(
-                self, "securitygroup", security_group_id=security_group_id
+            opencast_vpc = ec2.Vpc.from_lookup(self, "OpencastVpc", vpc_id=vpc_id),
+            opencast_security_group = ec2.SecurityGroup.from_security_group_id(
+                self, "OpencastSecurityGroup", security_group_id=security_group_id
             )
+            function_props.update({
+                "vpc": opencast_vpc,
+                "security_groups": [opencast_security_group]
+            })
 
         self.function = aws_lambda.Function(self, "function", **function_props)
         self.alias = aws_lambda.Alias(

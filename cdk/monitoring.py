@@ -7,12 +7,7 @@ from aws_cdk import (
 
 class ZipMonitoring(core.Construct):
 
-    def __init__(self, scope: core.Construct, id: str,
-            notification_email,
-            api,
-            functions,
-            queues,
-    ):
+    def __init__(self, scope: core.Construct, id: str, notification_email):
         super().__init__(scope, id)
         stack_name = core.Stack.of(self).stack_name
 

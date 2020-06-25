@@ -63,3 +63,7 @@ def oc_base_url():
     dns_name = result["Reservations"][0]["Instances"][0]["PublicDnsName"]
     return "http://" + dns_name.strip()
 
+def aws_account_id():
+    sts = boto3.client('sts')
+    caller_id = sts.get_caller_identity()
+    return caller_id["Account"]
