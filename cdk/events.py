@@ -15,4 +15,3 @@ class ZipEvent(core.Construct):
             schedule=events.Schedule.rate(core.Duration.minutes(event_rate)),
             targets=[events_targets.LambdaFunction(function.function)]
         )
-        
