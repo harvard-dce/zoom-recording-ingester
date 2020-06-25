@@ -19,7 +19,6 @@ class ZipFunction(core.Construct):
         super().__init__(scope, id)
 
         self.stack_name = core.Stack.of(self).stack_name
-        self.handler = handler
         environment = {key: str(val) for key,val in environment.items() if val}
 
         function_props = {
