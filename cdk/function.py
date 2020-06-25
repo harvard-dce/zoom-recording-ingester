@@ -19,6 +19,7 @@ class ZipFunction(core.Construct):
         super().__init__(scope, id)
 
         self.stack_name = core.Stack.of(self).stack_name
+        self.handler = handler
         environment = {key: str(val) for key,val in environment.items() if val}
 
         function_props = {
@@ -34,7 +35,7 @@ class ZipFunction(core.Construct):
         }
 
         if vpc_id is not None and security_group_id is not None:
-            opencast_vpc = ec2.Vpc.from_lookup(self, "OpencastVpc", vpc_id=vpc_id),
+            opencast_vpc = ec2.Vpc.from_lookup(self, "OpencastVpc", vpc_id=vpc_id)
             opencast_security_group = ec2.SecurityGroup.from_security_group_id(
                 self, "OpencastSecurityGroup", security_group_id=security_group_id
             )

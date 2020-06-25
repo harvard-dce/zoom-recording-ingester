@@ -22,6 +22,7 @@ from .monitoring import ZipMonitoring
 class ZipStack(core.Stack):
 
     def __init__(self, scope: core.Construct, id: str,
+            lambda_release_alias,
             lambda_code_bucket,
             notification_email,
             zoom_api_key,
@@ -164,7 +165,8 @@ class ZipStack(core.Stack):
 
         api = ZipApi(self, "RestApi",
             on_demand_function=on_demand,
-            webhook_function=webhook
+            webhook_function=webhook,
+            lambda_release_alias=lambda_release_alias
         )
 
         download_event = ZipEvent(self, "DownloadEvent",

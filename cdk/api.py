@@ -8,7 +8,8 @@ class ZipApi(core.Construct):
 
     def __init__(self, scope: core.Construct, id: str,
             webhook_function,
-            on_demand_function):
+            on_demand_function,
+            lambda_release_alias):
         super().__init__(scope, id)
 
         stack_name = core.Stack.of(self).stack_name
@@ -16,7 +17,7 @@ class ZipApi(core.Construct):
         self.rest_api_name = f"{stack_name}-api"
         self.api = apigw.LambdaRestApi(
             self, "api",
-            handler=webhook_function,  # default handler
+            handler=webhook_function.function,  # default handler
             rest_api_name=self.rest_api_name,
             proxy=False,
             deploy=True,
@@ -44,7 +45,7 @@ class ZipApi(core.Construct):
         )
 
         self.ingest_resource = self.api.root.add_resource("ingest")
-        on_demand_integration = apigw.LambdaIntegration(on_demand_function)
+        on_demand_integration = apigw.LambdaIntegration(on_demand_function.function)
         self.ingest_method = self.ingest_resource.add_method(
             "POST",
             on_demand_integration,
@@ -58,10 +59,10 @@ class ZipApi(core.Construct):
             ]
         )
 
-        on_demand_function.add_environment(
+        on_demand_function.function.add_environment(
             "WEBHOOK_ENDPOINT_URL",
-            (f"https://{self.api.rest_api_id}.execute-api.{self.region}"
-             f".amazonaws.com/{self.lambda_release_alias}/new_recording")
+            (f"https://{self.api.rest_api_id}.execute-api.{core.Stack.of(self).region}"
+             f".amazonaws.com/{lambda_release_alias}/new_recording")
         )
 
     def add_monitoring(self, monitoring):

@@ -11,7 +11,7 @@ class ZipEvent(core.Construct):
         stack_name = core.Stack.of(self).stack_name
         self.rule = events.Rule(self, "rule",
             enabled=True,
-            rule_name=f"{stack_name}-{function.function_name}-rule",
+            rule_name=f"{stack_name}-{function.function.function_name}-rule",
             schedule=events.Schedule.rate(core.Duration.minutes(event_rate)),
-            targets=[events_targets.LambdaFunction(function)]
+            targets=[events_targets.LambdaFunction(function.function)]
         )

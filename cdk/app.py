@@ -24,6 +24,7 @@ AWS_REGION = getenv("AWS_REGION", required=False) or \
 oc_vpc_id, oc_security_group_id =  vpc_components()
 
 stack_props = {
+    "lambda_release_alias": getenv("LAMBDA_RELEASE_ALIAS"),
     "lambda_code_bucket": getenv("LAMBDA_CODE_BUCKET"),
     "notification_email": getenv("NOTIFICATION_EMAIL"),
     "zoom_api_key": getenv("ZOOM_API_KEY"),
