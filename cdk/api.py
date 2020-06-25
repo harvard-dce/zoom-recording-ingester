@@ -67,17 +67,14 @@ class ZipApi(core.Construct):
 
     def add_monitoring(self, monitoring):
 
-        for metric_name in ["4XXError", "5XXError"]:
-            for resource in [self.new_recording_resource, self.ingest_resource]:
-                alarm = cloudwatch.Alarm(self, f"{metric_name}Alarm",
+        for metric_name in ["4XX", "5XX"]:
+                alarm = cloudwatch.Alarm(self, f"ZoomWebhook{metric_name}Alarm",
                     metric=cloudwatch.Metric(
                         metric_name=metric_name,
                         namespace="AWS/ApiGateway",
                         dimensions={
                             "ApiName": self.rest_api_name,
-                            "Stage": "live",
-                            "Method": "POST",
-                            "Resource": resource.path,
+                            "Stage": "live"
                         },
                         period=core.Duration.minutes(1)
                     ),

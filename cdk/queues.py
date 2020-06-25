@@ -51,6 +51,7 @@ class ZipQueues(core.Construct):
             metric=self.upload_queue.metric("ApproximateNumberOfMessagesVisible"),
             statistic="sum",
             threshold=40,
+            evaluation_periods=1,
             period=core.Duration.minutes(5),
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD
         )
