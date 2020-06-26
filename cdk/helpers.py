@@ -1,7 +1,12 @@
 import boto3
 import jmespath
 from os import getenv as _getenv
+from functools import lru_cache
 from functions.common import zoom_api_request
+
+AWS_PROFILE = _getenv("AWS_PROFILE")
+if AWS_PROFILE is not None:
+    boto3.setup_default_session(profile_name=AWS_PROFILE)
 
 # wrap the default getenv so we can enforce required vars
 def getenv(param_name, required=True):
@@ -63,7 +68,13 @@ def oc_base_url():
     dns_name = result["Reservations"][0]["Instances"][0]["PublicDnsName"]
     return "http://" + dns_name.strip()
 
+
+@lru_cache()
+def aws_identity():
+    return boto3.client('sts').get_caller_identity()
+
 def aws_account_id():
-    sts = boto3.client('sts')
-    caller_id = sts.get_caller_identity()
-    return caller_id["Account"]
+    return aws_identity()['Account']
+
+def aws_region():
+    return aws_identity()['Region']

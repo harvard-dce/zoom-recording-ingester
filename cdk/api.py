@@ -58,10 +58,29 @@ class ZipApi(core.Construct):
             ]
         )
 
+        def endpoint_url(resource_name):
+            return (f"https://{self.api.rest_api_id}.execute-api."
+                    f"{core.Stack.of(self).region}.amazonaws.com/"
+                    f"live/{resource_name}")
+
         on_demand_function.add_environment(
             "WEBHOOK_ENDPOINT_URL",
-            (f"https://{self.api.rest_api_id}.execute-api.{core.Stack.of(self).region}"
-             f".amazonaws.com/live/new_recording")
+            endpoint_url("new_recording")
+        )
+
+        core.CfnOutput(self, "WebhookEndpoint",
+            export_name=f"{stack_name}-webhook-endpoint-url",
+            value=endpoint_url("new_recording")
+        )
+
+        core.CfnOutput(self, "OnDemandEndpoint",
+            export_name=f"{stack_name}-on-demand-endpoint-url",
+            value=endpoint_url("ingest")
+        )
+
+        core.CfnOutput(self, "RestApiId",
+            export_name=f"{stack_name}-rest-api-id",
+            value=self.api.rest_api_id
         )
 
     def add_monitoring(self, monitoring):
