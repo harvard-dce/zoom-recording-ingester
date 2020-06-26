@@ -15,6 +15,7 @@ from invoke.exceptions import Exit
 from os import symlink, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
+from pathlib import Path
 from tabulate import tabulate
 from pprint import pprint
 from functions.common import zoom_api_request
@@ -25,7 +26,8 @@ from urllib.parse import urlparse, quote
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-load_dotenv(join(dirname(__file__), '.env'))
+dotenv_path = Path('.') / '.env'
+load_dotenv(dotenv_path, override=True)
 
 AWS_ACCOUNT_ID = None
 AWS_PROFILE = env('AWS_PROFILE')
