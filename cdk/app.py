@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import boto3
 from aws_cdk import core
 from pathlib import Path
 
@@ -12,14 +11,12 @@ from .helpers import (
     vpc_components,
     oc_base_url,
     zoom_admin_id,
-    aws_account_id
+    aws_account_id,
+    aws_region
 )
 from .stack import ZipStack
 
 STACK_NAME = getenv("STACK_NAME")
-AWS_REGION = getenv("AWS_REGION", required=False) or \
-             getenv("AWS_DEFAULT_REGION", required=False) or \
-             "us-east-1"
 
 oc_vpc_id, oc_security_group_id =  vpc_components()
 
@@ -55,7 +52,7 @@ stack = ZipStack(
     **stack_props,
     env=core.Environment(
         account=aws_account_id(),
-        region=AWS_REGION
+        region=aws_region()
     )
 )
 

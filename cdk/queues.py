@@ -14,7 +14,7 @@ class ZipQueues(core.Construct):
             max_receive_count=2,
             queue=sqs.Queue(
                 self, "DownloadDeadLetterQueue",
-                queue_name=f"{self.stack_name}-download-dql",
+                queue_name=f"{self.stack_name}-download-dlq",
                 retention_period=core.Duration.days(14)
             )
         )
@@ -26,11 +26,11 @@ class ZipQueues(core.Construct):
             dead_letter_queue=self.download_dlq
         )
 
-        self.upload_dql = sqs.DeadLetterQueue(
+        self.upload_dlq = sqs.DeadLetterQueue(
             max_receive_count=2,
             queue=sqs.Queue(
                 self, "UploadDeadLetterQueue",
-                queue_name=f"{self.stack_name}-upload-dql.fifo",
+                queue_name=f"{self.stack_name}-upload-dlq.fifo",
                 retention_period=core.Duration.days(14)
             )
         )
@@ -42,8 +42,20 @@ class ZipQueues(core.Construct):
             visibility_timeout=core.Duration.seconds(300),
             content_based_deduplication=False,
             fifo=True,
-            dead_letter_queue=self.upload_dql
+            dead_letter_queue=self.upload_dlq
         )
+
+        url_exports = [
+            ("download-queue", self.download_queue),
+            ("download-dlq", self.download_dlq.queue),
+            ("updload-queue", self.upload_queue),
+            ("upload-dlq", self.upload_dlq.queue)
+        ]
+        for name, queue in url_exports:
+            core.CfnOutput(self, f"{name}Export",
+                export_name=f"{self.stack_name}-{name}-url",
+                value=queue.queue_url
+            )
 
     def add_monitoring(self, monitoring):
 

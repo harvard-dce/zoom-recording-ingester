@@ -15,21 +15,20 @@ from invoke.exceptions import Exit
 from os import symlink, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
-from pathlib import Path
 from tabulate import tabulate
 from pprint import pprint
 from functions.common import zoom_api_request
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
+from cdk.helpers import aws_account_id
 
 # supress warnings for cases where we want to ingore dev cluster dummy certificates
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-dotenv_path = Path('.') / '.env'
+dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path, override=True)
 
-AWS_ACCOUNT_ID = None
 AWS_PROFILE = env('AWS_PROFILE')
 AWS_DEFAULT_REGION = env('AWS_DEFAULT_REGION', 'us-east-1')
 STACK_NAME = env('STACK_NAME')
@@ -53,12 +52,8 @@ if AWS_PROFILE is not None:
 
 def get_queue_url(queue_name):
 
-    global AWS_ACCOUNT_ID
-    if AWS_ACCOUNT_ID is None:
-        AWS_ACCOUNT_ID = boto3.client('sts').get_caller_identity()['Account']
-
     queue_url = 'https://queue.amazonaws.com/{}/{}-{}'.format(
-        AWS_ACCOUNT_ID,
+        aws_account_id(),
         STACK_NAME,
         queue_name
     )
@@ -245,7 +240,7 @@ def generate_resource_policy(ctx):
     for s in resource_policy["Statement"]:
         s["Resource"] = s["Resource"].format(
             region=AWS_DEFAULT_REGION,
-            account=account_id(ctx),
+            account=aws_account_id(),
             api_id=api_id
         )
 
@@ -382,7 +377,7 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     Manually trigger downloader.
     """
 
-    if queue_is_empty(ctx, "downloads"):
+    if queue_is_empty(ctx, "download"):
         print("No downloads in queue")
         return
 
@@ -394,7 +389,7 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     if not qualifier:
         qualifier = getenv('LAMBDA_RELEASE_ALIAS')
 
-    cmd = ("aws lambda invoke --function-name='{}-zoom-downloader-function' "
+    cmd = ("aws lambda invoke --function-name='{}-zoom-downloader' "
             "--payload='{}' --qualifier {} output.txt").format(
         STACK_NAME,
         json.dumps(payload),
@@ -411,14 +406,14 @@ def exec_uploader(ctx, qualifier=None):
     """
     Manually trigger uploader.
     """
-    if queue_is_empty(ctx, "uploads.fifo"):
+    if queue_is_empty(ctx, "upload.fifo"):
         print("No uploads in queue")
         return
 
     if qualifier is None:
         qualifier = getenv('LAMBDA_RELEASE_ALIAS')
 
-    cmd = ("aws lambda invoke --function-name='{}-zoom-uploader-function' "
+    cmd = ("aws lambda invoke --function-name='{}-zoom-uploader' "
            "--qualifier {} outfile.txt").format(STACK_NAME, qualifier)
 
     print(cmd)
@@ -436,7 +431,6 @@ def status(ctx):
     Show table of CloudFormation stack details
     """
     __show_stack_status(ctx)
-    __show_webhook_endpoint(ctx)
     __show_function_status(ctx)
     __show_sqs_status(ctx)
 
@@ -470,8 +464,8 @@ def retry_downloads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    downloads_dlq = get_queue_url("downloads-deadletter")
-    downloads_queue = get_queue_url("downloads")
+    downloads_dlq = get_queue_url("download-dlq")
+    downloads_queue = get_queue_url("download")
     __move_messages(downloads_dlq, downloads_queue, limit=limit, uuid=uuid)
 
 
@@ -480,8 +474,8 @@ def retry_uploads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    uploads_dql = get_queue_url("uploads-deadletter.fifo")
-    uploads_queue = get_queue_url("uploads.fifo")
+    uploads_dql = get_queue_url("upload-dlq.fifo")
+    uploads_queue = get_queue_url("upload.fifo")
     __move_messages(uploads_dql, uploads_queue, limit=limit, uuid=uuid)
 
 
@@ -490,8 +484,8 @@ def view_downloads(ctx, limit=20):
     """
     View items in download queues. Optional: --limit (default 20).
     """
-    downloads_queue = get_queue_url("downloads")
-    downloads_dlq = get_queue_url("downloads-deadletter")
+    downloads_queue = get_queue_url("download")
+    downloads_dlq = get_queue_url("download-dlq")
     __view_messages(downloads_queue, limit=limit)
     __view_messages(downloads_dlq, limit=limit)
 
@@ -501,8 +495,8 @@ def view_uploads(ctx, limit=20):
     """
     View items in upload queues. Optional: --limit (default 20).
     """
-    uploads_queue = get_queue_url("uploads.fifo")
-    uploads_dql = get_queue_url("uploads-deadletter.fifo")
+    uploads_queue = get_queue_url("upload.fifo")
+    uploads_dql = get_queue_url("upload-dlq.fifo")
     __view_messages(uploads_queue, limit=limit)
     __view_messages(uploads_dql, limit=limit)
 
@@ -694,7 +688,7 @@ def logs(ctx, function=None, watch=False):
 
     procs = []
     for func in functions:
-        group = "/aws/lambda/{}-{}-function".format(STACK_NAME, func)
+        group = "/aws/lambda/{}-{}".format(STACK_NAME, func)
         procs.append(
             Process(target=_awslogs, name=func, args=(group, watch))
         )
@@ -823,14 +817,6 @@ def oc_host(ctx, layer_name):
     return res.stdout.strip()
 
 
-def account_id(ctx):
-
-    cmd = ("aws {} sts get-caller-identity "
-           "--query 'Account' --output text").format(profile_arg())
-    res = ctx.run(cmd, hide=1)
-    return res.stdout.strip()
-
-
 def api_gateway_id(ctx):
 
     cmd = ("aws {} apigateway get-rest-apis "
@@ -875,7 +861,7 @@ def __invoke_api(ctx, endpoint, event_body):
 
 def __update_release_alias(ctx, func, version, description):
     print("Setting {} '{}' alias to version {}".format(func, getenv('LAMBDA_RELEASE_ALIAS'), version))
-    lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+    lambda_function_name = "{}-{}".format(STACK_NAME, func)
     if description is None:
         description = "''"
     alias_cmd = ("aws {} lambda update-alias --function-name {} "
@@ -894,7 +880,7 @@ def __update_release_alias(ctx, func, version, description):
 def __publish_version(ctx, func, description):
 
     print("Publishing new version of {}".format(func))
-    lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+    lambda_function_name = "{}-{}".format(STACK_NAME, func)
     if description is None:
         description = "''"
     version_cmd = ("aws {} lambda publish-version --function-name {} "
@@ -948,7 +934,7 @@ def __build_function(ctx, func, upload_to_s3=False):
 
 
 def __update_function(ctx, func):
-    lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+    lambda_function_name = "{}-{}".format(STACK_NAME, func)
     zip_path = join(dirname(__file__), 'dist', func + '.zip')
 
     if not exists(zip_path):
@@ -966,7 +952,7 @@ def __update_function(ctx, func):
 
 def __set_debug(ctx, debug_val):
     for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
-        func_name = "{}-{}-function".format(STACK_NAME, func)
+        func_name = "{}-{}".format(STACK_NAME, func)
         cmd = ("aws {} lambda get-function-configuration --output json "
                "--function-name {}").format(profile_arg(), func_name)
         res = ctx.run(cmd, hide=1)
@@ -975,6 +961,7 @@ def __set_debug(ctx, debug_val):
 
         if func_env.get('DEBUG') is not None \
                 and int(func_env.get('DEBUG')) == debug_val:
+            print(f"{func_name} DEBUG is off")
             continue
 
         func_env['DEBUG'] = debug_val
@@ -1185,22 +1172,6 @@ def __show_stack_status(ctx):
     ctx.run(cmd)
 
 
-def __show_webhook_endpoint(ctx):
-
-    cmd = ("aws {} cloudformation describe-stack-resources --stack-name {} "
-           "--query \"StackResources[?ResourceType=='AWS::ApiGateway::RestApi'].PhysicalResourceId\" "
-           "--output text").format(profile_arg(), STACK_NAME)
-    rest_api_id = ctx.run(cmd, hide=True).stdout.strip()
-
-    webhook_url = "https://{}.execute-api.{}.amazonaws.com/{}/new_recording" \
-        .format(rest_api_id, AWS_DEFAULT_REGION, getenv("LAMBDA_RELEASE_ALIAS"))
-    print(tabulate([["Webhook Endpoint", webhook_url]], tablefmt="grid"))
-
-    on_demand_url = "https://{}.execute-api.{}.amazonaws.com/{}/ingest" \
-        .format(rest_api_id, AWS_DEFAULT_REGION, getenv("LAMBDA_RELEASE_ALIAS"))
-    print(tabulate([["On-Demand Endpoint", on_demand_url]], tablefmt="grid"))
-
-
 def __show_function_status(ctx):
 
     status_table = [
@@ -1215,7 +1186,7 @@ def __show_function_status(ctx):
 
     for func in FUNCTION_NAMES:
 
-        lambda_function_name = "{}-{}-function".format(STACK_NAME, func)
+        lambda_function_name = "{}-{}".format(STACK_NAME, func)
         cmd = ("aws {} lambda list-aliases --function-name {} "
                "--query \"Aliases[?Name=='{}'].[FunctionVersion,Description]\" "
                "--output text") \
@@ -1262,10 +1233,10 @@ def __show_sqs_status(ctx):
     ]
 
     queue_names = [
-        'uploads.fifo',
-        'uploads-deadletter.fifo',
-        'downloads',
-        'downloads-deadletter'
+        'upload.fifo',
+        'upload-dlq.fifo',
+        'download',
+        'download-dlq'
     ]
 
     for queue_name in queue_names:
@@ -1299,7 +1270,7 @@ def __find_recording_log_events(ctx, function, uuid):
     else:
         return
 
-    log_group = '/aws/lambda/{}-{}-function'.format(STACK_NAME, function)
+    log_group = '/aws/lambda/{}-{}'.format(STACK_NAME, function)
 
     for log_stream, request_id in __request_ids_from_logs(ctx, log_group, filter_pattern):
 
