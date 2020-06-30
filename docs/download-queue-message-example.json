@@ -30,5 +30,6 @@
   "received_time": "2020-03-12T22:40:00Z",
   // optional fields
   "on_demand_series_id": "2020019999",
-  "allow_multiple_ingests": true
+  "allow_multiple_ingests": true,
+  "zoom_processing_minutes": 40
 }

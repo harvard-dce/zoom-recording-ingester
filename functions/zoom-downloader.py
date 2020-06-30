@@ -324,7 +324,7 @@ class Download:
             logger.info("Ignoring schedule")
         else:
             self.opencast_series_id = self._series_id_from_schedule
-            if self.opencast_series_id is not None:
+            if self.opencast_series_id:
                 logger.info("Matched with opencast series '{}'!"
                             .format(self.opencast_series_id))
                 return True
