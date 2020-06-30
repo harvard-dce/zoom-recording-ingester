@@ -29,7 +29,8 @@ class ZipFunction(core.Construct):
             ),
             "handler": f"{name}.handler",
             "timeout": core.Duration.seconds(timeout),
-            "environment": environment
+            "environment": environment,
+            "log_retention": logs.RetentionDays.SIX_MONTHS
         }
 
         if vpc_id is not None and security_group_id is not None:

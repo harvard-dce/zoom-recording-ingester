@@ -2,7 +2,8 @@ from aws_cdk import (
     core,
     aws_apigateway as apigw,
     aws_cloudwatch as cloudwatch,
-    aws_iam as iam
+    aws_iam as iam,
+    aws_logs as logs
 )
 
 class ZipApi(core.Construct):
@@ -40,6 +41,12 @@ class ZipApi(core.Construct):
         )
 
         self.rest_api_name = f"{stack_name}-api"
+
+        log_group = logs.LogGroup(self, "apilogs",
+            log_group_name=f"/aws/apigateway/{self.rest_api_name}/access_logs",
+            retention=logs.RetentionDays.SIX_MONTHS
+        )
+
         self.api = apigw.LambdaRestApi(
             self, "api",
             handler=webhook_function,  # default handler
@@ -48,6 +55,8 @@ class ZipApi(core.Construct):
             deploy=True,
             policy=policy,
             deploy_options=apigw.StageOptions(
+                access_log_destination=apigw.LogGroupLogDestination(log_group),
+                access_log_format=apigw.AccessLogFormat.clf(),
                 data_trace_enabled=True,
                 metrics_enabled=True,
                 logging_level=apigw.MethodLoggingLevel.INFO,
