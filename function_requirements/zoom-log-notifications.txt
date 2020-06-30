@@ -5,18 +5,18 @@
 #    pip-compile function_requirements/zoom-log-notifications.in
 #
 aws-lambda-logging==0.1.1  # via -r function_requirements/common-requirements.in
-boto3==1.12.20            # via -r function_requirements/common-requirements.in
-botocore==1.15.20         # via boto3, s3transfer
-certifi==2019.11.28       # via requests
+boto3==1.14.14            # via -r function_requirements/common-requirements.in
+botocore==1.17.14         # via boto3, s3transfer
+certifi==2020.6.20        # via requests
 chardet==3.0.4            # via requests
 docutils==0.15.2          # via botocore
-idna==2.9                 # via requests
-jmespath==0.9.5           # via boto3, botocore
+idna==2.10                # via requests
+jmespath==0.10.0          # via boto3, botocore
 pyjwt==1.7.1              # via -r function_requirements/common-requirements.in
 python-dateutil==2.8.1    # via botocore
-python-dotenv==0.12.0     # via -r function_requirements/common-requirements.in
-pytz==2019.3              # via -r function_requirements/common-requirements.in
-requests==2.23.0          # via -r function_requirements/common-requirements.in
+python-dotenv==0.13.0     # via -r function_requirements/common-requirements.in
+pytz==2020.1              # via -r function_requirements/common-requirements.in
+requests==2.24.0          # via -r function_requirements/common-requirements.in
 s3transfer==0.3.3         # via boto3
-six==1.14.0               # via python-dateutil
-urllib3==1.25.8           # via botocore, requests
+six==1.15.0               # via python-dateutil
+urllib3==1.25.9           # via botocore, requests

@@ -1,4 +1,5 @@
 from aws_cdk import core, aws_s3 as s3
+from . import names
 
 class ZipRecordingsBucket(core.Construct):
     def __init__(self, scope: core.Construct, id: str):
@@ -19,7 +20,7 @@ class ZipRecordingsBucket(core.Construct):
 
         self.bucket = s3.Bucket(
             self, "bucket",
-            bucket_name=f"{stack_name}-zoom-recording-files",
+            bucket_name=f"{stack_name}-{names.RECORDINGS_BUCKET}",
             lifecycle_rules=[two_week_lifecycle_rule],
             removal_policy=core.RemovalPolicy.DESTROY
         )
