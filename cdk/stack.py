@@ -38,6 +38,7 @@ class ZipStack(core.Stack):
             oc_flavor,
             oc_track_upload_max,
             oc_base_url,
+            ingest_allowed_ips,
             zoom_admin_id,
             oc_vpc_id,
             oc_security_group_id,
@@ -158,7 +159,8 @@ class ZipStack(core.Stack):
 
         api = ZipApi(self, "RestApi",
             on_demand_function=on_demand.function,
-            webhook_function=webhook.function
+            webhook_function=webhook.function,
+            ingest_allowed_ips=ingest_allowed_ips
         )
 
         download_event = ZipEvent(self, "DownloadEvent",

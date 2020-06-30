@@ -1,17 +1,43 @@
 from aws_cdk import (
     core,
     aws_apigateway as apigw,
-    aws_cloudwatch as cloudwatch
+    aws_cloudwatch as cloudwatch,
+    aws_iam as iam
 )
 
 class ZipApi(core.Construct):
 
     def __init__(self, scope: core.Construct, id: str,
             webhook_function,
-            on_demand_function):
+            on_demand_function,
+            ingest_allowed_ips):
         super().__init__(scope, id)
 
         stack_name = core.Stack.of(self).stack_name
+
+        policy = iam.PolicyDocument(
+            statements=[
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions= ["execute-api:Invoke"],
+                    principals=[iam.AnyPrincipal()],
+                    # note that the policy is a prop of the api which cannot reference itself
+                    # see the Cloudformation documentation for api gateway policy attribute
+                    resources=[core.Fn.join('', ['execute-api:/', '*'])]
+                ),
+                iam.PolicyStatement(
+                    effect=iam.Effect.DENY,
+                    actions=["execute-api:Invoke"],
+                    principals=[iam.AnyPrincipal()],
+                    resources=[core.Fn.join('', ['execute-api:/', '*/POST/ingest'])],
+                    conditions={
+                        "NotIpAddress": {
+                            "aws:SourceIp": ingest_allowed_ips
+                        }
+                    }
+                )
+            ]
+        )
 
         self.rest_api_name = f"{stack_name}-api"
         self.api = apigw.LambdaRestApi(
@@ -20,6 +46,7 @@ class ZipApi(core.Construct):
             rest_api_name=self.rest_api_name,
             proxy=False,
             deploy=True,
+            policy=policy,
             deploy_options=apigw.StageOptions(
                 data_trace_enabled=True,
                 metrics_enabled=True,
@@ -43,7 +70,14 @@ class ZipApi(core.Construct):
             ]
         )
 
-        self.ingest_resource = self.api.root.add_resource("ingest")
+        self.ingest_resource = self.api.root.add_resource("ingest",
+            default_cors_preflight_options=apigw.CorsOptions(
+                allow_origins=apigw.Cors.ALL_ORIGINS,
+                allow_methods=["POST", "OPTIONS"],
+                allow_headers=apigw.Cors.DEFAULT_HEADERS \
+                              + ["Accept-Language","X-Requested-With"]
+            )
+        )
         on_demand_integration = apigw.LambdaIntegration(on_demand_function)
         self.ingest_method = self.ingest_resource.add_method(
             "POST",

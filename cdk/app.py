@@ -11,14 +11,17 @@ from .helpers import (
     vpc_components,
     oc_base_url,
     zoom_admin_id,
-    aws_account_id,
-    aws_region
+    aws_account_id
 )
 from .stack import ZipStack
 
 STACK_NAME = getenv("STACK_NAME")
+AWS_REGION = getenv("AWS_REGION", required=False) or \
+             getenv("AWS_DEFAULT_REGION", required=False) or \
+             "us-east-1"
 
 oc_vpc_id, oc_security_group_id =  vpc_components()
+ingest_allowed_ips = getenv("INGEST_ALLOWED_IPS").split(',')
 
 stack_props = {
     "lambda_code_bucket": getenv("LAMBDA_CODE_BUCKET"),
@@ -38,6 +41,7 @@ stack_props = {
     "oc_track_upload_max": getenv("OC_TRACK_UPLOAD_MAX"),
     "downloader_event_rate": 2,
     "uploader_event_rate": 2,
+    "ingest_allowed_ips": ingest_allowed_ips,
     "oc_vpc_id": oc_vpc_id,
     "oc_security_group_id": oc_security_group_id,
     "oc_base_url": oc_base_url(),
@@ -52,7 +56,7 @@ stack = ZipStack(
     **stack_props,
     env=core.Environment(
         account=aws_account_id(),
-        region=aws_region()
+        region=AWS_REGION
     )
 )
 

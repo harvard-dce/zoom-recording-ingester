@@ -69,12 +69,6 @@ def oc_base_url():
     return "http://" + dns_name.strip()
 
 
-@lru_cache()
-def aws_identity():
-    return boto3.client('sts').get_caller_identity()
-
 def aws_account_id():
-    return aws_identity()['Account']
+    return boto3.client('sts').get_caller_identity()["Account"]
 
-def aws_region():
-    return aws_identity()['Region']
