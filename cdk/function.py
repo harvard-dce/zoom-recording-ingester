@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_cloudwatch as cloudwatch,
     aws_logs as logs
 )
+from . import names
 
 class ZipFunction(core.Construct):
 
@@ -48,7 +49,7 @@ class ZipFunction(core.Construct):
             self, "alias",
             version=self.function.add_version("$LATEST"),
             description="initial release",
-            alias_name="live"
+            alias_name=names.LAMBDA_RELEASE_ALIAS
         )
 
     def add_monitoring(self, monitoring):

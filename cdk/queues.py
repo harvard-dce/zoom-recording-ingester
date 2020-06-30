@@ -3,6 +3,7 @@ from aws_cdk import (
     aws_sqs as sqs,
     aws_cloudwatch as cloudwatch
 )
+from . import names
 
 class ZipQueues(core.Construct):
 
@@ -14,13 +15,13 @@ class ZipQueues(core.Construct):
             max_receive_count=2,
             queue=sqs.Queue(
                 self, "DownloadDeadLetterQueue",
-                queue_name=f"{self.stack_name}-download-dlq",
+                queue_name=f"{self.stack_name}-{names.DOWNLOAD_DLQ}",
                 retention_period=core.Duration.days(14)
             )
         )
         self.download_queue = sqs.Queue(
             self, "DownloadQueue",
-            queue_name=f"{self.stack_name}-download",
+            queue_name=f"{self.stack_name}-{names.DOWNLOAD_QUEUE}",
             retention_period=core.Duration.days(14),
             visibility_timeout=core.Duration.seconds(300),
             dead_letter_queue=self.download_dlq
@@ -30,14 +31,14 @@ class ZipQueues(core.Construct):
             max_receive_count=2,
             queue=sqs.Queue(
                 self, "UploadDeadLetterQueue",
-                queue_name=f"{self.stack_name}-upload-dlq.fifo",
+                queue_name=f"{self.stack_name}-{names.UPLOAD_DLQ}",
                 retention_period=core.Duration.days(14)
             )
         )
 
         self.upload_queue = sqs.Queue(
             self, "UploadQueue",
-            queue_name=f"{self.stack_name}-upload.fifo",
+            queue_name=f"{self.stack_name}-{names.UPLOAD_QUEUE}",
             retention_period=core.Duration.days(14),
             visibility_timeout=core.Duration.seconds(300),
             content_based_deduplication=False,
@@ -45,15 +46,18 @@ class ZipQueues(core.Construct):
             dead_letter_queue=self.upload_dlq
         )
 
-        url_exports = [
-            ("download-queue", self.download_queue),
-            ("download-dlq", self.download_dlq.queue),
-            ("updload-queue", self.upload_queue),
-            ("upload-dlq", self.upload_dlq.queue)
-        ]
-        for name, queue in url_exports:
-            core.CfnOutput(self, f"{name}Export",
-                export_name=f"{self.stack_name}-{name}-url",
+        # note: you can't simply use the `queue_name` attribute of the
+        # construct objects here: cdk/cfn will complain about
+        # 'The Name field of Export must not depend on any resources'
+        queues = {
+            names.DOWNLOAD_QUEUE: self.download_queue,
+            names.DOWNLOAD_DLQ: self.download_dlq.queue,
+            names.UPLOAD_QUEUE: self.upload_queue,
+            names.UPLOAD_DLQ: self.upload_dlq.queue
+        }
+        for name, queue in queues.items():
+            core.CfnOutput(self, f"{name}-queue-export",
+                export_name=f"{self.stack_name}-{name.replace('.', '-')}-url",
                 value=queue.queue_url
             )
 

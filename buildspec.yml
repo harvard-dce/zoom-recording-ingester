@@ -4,14 +4,12 @@ phases:
   install:
     runtime-versions:
       python: 3.8
-    commands:
-      - yum install -y python38 python38-devel python38-pip python38-setuptools python38-virtualenv zip unzip
   pre_build:
     commands:
       - python -m virtualenv venv
       - source venv/bin/activate
-      - pip install -U pip
-      - pip install -r requirements.txt
+      - pip install -U pip pip-tools
+      - pip-sync requirements.txt
       - invoke test
   build:
     commands:

@@ -2,7 +2,6 @@ import sys
 import json
 import boto3
 from botocore.exceptions import ClientError
-import jmespath
 import requests
 from requests.auth import HTTPDigestAuth
 import time
@@ -20,7 +19,8 @@ from pprint import pprint
 from functions.common import zoom_api_request
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
-from cdk.helpers import aws_account_id
+from cdk import names
+from functools import lru_cache
 
 # supress warnings for cases where we want to ingore dev cluster dummy certificates
 import urllib3
@@ -37,40 +37,8 @@ PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
 INGEST_ALLOWED_IPS = env('INGEST_ALLOWED_IPS', '')
 
-FUNCTION_NAMES = [
-    'zoom-webhook',
-    'zoom-downloader',
-    'zoom-uploader',
-    'zoom-log-notifications',
-    'opencast-op-counts',
-    'zoom-on-demand'
-]
-
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
-
-
-def get_queue_url(queue_name):
-
-    queue_url = 'https://queue.amazonaws.com/{}/{}-{}'.format(
-        aws_account_id(),
-        STACK_NAME,
-        queue_name
-    )
-
-    return queue_url
-
-
-def queue_is_empty(ctx, queue_name):
-    queue_url = get_queue_url(queue_name)
-
-    cmd = ("aws {} sqs get-queue-attributes --queue-url {} "
-           "--attribute-names ApproximateNumberOfMessages "
-           "--query \"Attributes.ApproximateNumberOfMessages\" --output text"
-           .format(profile_arg(), queue_url))
-
-    num_queued = int(ctx.run(cmd, hide=True).stdout.strip())
-    return num_queued == 0
 
 
 @task
@@ -93,18 +61,17 @@ def codebuild(ctx, revision):
     """
     Execute a codebuild run. Optional: --revision=[tag or branch]
     """
+    project_name = f"{STACK_NAME}-{names.CODEBUILD_PROJECT}"
     cmd = ("aws {} codebuild start-build "
-           "--project-name {}-codebuild --source-version {} "
+           "--project-name {} --source-version {} "
            " --environment-variables-override"
            " name='STACK_NAME',value={},type=PLAINTEXT"
-           " name='LAMBDA_RELEASE_ALIAS',value={},type=PLAINTEXT"
            " name='NONINTERACTIVE',value=1") \
         .format(
             profile_arg(),
-            STACK_NAME,
+            project_name,
             revision,
-            STACK_NAME,
-            getenv("LAMBDA_RELEASE_ALIAS")
+            STACK_NAME
             )
 
     res = ctx.run(cmd, hide='out')
@@ -136,11 +103,7 @@ def package(ctx, function=None, upload_to_s3=False):
     """
     Package function(s) + deps into a zip file.
     """
-    if function is not None:
-        functions = [function]
-    else:
-        functions = FUNCTION_NAMES
-
+    functions = resolve_function_arg(function)
     for func in functions:
         __build_function(ctx, func, upload_to_s3)
 
@@ -151,11 +114,7 @@ def deploy(ctx, function=None, do_release=False):
     """
     Package, upload and register new code for all lambda functions
     """
-    if function is not None:
-        functions = [function]
-    else:
-        functions = FUNCTION_NAMES
-
+    functions = resolve_function_arg(function)
     for func in functions:
         __build_function(ctx, func)
         __update_function(ctx, func)
@@ -165,27 +124,27 @@ def deploy(ctx, function=None, do_release=False):
 
 @task(pre=[production_failsafe])
 def deploy_on_demand(ctx, do_release=False):
-    deploy(ctx, "zoom-on-demand", do_release)
+    deploy(ctx, names.ON_DEMAND_FUNCTION, do_release)
 
 
 @task(pre=[production_failsafe])
 def deploy_opencast_op_counts(ctx, do_release=False):
-    deploy(ctx, "opencast-op-counts", do_release)
+    deploy(ctx, names.OP_COUNTS_FUNCTION, do_release)
 
 
 @task(pre=[production_failsafe])
 def deploy_webhook(ctx, do_release=False):
-    deploy(ctx, "zoom-webhook", do_release)
+    deploy(ctx, names.WEBHOOK_FUNCTION, do_release)
 
 
 @task(pre=[production_failsafe])
 def deploy_downloader(ctx, do_release=False):
-    deploy(ctx, "zoom-downloader", do_release)
+    deploy(ctx, names.DOWNLOAD_FUNCTION, do_release)
 
 
 @task(pre=[production_failsafe])
 def deploy_uploader(ctx, do_release=False):
-    deploy(ctx, "zoom-uploader", do_release)
+    deploy(ctx, names.UPLOAD_FUNCTION, do_release)
 
 
 @task(pre=[production_failsafe],
@@ -194,11 +153,7 @@ def release(ctx, function=None, description=None):
     """
     Publish a new version of the function(s) and update the release alias to point to it
     """
-    if function is not None:
-        functions = [function]
-    else:
-        functions = FUNCTION_NAMES
-
+    functions = resolve_function_arg(function)
     for func in functions:
         new_version = __publish_version(ctx, func, description)
         __update_release_alias(ctx, func, new_version, description)
@@ -210,42 +165,11 @@ def update_requirements(ctx):
     Run a `pip-compile -U` on all requirements files
     """
     req_file = relpath(join(dirname(__file__), 'requirements.in'))
-    ctx.run("pip-compile -r -U {}".format(req_file))
-    for func in FUNCTION_NAMES:
+    ctx.run("pip install -U pip-tools && pip-compile -r -U {}".format(req_file))
+    for func in names.FUNCTIONS:
         req_file = relpath(join(dirname(__file__),
                         'function_requirements/{}.in'.format(func)))
         ctx.run("pip-compile -r -U {}".format(req_file))
-
-
-@task
-def generate_resource_policy(ctx):
-    """
-    Update/set the api resource access policy
-    """
-    resource_policy = json.loads(API_RESOURCE_POLICY)
-
-    if not INGEST_ALLOWED_IPS:
-        ok = input(
-            '\nYou have not configured any allowed ips for the ingest endpoint'
-            '\nDo you still want to apply the access policy? [y/N] ').lower().strip().startswith(
-            'y')
-        if not ok:
-            return
-    else:
-        resource_policy["Statement"][1]["Condition"]["NotIpAddress"] \
-            ["aws:SourceIp"] = INGEST_ALLOWED_IPS.split(',')
-
-    api_id = api_gateway_id(ctx)
-
-    for s in resource_policy["Statement"]:
-        s["Resource"] = s["Resource"].format(
-            region=AWS_DEFAULT_REGION,
-            account=aws_account_id(),
-            api_id=api_id
-        )
-
-    print("Copy/paste the following into the API Gateway console")
-    print(json.dumps(resource_policy, indent=2))
 
 
 @task(help={"uuid": "meeting instance uuid",
@@ -269,7 +193,7 @@ def exec_on_demand(ctx, uuid, oc_series_id=None, allow_multiple_ingests=False):
 
     print(event_body)
     
-    resp = __invoke_api(ctx, "ingest", event_body)
+    resp = __invoke_api(on_demand_resource_id(), event_body)
 
     print("Returned with status code: {}. {}".format(
         resp["status"],
@@ -360,7 +284,7 @@ def exec_webhook(ctx, uuid, on_demand_series_id=None):
             }
         }
 
-    resp = __invoke_api(ctx, "new_recording", event_body)
+    resp = __invoke_api(webhook_resource_id(), event_body)
 
     print("Returned with status code: {}. {}".format(
         resp["status"],
@@ -376,8 +300,7 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
     """
     Manually trigger downloader.
     """
-
-    if queue_is_empty(ctx, "download"):
+    if queue_is_empty(ctx, names.DOWNLOAD_QUEUE):
         print("No downloads in queue")
         return
 
@@ -387,7 +310,7 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
         payload['override_series_id'] = series_id
 
     if not qualifier:
-        qualifier = getenv('LAMBDA_RELEASE_ALIAS')
+        qualifier = names.LAMBDA_RELEASE_ALIAS
 
     cmd = ("aws lambda invoke --function-name='{}-zoom-downloader' "
             "--payload='{}' --qualifier {} output.txt").format(
@@ -411,7 +334,7 @@ def exec_uploader(ctx, qualifier=None):
         return
 
     if qualifier is None:
-        qualifier = getenv('LAMBDA_RELEASE_ALIAS')
+        qualifier = names.LAMBDA_RELEASE_ALIAS
 
     cmd = ("aws lambda invoke --function-name='{}-zoom-uploader' "
            "--qualifier {} outfile.txt").format(STACK_NAME, qualifier)
@@ -464,8 +387,8 @@ def retry_downloads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    downloads_dlq = get_queue_url("download-dlq")
-    downloads_queue = get_queue_url("download")
+    downloads_dlq = queue_url(names.DOWNLOAD_DLQ)
+    downloads_queue = queue_url(names.DOWNLOAD_QUEUE)
     __move_messages(downloads_dlq, downloads_queue, limit=limit, uuid=uuid)
 
 
@@ -474,8 +397,8 @@ def retry_uploads(ctx, limit=1, uuid=None):
     """
     Move SQS messages DLQ to source. Optional: --limit (default 1).
     """
-    uploads_dql = get_queue_url("upload-dlq.fifo")
-    uploads_queue = get_queue_url("upload.fifo")
+    uploads_dql = queue_url(names.UPLOAD_DLQ)
+    uploads_queue = queue_url(names.UPLOAD_QUEUE)
     __move_messages(uploads_dql, uploads_queue, limit=limit, uuid=uuid)
 
 
@@ -484,8 +407,8 @@ def view_downloads(ctx, limit=20):
     """
     View items in download queues. Optional: --limit (default 20).
     """
-    downloads_queue = get_queue_url("download")
-    downloads_dlq = get_queue_url("download-dlq")
+    downloads_queue = queue_url(names.DOWNLOAD_QUEUE)
+    downloads_dlq = queue_url(names.DOWNLOAD_DLQ)
     __view_messages(downloads_queue, limit=limit)
     __view_messages(downloads_dlq, limit=limit)
 
@@ -495,8 +418,8 @@ def view_uploads(ctx, limit=20):
     """
     View items in upload queues. Optional: --limit (default 20).
     """
-    uploads_queue = get_queue_url("upload.fifo")
-    uploads_dql = get_queue_url("upload-dlq.fifo")
+    uploads_queue = queue_url(names.UPLOAD_QUEUE)
+    uploads_dql = queue_url(names.UPLOAD_DLQ)
     __view_messages(uploads_queue, limit=limit)
     __view_messages(uploads_dql, limit=limit)
 
@@ -672,11 +595,7 @@ def import_fas_schedule_from_csv(ctx, filepath):
 @task
 def logs(ctx, function=None, watch=False):
 
-    if function is None:
-        functions = FUNCTION_NAMES
-    else:
-        functions = [function]
-
+    functions = resolve_function_arg(function)
     def _awslogs(group, watch=False):
         watch_flag = watch and "--watch" or ""
         cmd = "awslogs get {} ALL {} {}".format(
@@ -702,24 +621,29 @@ def logs(ctx, function=None, watch=False):
 
 @task
 def recording(ctx, uuid, function=None):
-    functions = function is None and FUNCTION_NAMES or [function]
+    functions = resolve_function_arg(function)
     for function in functions:
         __find_recording_log_events(ctx, function, uuid)
 
 
 @task
+def logs_on_demand(ctx, watch=False):
+    logs(ctx, names.ON_DEMAND_FUNCTION, watch)
+
+
+@task
 def logs_webhook(ctx, watch=False):
-    logs(ctx, 'zoom-webhook', watch)
+    logs(ctx, names.WEBHOOK_FUNCTION, watch)
 
 
 @task
 def logs_downloader(ctx, watch=False):
-    logs(ctx, 'zoom-downloader', watch)
+    logs(ctx, names.DOWNLOAD_FUNCTION, watch)
 
 
 @task
 def logs_uploader(ctx, watch=False):
-    logs(ctx, 'zoom-uploader', watch)
+    logs(ctx, names.UPLOAD_FUNCTION, watch)
 
 
 ns = Collection()
@@ -728,7 +652,6 @@ ns.add_task(codebuild)
 ns.add_task(package)
 ns.add_task(release)
 ns.add_task(update_requirements)
-ns.add_task(generate_resource_policy)
 
 deploy_ns = Collection('deploy')
 deploy_ns.add_task(deploy, 'all')
@@ -770,6 +693,7 @@ ns.add_collection(schedule_ns)
 
 logs_ns = Collection('logs')
 logs_ns.add_task(logs, 'all')
+logs_ns.add_task(logs_on_demand, 'on-demand')
 logs_ns.add_task(logs_webhook, 'webhook')
 logs_ns.add_task(logs_downloader, 'downloader')
 logs_ns.add_task(logs_uploader, 'uploader')
@@ -817,40 +741,14 @@ def oc_host(ctx, layer_name):
     return res.stdout.strip()
 
 
-def api_gateway_id(ctx):
-
-    cmd = ("aws {} apigateway get-rest-apis "
-           "--query \"items[?name=='{}'].id\" --output text") \
-            .format(profile_arg(), STACK_NAME)
-    res = ctx.run(cmd, hide=1)
-    return res.stdout.strip()
-
-
-def __invoke_api(ctx, endpoint, event_body):
+def __invoke_api(resource_id, event_body):
     """
     Test invoke a zoom ingester endpoint method
     """
     apig = boto3.client('apigateway')
 
-    apis = apig.get_rest_apis()
-    api_id = jmespath.search(
-        "items[?name=='{}'].id | [0]".format(STACK_NAME),
-        apis
-    )
-    if not api_id:
-        raise Exit(
-            "No api found, double check that your environment variables "
-            "are correct."
-        )
-
-    api_resources = apig.get_resources(restApiId=api_id)
-    resource_id = jmespath.search(
-        f"items[?pathPart=='{endpoint}'].id | [0]",
-        api_resources
-    )
-
     resp = apig.test_invoke_method(
-        restApiId=api_id,
+        restApiId=rest_api_id(),
         resourceId=resource_id,
         httpMethod="POST",
         body=json.dumps(event_body)
@@ -860,8 +758,8 @@ def __invoke_api(ctx, endpoint, event_body):
 
 
 def __update_release_alias(ctx, func, version, description):
-    print("Setting {} '{}' alias to version {}".format(func, getenv('LAMBDA_RELEASE_ALIAS'), version))
-    lambda_function_name = "{}-{}".format(STACK_NAME, func)
+    print(f"Setting {func} '{names.LAMBDA_RELEASE_ALIAS}' alias to version {version}")
+    lambda_function_name = f"{STACK_NAME}-{func}"
     if description is None:
         description = "''"
     alias_cmd = ("aws {} lambda update-alias --function-name {} "
@@ -870,7 +768,7 @@ def __update_release_alias(ctx, func, version, description):
         .format(
             profile_arg(),
             lambda_function_name,
-            getenv("LAMBDA_RELEASE_ALIAS"),
+            names.LAMBDA_RELEASE_ALIAS,
             version,
             description
         )
@@ -880,7 +778,7 @@ def __update_release_alias(ctx, func, version, description):
 def __publish_version(ctx, func, description):
 
     print("Publishing new version of {}".format(func))
-    lambda_function_name = "{}-{}".format(STACK_NAME, func)
+    lambda_function_name = f"{STACK_NAME}-{func}"
     if description is None:
         description = "''"
     version_cmd = ("aws {} lambda publish-version --function-name {} "
@@ -912,7 +810,7 @@ def __build_function(ctx, func, upload_to_s3=False):
             pass
 
     # include the ffprobe binary with the downloader function package
-    if func == 'zoom-downloader':
+    if func == names.DOWNLOAD_FUNCTION:
         ffprobe_path = join(dirname(__file__), 'bin/ffprobe')
         ffprobe_dist_path = join(build_path, 'ffprobe')
         try:
@@ -934,7 +832,7 @@ def __build_function(ctx, func, upload_to_s3=False):
 
 
 def __update_function(ctx, func):
-    lambda_function_name = "{}-{}".format(STACK_NAME, func)
+    func_name = f"{STACK_NAME}-{func}"
     zip_path = join(dirname(__file__), 'dist', func + '.zip')
 
     if not exists(zip_path):
@@ -944,15 +842,15 @@ def __update_function(ctx, func):
            "--function-name {} --zip-file fileb://{}"
            ).format(
                 profile_arg(),
-                lambda_function_name,
+                func_name,
                 zip_path
             )
     ctx.run(cmd)
 
 
 def __set_debug(ctx, debug_val):
-    for func in ['zoom-webhook', 'zoom-downloader', 'zoom-uploader']:
-        func_name = "{}-{}".format(STACK_NAME, func)
+    for func in [names.WEBHOOK_FUNCTION, names.DOWNLOAD_FUNCTION, names.UPLOAD_FUNCTION]:
+        func_name = f"{STACK_NAME}-{func}"
         cmd = ("aws {} lambda get-function-configuration --output json "
                "--function-name {}").format(profile_arg(), func_name)
         res = ctx.run(cmd, hide=1)
@@ -1067,7 +965,7 @@ def __view_messages(queue_url, limit):
     sqs = boto3.client('sqs')
     fifo = queue_url.endswith("fifo")
 
-    if "deadletter" in queue_url:
+    if "dlq" in queue_url:
         print("\nDEADLETTER QUEUE")
     else:
         print("\nMAIN QUEUE")
@@ -1133,7 +1031,7 @@ def __schedule_json_to_dynamo(ctx, json_file=None, schedule_data=None):
 
     try:
         dynamodb = boto3.resource('dynamodb')
-        table_name = STACK_NAME + '-schedule'
+        table_name = f"{STACK_NAME}-{names.SCHEDULE_TABLE}"
         table = dynamodb.Table(table_name)
 
         for item in schedule_data.values():
@@ -1184,16 +1082,16 @@ def __show_function_status(ctx):
         ]
     ]
 
-    for func in FUNCTION_NAMES:
+    for func in names.FUNCTIONS:
 
-        lambda_function_name = "{}-{}".format(STACK_NAME, func)
+        lambda_function_name = f"{STACK_NAME}-{func}"
         cmd = ("aws {} lambda list-aliases --function-name {} "
                "--query \"Aliases[?Name=='{}'].[FunctionVersion,Description]\" "
                "--output text") \
             .format(
                 profile_arg(),
                 lambda_function_name,
-                getenv('LAMBDA_RELEASE_ALIAS')
+                names.LAMBDA_RELEASE_ALIAS
             )
         res = ctx.run(cmd, hide=True)
 
@@ -1232,15 +1130,8 @@ def __show_sqs_status(ctx):
         ]
     ]
 
-    queue_names = [
-        'upload.fifo',
-        'upload-dlq.fifo',
-        'download',
-        'download-dlq'
-    ]
-
-    for queue_name in queue_names:
-        url = get_queue_url(queue_name)
+    for queue_name in names.QUEUES:
+        url = queue_url(queue_name)
 
         cmd = ("aws {} sqs get-queue-attributes --queue-url {} "
                "--attribute-names All").format(profile_arg(), url)
@@ -1301,27 +1192,57 @@ def __request_ids_from_logs(ctx, log_group, filter_pattern):
         yield log_stream, message['aws_request_id']
 
 
-API_RESOURCE_POLICY = """
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": "*",
-            "Action": "execute-api:Invoke",
-            "Resource": "arn:aws:execute-api:{region}:{account}:{api_id}/*"
-        },
-        {
-            "Effect": "Deny",
-            "Principal": "*",
-            "Action": "execute-api:Invoke",
-            "Resource": "arn:aws:execute-api:{region}:{account}:{api_id}/*/POST/ingest",
-            "Condition": {
-                "NotIpAddress": {
-                    "aws:SourceIp": []
-                }
-            }
-        }
-    ]
-}
-"""
+def resolve_function_arg(func):
+    if func is not None:
+        if func not in names.FUNCTIONS:
+            raise Exit(f"Function choices: {names.FUNCTIONS}")
+        return [func]
+    else:
+        return names.FUNCTIONS
+
+
+@lru_cache()
+def cfn_exports():
+    stack = boto3.resource('cloudformation').Stack(STACK_NAME)
+    exports = {
+        x["ExportName"]: x["OutputValue"]
+        for x in stack.outputs
+        if "ExportName" in x
+    }
+    return exports
+
+def cfn_export_value(name):
+    export_name = f"{STACK_NAME}-{name}"
+    try:
+        return cfn_exports()[export_name]
+    except KeyError:
+        raise Exception(
+            f"Missing {export_name} export for stack {STACK_NAME}"
+        )
+
+def queue_url(queue_name):
+    export_name = f"{STACK_NAME}-{queue_name.replace('.', '-')}-url"
+    return cfn_exports()[export_name]
+
+def queue_is_empty(ctx, queue_name):
+
+    cmd = ("aws {} sqs get-queue-attributes --queue-url {} "
+           "--attribute-names ApproximateNumberOfMessages "
+           "--query \"Attributes.ApproximateNumberOfMessages\" --output text"
+        .format(
+        profile_arg(),
+        queue_url(queue_name))
+    )
+
+    num_queued = int(ctx.run(cmd, hide=True).stdout.strip())
+    return num_queued == 0
+
+def rest_api_id():
+    return cfn_export_value(f"{names.REST_API}-id")
+
+def webhook_resource_id():
+    return cfn_export_value(f"{names.WEBHOOK_ENDPOINT}-resource-id")
+
+def on_demand_resource_id():
+    return cfn_export_value(f"{names.ON_DEMAND_ENDPOINT}-resource-id")
+

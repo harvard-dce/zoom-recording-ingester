@@ -1,4 +1,5 @@
 from aws_cdk import core, aws_dynamodb as dynamodb
+from . import  names
 
 class ZipSchedule(core.Construct):
 
@@ -11,7 +12,7 @@ class ZipSchedule(core.Construct):
 
         self.table = dynamodb.Table(
             self, "table",
-            table_name=f"{stack_name}-schedule",
+            table_name=f"{stack_name}-{names.SCHEDULE_TABLE}",
             partition_key=dynamodb.Attribute(
                 name="zoom_series_id",
                 type=dynamodb.AttributeType.STRING
