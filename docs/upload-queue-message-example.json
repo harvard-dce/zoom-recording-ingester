@@ -31,7 +31,8 @@
         "total_file_seconds": 500.4,
         "total_segment_seconds": 500.4
       },
-      // optional field
-      "allow_multiple_ingests": true
+      // optional fields
+      "allow_multiple_ingests": true,
+      "zoom_processing_minutes": 40
   }
 }

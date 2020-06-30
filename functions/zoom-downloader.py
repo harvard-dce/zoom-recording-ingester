@@ -324,7 +324,7 @@ class Download:
             logger.info("Ignoring schedule")
         else:
             self.opencast_series_id = self._series_id_from_schedule
-            if self.opencast_series_id is not None:
+            if self.opencast_series_id:
                 logger.info("Matched with opencast series '{}'!"
                             .format(self.opencast_series_id))
                 return True
@@ -395,8 +395,9 @@ class Download:
                 "total_segment_seconds": recording_seconds
             }
 
-            if "allow_multiple_ingests" in self.data:
-                self._upload_message["allow_multiple_ingests"] = self.data["allow_multiple_ingests"]
+            for field in ["allow_multiple_ingests", "zoom_processing_minutes"]:
+                if field in self.data:
+                    self._upload_message[field] = self.data[field]
 
         return self._upload_message
 
