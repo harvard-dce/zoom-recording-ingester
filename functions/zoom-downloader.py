@@ -395,8 +395,9 @@ class Download:
                 "total_segment_seconds": recording_seconds
             }
 
-            if "allow_multiple_ingests" in self.data:
-                self._upload_message["allow_multiple_ingests"] = self.data["allow_multiple_ingests"]
+            for field in ["allow_multiple_ingests", "zoom_processing_minutes"]:
+                if field in self.data:
+                    self._upload_message[field] = self.data[field]
 
         return self._upload_message
 
