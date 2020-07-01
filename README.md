@@ -54,7 +54,8 @@ Info on Zoom's API and webhook functionality can be found at:
 
 #### deployment
 
-1. Run `invoke create-code-bucket` to ensure the s3 bucket for packaged lambda code exists
+1. Make sure your s3 bucket for packaged lambda code exists. The
+name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`. 
 1. Run `invoke stack.create` to build the CloudFormation stack
 1. Run `invoke generate-resource-policy` and paste the output into the API Gateway's "Resource Policy" field in the web console.
 1. Enable CORS on the ingest endpoint:
@@ -161,14 +162,6 @@ to whatever test series you want to use and all unmapped meetings will be ingest
 This project uses the `invoke` python library to provide a simple task cli. Run `invoke -l`
 to see a list of available commands. The descriptions below are listed in the likely order
 you would run them and/or their importance.
-
-##### `invoke create-code-bucket`
-
-Must be run once per setup. Will create an s3 bucket to which the packaged
-lambda code will be uploaded. Does nothing if the bucket already exists. The
-name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`. Packaged function
-zip files are **not** namespaced, so beware using the same code bucket for multiple
-ingester stacks.
 
 ##### `invoke stack.create`
 
