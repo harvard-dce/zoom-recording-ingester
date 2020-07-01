@@ -30,7 +30,7 @@ Info on Zoom's API and webhook functionality can be found at:
 
 ## Things you will need
 
-* python 3
+* python 3.8
 * the python `virtualenv` package
 * an Opsworks Opencast cluster, including:
     * the base url of the admin node
