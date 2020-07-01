@@ -68,7 +68,7 @@ name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`.
        Apparently this is fine for our purposes and doesn't cause problems, so safe to ignore.
 1. Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
     1. Export the DCE Zoom schedule google spreadsheet to a CSV file
-    1. Run `invoke schedule.import -c [csv file] -s [semester] -y [year]`
+    1. Run `invoke schedule.import-csv [filepath]`
 
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
