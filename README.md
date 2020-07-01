@@ -120,6 +120,10 @@ This command will trigger CodeBuild to package and release the function code fro
 repo identified by the "release-v1.0.0" tag. Each function will have a new Lambda version "2"
 published and the release alias will be updated to point to this version.
 
+#### Step by step release instructions
+
+[docs/release-process.md]()
+
 ## Zoom Webhook Setup
 
 Once the Zoom Ingester pipeline is operational you can configure your Zoom account to
@@ -210,25 +214,32 @@ Does a bulk `pip-compile` upgrade of all base and function requirements.
    to unique values, e.g. "myname-zoom-ingester"
 1. Follow the usual stack creation steps outlined at the top
 1. Make changes
-1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions
-1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
+1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
+Alternatively, to save time, if you are only editing one function, run `invoke deploy.[function name] --do-release`.
+1. Run `invoke exec.pipeline[options]` to initiate the pipeline. See below for options.
 1. Repeat
 
-##### `invoke exec.webhook`
+##### `invoke exec.webhook [uuid]`
 
-This task will manually invoke the webhook endpoint with a payload constructed from
-the arguments you provide. The arguments are:
+Options: `--oc-series-id=XX`
 
-* uuid - the uuid of the meeting instance
-* host_id - the Zoom host identifier
+This task will recreate the webhook notification for the recording identified by
+`uuid` and manually invoke the `/new_recording` api endpoint.
 
-These are positional arguments, so an example command looks something like:
+##### `invoke exec.pipeline [uuid]`
 
-`invoke exec.webhook V27UZBYGRRGPVbZZTDUPyA== Lpf1XegVTWu6CVGWtSfc-Q`
+Options: `--oc-series-id=XX`
 
-There is also a `--status=[recording status]` option with a default value of
-"RECORDING_MEETING_COMPLETED", but this is only useful in cases where you would be
-testing correct behavior by the webhook function.
+Similar to `exec.webhook` except that this also triggers the downloader and
+uploader functions to run and reports success or error for reach.
+
+##### `invoke exec.on_demand [uuid]`
+
+Options: `--oc-series-id=XXX --allow-multiple-ingests`
+
+This task will manually invoke the `/ingest` endpoint. This is the endpoint used
+by the Opencast "Zoom+" tool. Specify an opencast series id with `--oc-series-id=XX`.
+Allow multiple ingests of the same recordiing (for testing purposes) with `--allow-multiple-ingests`.
 
 ## Testing
 
