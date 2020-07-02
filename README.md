@@ -48,7 +48,7 @@ Info on Zoom's API and webhook functionality can be found at:
 * an Opsworks Opencast cluster, including:
     * the base url of the admin node
     * the user/pass combo of the Opencast API system account user
-    * OC database password
+    * Opencast database password
 * A Zoom account API key and secret
 * Email of Zoom account with privileges to download recordings
 * An email address to receive alerts and other notifications
@@ -85,7 +85,7 @@ name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`.
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
 
-### Set up Zoom webhook notifications (Optional)
+### Setup Zoom webhook notifications (Optional)
 
 
 Once the Zoom Ingester pipeline is operational you can configure your Zoom account to
@@ -100,6 +100,20 @@ Choose app type "Webhook only app."
 and enter the API endpoint under "Event Subscription."
 1. Make sure to subscribe to "All recordings have completed" events.
 1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
+
+### Setup on demand ingests
+
+The easiest way to find the on demand ingest endpoint is to run `invoke stack.status`.
+
+The on-demand endpoint appears in the status command output:
+
+	+--------------------+--------------------------------------------------------------------+
+	| On-Demand Endpoint | https://abcde.execute-api.us-east-1.amazonaws.com/live/ingest |
+	+--------------------+--------------------------------------------------------------------+
+	
+Opencast can send on demand ingest requests to this endpoint as POST requests. The payload parameter `uuid`, a unique Zoom recording id, is requried. The payload parameters `oc_series_id`, the Opencast series id, and `allow_multiple_ingests`, whether to allow multiple ingests of the same Zoom recording, are optional.
+
+
 
 ## Development
 
