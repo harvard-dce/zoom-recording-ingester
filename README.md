@@ -45,6 +45,7 @@ Info on Zoom's API and webhook functionality can be found at:
 
 * python 3.8
 * the python `virtualenv` package
+* AWS CLI installed and configured [https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html]()
 * an Opsworks Opencast cluster, including:
     * the base url of the admin node
     * the user/pass combo of the Opencast API system account user
@@ -57,6 +58,7 @@ Info on Zoom's API and webhook functionality can be found at:
 
 #### local environment setup
 
+1. In your aws config (`.aws/config`) make sure to use the identifier "prod" for your production AWS credentials.
 1. Make a python virtualenv and activate it however you normally do those things, e.g.: `virtualenv venv && source venv/bin/activate`
 1. Python dependencies are handled via `pip-tools` so you need to install that first: `pip install pip-tools`
 1. Install the dependencies by running `pip-sync`
