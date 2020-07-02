@@ -4,30 +4,6 @@
 
 A set of AWS services for downloading and ingesting Zoom meeting videos into Opencast
 
-* [Overview](#overview)
-
-* [Setup](#setup)
-
-	* [CloudFormation stack](#create%20a%20cloudformation%20stack) 
-
-	* [Zoom webhook notifications](Setup%20Zoom%20webhook%20notifications(Optional))
-
-* [Development](#development)
-
-	* [Schedule DB](#schedule%20db)
-
-	* [Invoke task descriptions](#invoke%20task%20descriptions)
-	
-	* [Dependency Changes](#dependency%20changes)
-
-	* [Lambda Versions, Release Alias & Initial Code Release](#lambda%20versions,%20release%20alias%20&%20initial%20code%20release)
-
-* [Testing](#testing)
-
-* [Release Process](#release-process)
-
-<!-- toc -->
-
 ## Overview
 
 The Zoom Ingester (a.k.a., "Zoom Ingester Pipeline", a.k.a., "ZIP") is Harvard DCE's mechanism for moving Zoom
@@ -51,6 +27,29 @@ Info on Zoom's API and webhook functionality can be found at:
 ## Pipeline flow diagram
 
 ![zoom ingester pipeline diagram](docs/Zoom%20Ingester%20Pipeline.png)
+
+
+* [Setup](#setup)
+
+	* [CloudFormation stack](#create%20a%20cloudformation%20stack) 
+
+	* [Zoom webhook notifications](Setup%20Zoom%20webhook%20notifications(Optional))
+
+* [Development](#development)
+
+	* [Schedule DB](#schedule%20db)
+
+	* [Invoke task descriptions](#invoke%20task%20descriptions)
+	
+	* [Dependency Changes](#dependency%20changes)
+
+	* [Lambda Versions, Release Alias & Initial Code Release](#lambda%20versions,%20release%20alias%20&%20initial%20code%20release)
+
+* [Testing](#testing)
+
+* [Release Process](#release-process)
+
+<!-- toc -->
 
 ## Setup
 
