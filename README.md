@@ -37,6 +37,8 @@ Info on Zoom's API and webhook functionality can be found at:
 
 * [Development](#development)
 
+	* [Development Guide](#development%20guide)
+
 	* [Schedule DB](#schedule%20db)
 
 	* [Invoke task descriptions](#invoke%20task%20descriptions)
@@ -114,6 +116,8 @@ and enter the API endpoint under "Event Subscription."
 1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
 
 ## Development
+
+### Development Guide
 
 1. Create a dev/test stack by setting your `.env` `STACK_NAME` to a unique value.
 1. Follow the usual stack creation steps outlined at the top.
