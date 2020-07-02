@@ -8,7 +8,19 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
 
 * [Setup](#setup)
 
+	* [CloudFormation stack](#create%20a%20cloudformation%20stack) 
+
+	* [Zoom webhook notifications](Setup%20Zoom%20webhook%20notifications(Optional))
+
 * [Development](#development)
+
+	* [Schedule DB](#schedule%20db)
+
+	* [Invoke task descriptions](#invoke%20task%20descriptions)
+	
+	* [Dependency Changes](#dependency%20changes)
+
+	* [Lambda Versions, Release Alias & Initial Code Release](#lambda%20versions,%20release%20alias%20&%20initial%20code%20release)
 
 * [Testing](#testing)
 
@@ -158,7 +170,7 @@ log a message to that effect and return. During testing/development, this can be
 by setting the `DEFAULT_SERIES_ID` in the lambda function's environment. Just set that
 to whatever test series you want to use and all unmapped meetings will be ingested to that series.
 
-## Invoke task descriptions
+### Invoke task descriptions
 
 This project uses the `invoke` python library to provide a simple task cli. Run `invoke -l`
 to see a list of available commands. The descriptions below are listed in the likely order
@@ -206,7 +218,7 @@ a `DEBUG` environment variable in the Lambda function(s) settings.
 Does a bulk `pip-compile` upgrade of all base and function requirements.
 
 
-## Dependency Changes
+### Dependency Changes
 
 Dependencies for the project as a whole and the individual functions are managed using
 the `pip-tools` command, `pip-compile`. Top-level dependencies are listed in a `.in` file
