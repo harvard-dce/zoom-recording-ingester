@@ -28,20 +28,32 @@ Info on Zoom's API and webhook functionality can be found at:
 
 ![zoom ingester pipeline diagram](docs/Zoom%20Ingester%20Pipeline.png)
 
-## Things you will need
 
-* python 3
+* [Setup](#setup)
+
+* [Development](#development)
+
+* [Testing](#testing)
+
+* [Release Process](#release-process)
+
+<!-- toc -->
+
+## Setup
+
+### Things you will need
+
+* python 3.8
 * the python `virtualenv` package
 * an Opsworks Opencast cluster, including:
     * the base url of the admin node
     * the user/pass combo of the Opencast API system account user
-    * the ID of the Opsworks cluster's VPC, e.g. "vpc-123abcd"
+    * Opencast database password
 * A Zoom account API key and secret
-* A Zoom account login user/pass combo
-* An email address to recieve alerts and other notifications
+* Email of Zoom account with privileges to download recordings
+* An email address to receive alerts and other notifications
 
-
-## Initial Setup
+### Create a CloudFormation stack
 
 #### local environment setup
 
@@ -54,7 +66,8 @@ Info on Zoom's API and webhook functionality can be found at:
 
 #### deployment
 
-1. Run `invoke create-code-bucket` to ensure the s3 bucket for packaged lambda code exists
+1. Make sure your s3 bucket for packaged lambda code exists. The
+name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`. 
 1. Run `invoke stack.create` to build the CloudFormation stack
 1. Run `invoke generate-resource-policy` and paste the output into the API Gateway's "Resource Policy" field in the web console.
 1. Enable CORS on the ingest endpoint:
@@ -65,61 +78,15 @@ Info on Zoom's API and webhook functionality can be found at:
     1. Click "Enable" and confirm
     1. The follow-up screen will show the changes being applied. The last one will show a red X instead of a green checkmark.
        Apparently this is fine for our purposes and doesn't cause problems, so safe to ignore.
-1. Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
+1. (Optional) Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
     1. Export the DCE Zoom schedule google spreadsheet to a CSV file
-    1. Run `invoke schedule.import -c [csv file] -s [semester] -y [year]`
+    1. Run `invoke schedule.import-csv [filepath]`
 
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
 
-#### dependency changes
+### Setup Zoom webhook notifications (Optional)
 
-Dependencies for the project as a whole and the individual functions are managed using
-the `pip-tools` command, `pip-compile`. Top-level dependencies are listed in a `.in` file
-which is then compiled to a "locked" `.txt` version like so:
-
-`pip-compile -o requirements.txt requirements.in`
-
-Both the `.in` and `.txt` files are version-controlled, so the initial compile was
-only necessary once. Now we only have to run `pip-compile` in a couple of situations:
-
-* when upgrading a particular package.
-* to update the project's base requirements list if a dependency for a specific function is changed
-
-In the first case you run `pip-compile -P [package-name] [source file]` where `source_file` is the `.in` file getting the update.
-
-Following that you must run `pip-compile` in the project root to pull the function-specific change(s) into the main project list.
-
-Finally, run `pip-sync` to ensure the packages are updated in your virtualenv .
-
-
-## Lambda Versions, Release Alias & Initial Code Release
-
-Lambda functions employ the concepts of "versions" and "aliases". Each time you push new
-code to a Lambda function it updates a special version signifier, `$LATEST`. If you wish
-to assign an actual version number to what is referenced by `$LATEST` you "publish" a
-new version. Versions are immutable and version numbers always increment by 1.
-
-Aliases allow us to control which versions of the Lambda functions are invoked by the system.
-The Zoom Ingester uses a single alias defined by the `.env` variable, `LAMBDA_RELEASE_ALIAS` (default "live"),
-to designate the currently released versions of each function. A new version of each
-function can be published independent of the alias as many times as you like. It is only
-when the release alias is updated to point to one of the new versions that the behavior
-of the ingester will change.
-
-When you first build the stack using the above "Initial Setup" steps, the version of the Lambda functions
-code will be whatever was current in your cloned repo. The Lambda function versions will
-be set to "1" and the release aliases ("live") will be pointing to this same version.
-At this point you may wish to re-release a specific tag or branch of the function code.
-In a production environment this should be done via the CodeBuild project, like so:
-
-    invoke codebuild -r release-v1.0.0
-
-This command will trigger CodeBuild to package and release the function code from the github
-repo identified by the "release-v1.0.0" tag. Each function will have a new Lambda version "2"
-published and the release alias will be updated to point to this version.
-
-## Zoom Webhook Setup
 
 Once the Zoom Ingester pipeline is operational you can configure your Zoom account to
 send completed recording notifications to it via the Zoom Webhook settings.
@@ -132,9 +99,58 @@ Choose app type "Webhook only app."
 1. Click "Create." Fill out the rest of the required information,
 and enter the API endpoint under "Event Subscription."
 1. Make sure to subscribe to "All recordings have completed" events.
-1. Activate the app.
+1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
 
-## Schedule DB
+### Setup on demand ingests
+
+The easiest way to find the on demand ingest endpoint is to run `invoke stack.status`.
+
+The on-demand endpoint appears in the status command output:
+
+	+--------------------+--------------------------------------------------------------------+
+	| On-Demand Endpoint | https://abcde.execute-api.us-east-1.amazonaws.com/live/ingest |
+	+--------------------+--------------------------------------------------------------------+
+	
+Opencast can send on demand ingest requests to this endpoint as POST requests. The payload parameter `uuid`, a unique Zoom recording id, is requried. The payload parameters `oc_series_id`, the Opencast series id, and `allow_multiple_ingests`, whether to allow multiple ingests of the same Zoom recording, are optional.
+
+
+
+## Development
+
+### Development Guide
+
+1. Create a dev/test stack by setting your `.env` `STACK_NAME` to a unique value.
+1. Follow the usual stack creation steps outlined at the top.
+1. Make changes.
+1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
+Alternatively, to save time, if you are only editing one function, run `invoke deploy.[function name] --do-release`.
+1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
+1. Repeat.
+
+##### `invoke exec.webhook [uuid]`
+
+Options: `--oc-series-id=XX`
+
+This task will recreate the webhook notification for the recording identified by
+`uuid` and manually invoke the `/new_recording` api endpoint.
+
+##### `invoke exec.pipeline [uuid]`
+
+Options: `--oc-series-id=XX`
+
+Similar to `exec.webhook` except that this also triggers the downloader and
+uploader functions to run and reports success or error for reach.
+
+##### `invoke exec.on_demand [uuid]`
+
+Options: `--oc-series-id=XXX --allow-multiple-ingests`
+
+This task will manually invoke the `/ingest` endpoint. This is the endpoint used
+by the Opencast "Zoom+" tool. Specify an opencast series id with `--oc-series-id=XX`.
+Allow multiple ingests of the same recordiing (for testing purposes) with `--allow-multiple-ingests`.
+
+
+### Schedule DB
 
 Incoming Zoom recordings are ingested to an Opencast series based on two pieces of
 information:
@@ -149,26 +165,18 @@ be ingested to we need to also know what time the meeting occurred.
 
 The current authority for Zoom meeting schedules is a google spreadsheet. To populate
 our DynamoDB from the spread sheet data we have to export the spreadsheet to CSV and then
-import to DynamoDB using the `invoke schedule.import` task.
+import to DynamoDB using the `invoke schedule.import-csv [filepath]` task.
 
 If a lookup to the DynamoDB schedule data does not find a mapping the uploader function will
 log a message to that effect and return. During testing/development, this can be overridden
 by setting the `DEFAULT_SERIES_ID` in the lambda function's environment. Just set that
 to whatever test series you want to use and all unmapped meetings will be ingested to that series.
 
-## Task descriptions
+### Invoke task descriptions
 
 This project uses the `invoke` python library to provide a simple task cli. Run `invoke -l`
 to see a list of available commands. The descriptions below are listed in the likely order
 you would run them and/or their importance.
-
-##### `invoke create-code-bucket`
-
-Must be run once per setup. Will create an s3 bucket to which the packaged
-lambda code will be uploaded. Does nothing if the bucket already exists. The
-name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`. Packaged function
-zip files are **not** namespaced, so beware using the same code bucket for multiple
-ingester stacks.
 
 ##### `invoke stack.create`
 
@@ -176,7 +184,7 @@ Does the following:
 
 1. Packages each function and uploads the zip files to your s3 code bucket
 1. Builds the CloudFormation stack defined in `template.yml.
-1. Releases an intitial version "1" of each Lambda function
+1. Releases an initial version "1" of each Lambda function
 
 Use `stack.update` to modify an existing stack.
 
@@ -205,37 +213,32 @@ Delete the stack.
 ##### `invoke debug.{on,off}`
 
 Enable/disable debug logging in the Lambda functions. This task adds or modifies
-a `DEBUG` evnironment variable in the Lambda function(s) settings.
+a `DEBUG` environment variable in the Lambda function(s) settings.
 
 ##### `invoke update-requirements`
 
 Does a bulk `pip-compile` upgrade of all base and function requirements.
 
-## Development
 
-1. Create a dev/test stack by setting your `.env` `STACK_NAME` and `LAMBDA_CODE_BUCKET`
-   to unique values, e.g. "myname-zoom-ingester"
-1. Follow the usual stack creation steps outlined at the top
-1. Make changes
-1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions
-1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
-1. Repeat
+### Dependency Changes
 
-##### `invoke exec.webhook`
+Dependencies for the project as a whole and the individual functions are managed using
+the `pip-tools` command, `pip-compile`. Top-level dependencies are listed in a `.in` file
+which is then compiled to a "locked" `.txt` version like so:
 
-This task will manually invoke the webhook endpoint with a payload constructed from
-the arguments you provide. The arguments are:
+`pip-compile -o requirements.txt requirements.in`
 
-* uuid - the uuid of the meeting instance
-* host_id - the Zoom host identifier
+Both the `.in` and `.txt` files are version-controlled, so the initial compile was
+only necessary once. Now we only have to run `pip-compile` in a couple of situations:
 
-These are positional arguments, so an example command looks something like:
+* when upgrading a particular package.
+* to update the project's base requirements list if a dependency for a specific function is changed
 
-`invoke exec.webhook V27UZBYGRRGPVbZZTDUPyA== Lpf1XegVTWu6CVGWtSfc-Q`
+In the first case you run `pip-compile -P [package-name] [source file]` where `source_file` is the `.in` file getting the update.
 
-There is also a `--status=[recording status]` option with a default value of
-"RECORDING_MEETING_COMPLETED", but this is only useful in cases where you would be
-testing correct behavior by the webhook function.
+Following that you must run `pip-compile` in the project root to pull the function-specific change(s) into the main project list.
+
+Finally, run `pip-sync` to ensure the packages are updated in your virtualenv .
 
 ## Testing
 
@@ -245,3 +248,77 @@ execute:
 `invoke test`
 
 Alternatively you can run `tox`.
+
+## Lambda Versions, Release Alias & Initial Code Release
+
+Lambda functions employ the concepts of "versions" and "aliases". Each time you push new
+code to a Lambda function it updates a special version signifier, `$LATEST`. If you wish
+to assign an actual version number to what is referenced by `$LATEST` you "publish" a
+new version. Versions are immutable and version numbers always increment by 1.
+
+Aliases allow us to control which versions of the Lambda functions are invoked by the system.
+The Zoom Ingester uses a single alias defined by the `.env` variable, `LAMBDA_RELEASE_ALIAS` (default "live"),
+to designate the currently released versions of each function. A new version of each
+function can be published independent of the alias as many times as you like. It is only
+when the release alias is updated to point to one of the new versions that the behavior
+of the ingester will change.
+
+When you first build the stack using the above "Initial Setup" steps, the version of the Lambda functions
+code will be whatever was current in your cloned repo. The Lambda function versions will
+be set to "1" and the release aliases ("live") will be pointing to this same version.
+At this point you may wish to re-release a specific tag or branch of the function code.
+In a production environment this should be done via the CodeBuild project, like so:
+
+    invoke codebuild -r release-v1.0.0
+
+This command will trigger CodeBuild to package and release the function code from the github
+repo identified by the "release-v1.0.0" tag. Each function will have a new Lambda version "2"
+published and the release alias will be updated to point to this version.
+
+## Release Process
+
+### Step 1: Update master
+
+Merge all changes for release into master.  
+Checkout master branch, git pull.
+
+### Step 2: Test release in dev stack
+
+First check that the codebuild runs with the new changes on a dev stack:
+
+If there are new functions you must package and ensure the code is in s3:
+
+    invoke package -u
+
+then
+
+	invoke stack.update
+	invoke codebuild --revision=master
+
+Make sure codebuild completes successfully.
+
+### Step 3: Tag management
+
+First update your tags:
+
+    git tag -l | xargs git tag -d
+    git fetch --tags    
+
+
+Then tag release:
+
+    git tag release-vX.X.X
+    git push --tags
+
+### Step 4: Release to production stack
+
+Make sure you are working on the correct zoom ingester stack, double check environment variables. Then:
+
+If there are new functions you must package and ensure the code is in s3:
+
+    invoke package -u
+    
+then
+
+	invoke stack.update
+	invoke codebuild --revision=release-vX.X.X

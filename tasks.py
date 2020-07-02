@@ -379,7 +379,7 @@ def exec_pipeline(ctx, uuid, ignore_schedule=False, oc_series_id=None):
 @task(help={'uuid': 'meeting instance uuid', 'oc_series_id': 'opencast series id'})
 def exec_webhook(ctx, uuid, oc_series_id=None):
     """
-    Manually call the webhook endpoint. Positional arguments: uuid, host_id
+    Manually trigger the webhook endpoint. Positional argument: uuid, Option: --oc-series-id
     """
 
     if not uuid:
@@ -627,7 +627,7 @@ def view_uploads(ctx, limit=20):
 
 
 @task(pre=[production_failsafe])
-def import_dce_schedule_from_opencast(ctx, endpoint=None):
+def import_schedule_from_opencast(ctx, endpoint=None):
     """
     Fetch schedule data from Opencast series endpoint
     """
@@ -713,7 +713,7 @@ def import_dce_schedule_from_opencast(ctx, endpoint=None):
 
 
 @task(pre=[production_failsafe])
-def import_fas_schedule_from_csv(ctx, filepath):
+def import_schedule_from_csv(ctx, filepath):
     valid_days = ["M", "T", "W", "R", "F"]
 
     # make it so we can use lower-case keys in our row dicts;
@@ -872,8 +872,8 @@ queue_ns.add_task(retry_uploads, 'retry-uploads')
 ns.add_collection(queue_ns)
 
 schedule_ns = Collection('schedule')
-schedule_ns.add_task(import_dce_schedule_from_opencast, 'dce-import')
-schedule_ns.add_task(import_fas_schedule_from_csv, 'fas-import')
+schedule_ns.add_task(import_schedule_from_opencast, 'oc-import')
+schedule_ns.add_task(import_schedule_from_csv, 'csv-import')
 ns.add_collection(schedule_ns)
 
 logs_ns = Collection('logs')
