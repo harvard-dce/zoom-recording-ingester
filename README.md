@@ -111,18 +111,17 @@ Choose app type "Webhook only app."
 1. Click "Create." Fill out the rest of the required information,
 and enter the API endpoint under "Event Subscription."
 1. Make sure to subscribe to "All recordings have completed" events.
-1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're testing.)
+1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
 
 ## Development
 
-1. Create a dev/test stack by setting your `.env` `STACK_NAME` and `LAMBDA_CODE_BUCKET`
-   to unique values, e.g. "myname-zoom-ingester"
-1. Follow the usual stack creation steps outlined at the top
-1. Make changes
+1. Create a dev/test stack by setting your `.env` `STACK_NAME` to a unique value.
+1. Follow the usual stack creation steps outlined at the top.
+1. Make changes.
 1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
 Alternatively, to save time, if you are only editing one function, run `invoke deploy.[function name] --do-release`.
-1. Run `invoke exec.pipeline[options]` to initiate the pipeline. See below for options.
-1. Repeat
+1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
+1. Repeat.
 
 ##### `invoke exec.webhook [uuid]`
 

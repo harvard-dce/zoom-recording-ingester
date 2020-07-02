@@ -379,7 +379,7 @@ def exec_pipeline(ctx, uuid, ignore_schedule=False, oc_series_id=None):
 @task(help={'uuid': 'meeting instance uuid', 'oc_series_id': 'opencast series id'})
 def exec_webhook(ctx, uuid, oc_series_id=None):
     """
-    Manually call the webhook endpoint. Positional arguments: uuid, host_id
+    Manually trigger the webhook endpoint. Positional argument: uuid, Option: --oc-series-id
     """
 
     if not uuid:
