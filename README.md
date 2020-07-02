@@ -31,21 +31,7 @@ Info on Zoom's API and webhook functionality can be found at:
 
 * [Setup](#setup)
 
-	* [CloudFormation stack](#create%20a%20cloudformation%20stack) 
-
-	* [Zoom webhook notifications](Setup%20Zoom%20webhook%20notifications(Optional))
-
 * [Development](#development)
-
-	* [Development Guide](#development%20guide)
-
-	* [Schedule DB](#schedule%20db)
-
-	* [Invoke task descriptions](#invoke%20task%20descriptions)
-	
-	* [Dependency Changes](#dependency%20changes)
-
-	* [Lambda Versions, Release Alias & Initial Code Release](#lambda%20versions,%20release%20alias%20&%20initial%20code%20release)
 
 * [Testing](#testing)
 
