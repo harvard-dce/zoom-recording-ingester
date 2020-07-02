@@ -161,7 +161,7 @@ be ingested to we need to also know what time the meeting occurred.
 
 The current authority for Zoom meeting schedules is a google spreadsheet. To populate
 our DynamoDB from the spread sheet data we have to export the spreadsheet to CSV and then
-import to DynamoDB using the `invoke schedule.import-csv` task.
+import to DynamoDB using the `invoke schedule.import-csv [filepath]` task.
 
 If a lookup to the DynamoDB schedule data does not find a mapping the uploader function will
 log a message to that effect and return. During testing/development, this can be overridden
