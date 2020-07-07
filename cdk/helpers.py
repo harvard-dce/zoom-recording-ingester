@@ -5,7 +5,7 @@ from functools import lru_cache
 from functions.common import zoom_api_request
 
 AWS_PROFILE = _getenv("AWS_PROFILE")
-if AWS_PROFILE is not None:
+if AWS_PROFILE:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
 
 # wrap the default getenv so we can enforce required vars
@@ -61,7 +61,7 @@ def oc_base_url():
             }
         ]
     )
-    if "Reservations" not in result or len(result["Reservations"]) == 0:
+    if "Reservations" not in result or not result["Reservations"]:
         raise Exception(
             f"No dns name found for OC_CLUSTER_NAME {oc_cluster_name}"
         )

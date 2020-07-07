@@ -10,7 +10,6 @@ class ZipRecordingsBucket(core.Construct):
 
         two_week_lifecycle_rule = s3.LifecycleRule(
             id="DeleteAfterTwoWeeks",
-            prefix="",  # for development, remove later
             enabled=True,
             expiration=core.Duration.days(14),
             abort_incomplete_multipart_upload_after=core.Duration.days(1)

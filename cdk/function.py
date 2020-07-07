@@ -34,7 +34,7 @@ class ZipFunction(core.Construct):
             "log_retention": logs.RetentionDays.SIX_MONTHS
         }
 
-        if vpc_id is not None and security_group_id is not None:
+        if vpc_id and security_group_id:
             opencast_vpc = ec2.Vpc.from_lookup(self, "OpencastVpc", vpc_id=vpc_id)
             opencast_security_group = ec2.SecurityGroup.from_security_group_id(
                 self, "OpencastSecurityGroup", security_group_id=security_group_id

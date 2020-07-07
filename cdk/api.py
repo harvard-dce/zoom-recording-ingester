@@ -46,6 +46,7 @@ class ZipApi(core.Construct):
 
         log_group = logs.LogGroup(self, "apilogs",
             log_group_name=f"/aws/apigateway/{self.rest_api_name}/access_logs",
+            removal_policy=core.RemovalPolicy.DESTROY,
             retention=logs.RetentionDays.SIX_MONTHS
         )
 

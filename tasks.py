@@ -22,7 +22,7 @@ from urllib.parse import urlparse, quote
 from cdk import names
 from functools import lru_cache
 
-# suppress warnings for cases where we want to ingore dev cluster dummy certificates
+# suppress warnings for cases where we want to ignore dev cluster dummy certificates
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -428,9 +428,6 @@ def view_uploads(ctx, limit=20):
 
 
 @task(pre=[production_failsafe])
-<<<<<<< HEAD
-def import_schedule_from_opencast(ctx, endpoint=None):
-=======
 def import_schedule_from_file(ctx, filename):
     """
     Import schedule from file. Used for testing.
@@ -442,8 +439,7 @@ def import_schedule_from_file(ctx, filename):
 
 
 @task(pre=[production_failsafe])
-def import_dce_schedule_from_opencast(ctx, endpoint=None):
->>>>>>> setting up cdk
+def import_schedule_from_opencast(ctx, endpoint=None):
     """
     Fetch schedule data from Opencast series endpoint
     """
@@ -1192,8 +1188,8 @@ def __request_ids_from_logs(ctx, log_group, filter_pattern):
         yield log_stream, message['aws_request_id']
 
 
-def resolve_function_arg(func):
-    if func is not None:
+def resolve_function_arg(func=None):
+    if func:
         if func not in names.FUNCTIONS:
             raise Exit(f"Function choices: {names.FUNCTIONS}")
         return [func]
