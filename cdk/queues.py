@@ -41,7 +41,7 @@ class ZipQueues(core.Construct):
             queue_name=f"{self.stack_name}-{names.UPLOAD_QUEUE}",
             retention_period=core.Duration.days(14),
             visibility_timeout=core.Duration.seconds(300),
-            content_based_deduplication=False,
+            content_based_deduplication=True,
             fifo=True,
             dead_letter_queue=self.upload_dlq
         )
