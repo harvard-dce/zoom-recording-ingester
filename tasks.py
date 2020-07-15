@@ -149,7 +149,25 @@ def stack_delete(ctx):
     """
     Deletes the cdk CloudFormation stack
     """
-    ctx.run(f"cdk destroy -c VIA_INVOKE=true {profile_arg()}")
+    recordings_uri = f"s3://{STACK_NAME}-{names.RECORDINGS_BUCKET}"
+    lambda_code_uri = f"s3://{getenv('LAMBDA_CODE_BUCKET')}/{STACK_NAME}"
+
+    empty_bucket_cmd = (f"aws {profile_arg()} s3 rm "
+                        f"--recursive {recordings_uri}")
+    lambda_code_cmd = (f"aws {profile_arg()} s3 rm "
+                       f"--recursive {lambda_code_uri}")
+    delete_cmd = f"cdk destroy --force -c VIA_INVOKE=true {profile_arg()}"
+
+    confirm = (f"\nAre you sure you want to delete stack '{STACK_NAME}'?\n"
+               "WARNING: This will also delete all recording files "
+               f"in '{recordings_uri}' and all lambda function code "
+               f"in '{lambda_code_uri}'.\n"
+               "Type the stack name to confirm deletion: ")
+
+    if input(confirm).strip() == STACK_NAME:
+        ctx.run(empty_bucket_cmd)
+        ctx.run(lambda_code_cmd)
+        ctx.run(delete_cmd)
 
 
 @task(help={'function': 'name of a specific function'})
@@ -367,7 +385,7 @@ def exec_downloader(ctx, series_id=None, ignore_schedule=False, qualifier=None):
         qualifier = names.LAMBDA_RELEASE_ALIAS
 
     cmd = ("aws lambda invoke --function-name='{}-zoom-downloader' "
-            "--payload='{}' --qualifier {} output.txt").format(
+            "--payload='{}' --qualifier {} outfile.txt").format(
         STACK_NAME,
         json.dumps(payload),
         qualifier
