@@ -109,7 +109,7 @@ def stack_create(ctx):
     for func in names.FUNCTIONS:
         __build_function(ctx, func, upload_to_s3=True)
 
-    ctx.run(f"cdk deploy {profile_arg()}")
+    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task(pre=[production_failsafe])
@@ -117,7 +117,7 @@ def stack_update(ctx):
     """
     Updates the CloudFormation stack (use the deploy.* tasks to update functions)
     """
-    ctx.run(f"cdk deploy {profile_arg()}")
+    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task
@@ -125,7 +125,7 @@ def stack_diff(ctx):
     """
     Output a cdk diff of the Cloudformation stack
     """
-    ctx.run(f"cdk diff {profile_arg()}")
+    ctx.run(f"cdk -c VIA_INVOKE=true diff {profile_arg()}")
 
 
 @task
@@ -133,7 +133,7 @@ def stack_synth(ctx):
     """
     Output the cdk-generated CloudFormation template
     """
-    ctx.run(f"cdk synth {profile_arg()}")
+    ctx.run(f"cdk synth -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task
@@ -141,7 +141,7 @@ def stack_list(ctx):
     """
     Outputs the name of the cdk CloudFormation stack
     """
-    ctx.run(f"cdk list {profile_arg()}")
+    ctx.run(f"cdk list -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task

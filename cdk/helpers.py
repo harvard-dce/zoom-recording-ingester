@@ -1,7 +1,6 @@
 import boto3
 import jmespath
 from os import getenv as _getenv
-from functools import lru_cache
 from functions.common import zoom_api_request
 
 AWS_PROFILE = _getenv("AWS_PROFILE")

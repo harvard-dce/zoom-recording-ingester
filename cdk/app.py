@@ -4,7 +4,9 @@ from aws_cdk import core
 from pathlib import Path
 
 from dotenv import load_dotenv
-load_dotenv(dotenv_path=Path('..') / '.env')
+
+dotenv_path = Path('..') / '.env'
+load_dotenv(dotenv_path, override=True)
 
 from .helpers import (
     getenv,
@@ -16,6 +18,7 @@ from .helpers import (
 from .stack import ZipStack
 
 STACK_NAME = getenv("STACK_NAME")
+AWS_PROFILE = getenv("AWS_PROFILE", required=False)
 AWS_REGION = getenv("AWS_REGION", required=False) or \
              getenv("AWS_DEFAULT_REGION", required=False) or \
              "us-east-1"
@@ -50,6 +53,11 @@ stack_props = {
 }
 
 app = core.App()
+
+# warn if we weren't exec'd via the invoke tasks
+if app.node.try_get_context("VIA_INVOKE") != "true":
+    print("\033[93m" + "WARNING: executing `cdk` commands directly is not recommended" + "\033[0m")
+
 stack = ZipStack(
     app,
     STACK_NAME,
