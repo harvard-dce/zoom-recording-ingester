@@ -43,9 +43,21 @@ Info on Zoom's API and webhook functionality can be found at:
 
 ### Things you will need
 
-* python 3.8
+##### Python stuff
+* python 3.8+
 * the python `virtualenv` package
 * AWS CLI installed and configured [https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html]()
+
+##### node/cdk stuff
+
+* node.js 10.3 or higher
+* the `aws-cdk` node.js toolkit installed 
+    * this is usually just `npm install -g aws-cdk`
+    * it's best if the version matches the version of the `aws-cdk.core` package in `requirements.txt`
+    * see [https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html]() for more info
+    
+##### other stuff
+
 * an Opsworks Opencast cluster, including:
     * the base url of the admin node
     * the user/pass combo of the Opencast API system account user
@@ -58,37 +70,30 @@ Info on Zoom's API and webhook functionality can be found at:
 
 #### local environment setup
 
-1. In your aws config (`.aws/config`) make sure to use the identifier "prod" for your production AWS credentials.
+1. Make sure to have run `aws configure` at some point so that you 
+   at least have one set of credentials in an `~/.aws/configure` file.
 1. Make a python virtualenv and activate it however you normally do those things, e.g.: `virtualenv venv && source venv/bin/activate`
 1. Python dependencies are handled via `pip-tools` so you need to install that first: `pip install pip-tools`
-1. Install the dependencies by running `pip-sync`
-1. Copy `example.env` to `.env` and update as necessary. See inline comments for an explanation of each setting
-1. Run `invoke test` to confirm the installation
-1. (Optional) run `invoke -l` to see a list of all available tasks + descriptions
+1. Install the dependencies by running `pip-sync`.
+1. Copy `example.env` to `.env` and update as necessary. See inline comments for an explanation of each setting.
+1. If you have more than one set of AWS credentials configured you can set `AWS_PROFILE` in your `.env` file. Otherwise
+   you'll need to remember to set in your shell session prior to any `invoke` commands.
+1. Run `invoke test` to confirm the installation.
+1. (Optional) run `invoke -l` to see a list of all available tasks + descriptions.
 
 #### deployment
 
 1. Make sure your s3 bucket for packaged lambda code exists. The
 name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`. 
-1. Run `invoke stack.create` to build the CloudFormation stack
-1. Run `invoke generate-resource-policy` and paste the output into the API Gateway's "Resource Policy" field in the web console.
-1. Enable CORS on the ingest endpoint:
-    1. Navigate to the `/ingest` POST method in the api gateway UI
-    1. In the "Actions" menu choose "Enable CORS"
-    1. In the "Access-Control-Allow-Headers" field enter the following value, including the "'" marks:
-       `'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept-Language,X-Requested-With'`
-    1. Click "Enable" and confirm
-    1. The follow-up screen will show the changes being applied. The last one will show a red X instead of a green checkmark.
-       Apparently this is fine for our purposes and doesn't cause problems, so safe to ignore.
-1. (Optional) Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
-    1. Export the DCE Zoom schedule google spreadsheet to a CSV file
-    1. Run `invoke schedule.import-csv [filepath]`
+1. Run `invoke stack.create` to build the CloudFormation stack.
+1. (Optional for dev) Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
+    1. Export the DCE Zoom schedule google spreadsheet to a CSV file.
+    1. Run `invoke schedule.import-csv [filepath]`.
 
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
 
 ### Setup Zoom webhook notifications (Optional)
-
 
 Once the Zoom Ingester pipeline is operational you can configure your Zoom account to
 send completed recording notifications to it via the Zoom Webhook settings.
@@ -107,13 +112,14 @@ and enter the API endpoint under "Event Subscription."
 
 The easiest way to find the on demand ingest endpoint is to run `invoke stack.status`.
 
-The on-demand endpoint appears in the status command output:
-
-	+--------------------+--------------------------------------------------------------------+
-	| On-Demand Endpoint | https://abcde.execute-api.us-east-1.amazonaws.com/live/ingest |
-	+--------------------+--------------------------------------------------------------------+
+The on-demand endpoint appears in the stack **Outputs** listing. Look for the row where `ExportName` is
+something like `my-zip-stack-ingest-url`.
 	
-Opencast can send on demand ingest requests to this endpoint as POST requests. The payload parameter `uuid`, a unique Zoom recording id, is requried. The payload parameters `oc_series_id`, the Opencast series id, and `allow_multiple_ingests`, whether to allow multiple ingests of the same Zoom recording, are optional.
+Opencast can send on demand ingest requests to this endpoint as POST requests. 
+The payload parameter `uuid`, a unique Zoom recording id, is requried. 
+The payload parameters `oc_series_id`, the Opencast series id, and 
+`allow_multiple_ingests`, whether to allow multiple ingests of the same 
+Zoom recording, are optional.
 
 
 
@@ -126,6 +132,9 @@ Opencast can send on demand ingest requests to this endpoint as POST requests. T
 1. Make changes.
 1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
 Alternatively, to save time, if you are only editing one function, run `invoke deploy.[function name] --do-release`.
+1. If you make changes to the provisioning code in `./cdk` you must also (or instead) run 
+    1. `invoke stack.diff` to inspect the changes
+    1. `invoke stack.update` to apply the changes
 1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
 1. Repeat.
 
@@ -185,7 +194,7 @@ you would run them and/or their importance.
 Does the following:
 
 1. Packages each function and uploads the zip files to your s3 code bucket
-1. Builds the CloudFormation stack defined in `template.yml.
+1. Builds all of the AWS resources as part of a CloudFormation stack using the AWS CDK tool
 1. Releases an initial version "1" of each Lambda function
 
 Use `stack.update` to modify an existing stack.
@@ -204,9 +213,13 @@ and release new versions of the pipeline functions in a production environment.
 
 The build steps that CodeBuild will perform are defined in `buildspec.yml`.
 
+##### `invoke stack.diff`
+
+View a diff of CloudFormation changes to the stack.
+
 ##### `invoke stack.update`
 
-Apply `template.yml` changes to the stack.
+Apply changes to the CloudFormation stack.
 
 ##### `invoke stack.delete`
 
