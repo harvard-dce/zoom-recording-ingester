@@ -101,6 +101,57 @@ def codebuild(ctx, revision):
             break
 
 
+@task(pre=[production_failsafe])
+def stack_create(ctx):
+    """
+    Package & upload the lambda function code and build the CloudFormation stack
+    """
+    for func in names.FUNCTIONS:
+        __build_function(ctx, func, upload_to_s3=True)
+
+    ctx.run(f"cdk deploy {profile_arg()}")
+
+
+@task(pre=[production_failsafe])
+def stack_update(ctx):
+    """
+    Updates the CloudFormation stack (use the deploy.* tasks to update functions)
+    """
+    ctx.run(f"cdk deploy {profile_arg()}")
+
+
+@task
+def stack_diff(ctx):
+    """
+    Output a cdk diff of the Cloudformation stack
+    """
+    ctx.run(f"cdk diff {profile_arg()}")
+
+
+@task
+def stack_synth(ctx):
+    """
+    Output the cdk-generated CloudFormation template
+    """
+    ctx.run(f"cdk synth {profile_arg()}")
+
+
+@task
+def stack_list(ctx):
+    """
+    Outputs the name of the cdk CloudFormation stack
+    """
+    ctx.run(f"cdk list {profile_arg()}")
+
+
+@task
+def stack_delete(ctx):
+    """
+    Deletes the cdk CloudFormation stack
+    """
+    ctx.run(f"cdk destroy -c VIA_INVOKE=true {profile_arg()}")
+
+
 @task(help={'function': 'name of a specific function'})
 def package(ctx, function=None, upload_to_s3=False):
     """
@@ -567,7 +618,7 @@ def import_schedule_from_csv(ctx, filepath):
         schedule_data[zoom_series_id].setdefault("Days", set())
         for day in row["day"].strip():
             if day not in valid_days:
-                raise Exit("Got bad day value: {}".format(letter))
+                raise Exit("Got bad day value: {}".format(day))
             schedule_data[zoom_series_id]["Days"].add(day)
 
         schedule_data[zoom_series_id].setdefault("Time", set())
@@ -646,6 +697,16 @@ ns.add_task(package)
 ns.add_task(release)
 ns.add_task(update_requirements)
 
+stack_ns = Collection('stack')
+stack_ns.add_task(status)
+stack_ns.add_task(stack_list, 'list')
+stack_ns.add_task(stack_synth, 'synth')
+stack_ns.add_task(stack_diff, 'diff')
+stack_ns.add_task(stack_create, 'create')
+stack_ns.add_task(stack_update, 'update')
+stack_ns.add_task(stack_delete, 'delete')
+ns.add_collection(stack_ns)
+
 deploy_ns = Collection('deploy')
 deploy_ns.add_task(deploy, 'all')
 deploy_ns.add_task(deploy_webhook, 'webhook')
@@ -667,10 +728,6 @@ debug_ns = Collection('debug')
 debug_ns.add_task(debug_on, 'on')
 debug_ns.add_task(debug_off, 'off')
 ns.add_collection(debug_ns)
-
-stack_ns = Collection('stack')
-stack_ns.add_task(status)
-ns.add_collection(stack_ns)
 
 queue_ns = Collection('queue')
 queue_ns.add_task(view_downloads, 'downloads')
@@ -798,7 +855,6 @@ def __build_function(ctx, func, upload_to_s3=False):
         module_path = join(dirname(__file__), 'functions/{}.py'.format(module))
         module_dist_path = join(build_path, '{}.py'.format(module))
         try:
-            print("symlinking {} to {}".format(module_path, module_dist_path))
             symlink(module_path, module_dist_path)
         except FileExistsError:
             pass
@@ -816,14 +872,10 @@ def __build_function(ctx, func, upload_to_s3=False):
         ctx.run("zip -r {} .".format(zip_path), hide=1)
 
     if upload_to_s3:
-        ctx.run("aws {} s3 cp {} s3://{}/{}/{}.zip".format(
-            profile_arg(),
-            zip_path,
-            getenv("LAMBDA_CODE_BUCKET"),
-            STACK_NAME,
-            func),
-            hide=1
-        )
+        bucket = getenv("LAMBDA_CODE_BUCKET")
+        s3_path = f"s3://{bucket}/{STACK_NAME}/{func}.zip"
+        print(f"uploading {func} to {s3_path}")
+        ctx.run(f"aws {profile_arg()} s3 cp {zip_path} {s3_path}", hide=1)
 
 
 def __update_function(ctx, func):
