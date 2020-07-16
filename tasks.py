@@ -109,7 +109,7 @@ def stack_create(ctx):
     for func in names.FUNCTIONS:
         __build_function(ctx, func, upload_to_s3=True)
 
-    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}")
+    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
 
 @task(pre=[production_failsafe])
@@ -117,7 +117,7 @@ def stack_update(ctx):
     """
     Updates the CloudFormation stack (use the deploy.* tasks to update functions)
     """
-    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}")
+    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
 
 @task
