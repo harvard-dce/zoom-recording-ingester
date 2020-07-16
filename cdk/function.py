@@ -57,7 +57,7 @@ class ZipFunction(core.Construct):
     def add_monitoring(self, monitoring):
         errors_alarm = cloudwatch.Alarm(self, "ErrorsAlarm",
             metric=self.function.metric_errors(),
-            alarm_name=f"{self.stack_name}-{self.function.function_name}-errors",
+            alarm_name=f"{self.function.function_name}-errors",
             statistic="sum",
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
             threshold=1,
@@ -122,7 +122,7 @@ class ZipDownloaderFunction(ZipFunction):
 
         invocations_alarm = cloudwatch.Alarm(self, "InvocationsAlarm",
             metric=self.function.metric_invocations(),
-            alarm_name=f"{self.stack_name}-{self.function.function_name}-invocations",
+            alarm_name=f"{self.function.function_name}-invocations",
             statistic="sum",
             comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
             threshold=1,
