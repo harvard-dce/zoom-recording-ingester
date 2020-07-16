@@ -14,6 +14,7 @@ class ZipFunction(core.Construct):
                  lambda_code_bucket,
                  environment,
                  timeout=30,
+                 memory_size=128,
                  vpc_id=None,
                  security_group_id=None):
         super().__init__(scope, id)
@@ -30,6 +31,7 @@ class ZipFunction(core.Construct):
             ),
             "handler": f"{name}.handler",
             "timeout": core.Duration.seconds(timeout),
+            "memory_size": memory_size,
             "environment": environment,
             "log_retention": logs.RetentionDays.SIX_MONTHS
         }

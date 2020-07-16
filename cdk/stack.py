@@ -94,6 +94,7 @@ class ZipStack(core.Stack):
             name=names.DOWNLOAD_FUNCTION,
             lambda_code_bucket = lambda_code_bucket,
             timeout=900,
+            memory_size=500,
             environment={
                 "ZOOM_VIDEOS_BUCKET": recordings_bucket.bucket.bucket_name,
                 "DOWNLOAD_QUEUE_NAME": queues.download_queue.queue_name,
