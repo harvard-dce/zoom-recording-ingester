@@ -39,6 +39,7 @@ class ZipStack(core.Stack):
             oc_flavor,
             oc_track_upload_max,
             oc_base_url,
+            oc_db_url,
             ingest_allowed_ips,
             zoom_admin_id,
             oc_vpc_id,
@@ -118,7 +119,9 @@ class ZipStack(core.Stack):
         op_counts = ZipOpCountsFunction(self, 'OpCountsFunction',
             name=names.OP_COUNTS_FUNCTION,
             lambda_code_bucket = lambda_code_bucket,
-            environment={}
+            environment={
+                "OPENCAST_DB_URL": oc_db_url
+            }
         )
 
         # uploader lambda uploads recordings to opencast
