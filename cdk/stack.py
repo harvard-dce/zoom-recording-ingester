@@ -120,6 +120,8 @@ class ZipStack(core.Stack):
         op_counts = ZipOpCountsFunction(self, 'OpCountsFunction',
             name=names.OP_COUNTS_FUNCTION,
             lambda_code_bucket = lambda_code_bucket,
+            vpc_id=oc_vpc_id,
+            security_group_id=oc_security_group_id,
             environment={
                 "OPENCAST_DB_URL": oc_db_url
             }
