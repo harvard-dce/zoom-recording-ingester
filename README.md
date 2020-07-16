@@ -150,7 +150,7 @@ This task will recreate the webhook notification for the recording identified by
 Options: `--oc-series-id=XX`
 
 Similar to `exec.webhook` except that this also triggers the downloader and
-uploader functions to run and reports success or error for reach.
+uploader functions to run and reports success or error for each.
 
 ##### `invoke exec.on_demand [uuid]`
 
@@ -197,6 +197,13 @@ Does the following:
 1. Builds all of the AWS resources as part of a CloudFormation stack using the AWS CDK tool
 1. Releases an initial version "1" of each Lambda function
 
+**Notes**:
+* When running this command (and `stack.update` as well) you will be presented with a
+  confirmation prompt to approve some of provisioning operations or changes, typical those realted
+  to security and/or permissions
+* The output from this command can be a bit verbose. You will see real-time updates from
+  Cloudformation as resource creation is initiated and completed.
+
 Use `stack.update` to modify an existing stack.
 
 ##### `invoke stack.status`
@@ -204,7 +211,7 @@ Use `stack.update` to modify an existing stack.
 This will output some tables of information about the current state of the
 CloudFormation stack and the Lambda functions.
 
-##### `invoke codebuild --revision [tag or branch]`
+##### `invoke codebuild --revision=[tag or branch]`
 
 Execute the CodeBuild project. This is the command that should be used to deploy
 and release new versions of the pipeline functions in a production environment.
