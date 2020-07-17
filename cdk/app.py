@@ -26,6 +26,8 @@ AWS_REGION = getenv("AWS_REGION", required=False) or \
 
 oc_vpc_id, oc_security_group_id =  vpc_components()
 ingest_allowed_ips = getenv("INGEST_ALLOWED_IPS").split(',')
+default_publisher = getenv("DEFAULT_PUBLISHER", required=False) \
+                    or getenv("NOTIFICATION_EMAIL")
 
 stack_props = {
     "lambda_code_bucket": getenv("LAMBDA_CODE_BUCKET"),
@@ -37,7 +39,7 @@ stack_props = {
     "download_message_per_invocation": getenv("DOWNLOAD_MESSAGES_PER_INVOCATION"),
     "opencast_api_user": getenv("OPENCAST_API_USER"),
     "opencast_api_password": getenv("OPENCAST_API_PASSWORD"),
-    "default_publisher": getenv("DEFAULT_PUBLISHER"),
+    "default_publisher": default_publisher,
     "override_publisher": getenv("OVERRIDE_PUBLISHER", required=False),
     "override_contributor": getenv("OVERRIDE_CONTRIBUTOR", required=False),
     "oc_workflow": getenv("OC_WORKFLOW"),
