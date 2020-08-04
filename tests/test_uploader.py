@@ -192,6 +192,64 @@ def test_get_current_upload_count(mocker):
     assert uploader.get_current_upload_count() == None
 
 
+def test_s3_filename_filter_false_start():
+    # entire meetings < MINIMUM_DURATION should have been filtered out
+    # in the downloader code so I don't test that case here
+
+    single_file = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "000.mp4",
+                        "ffprobe_seconds": 500
+                    }
+                ]
+            }
+        }
+    }
+
+    false_start = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "000.mp4",
+                        "ffprobe_seconds": 5
+                    },
+                    {
+                        "filename": "001.mp4",
+                        "ffprobe_seconds": 500
+                    }
+                ]
+            }
+        }
+    }
+
+    false_end = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "000.mp4",
+                        "ffprobe_seconds": 500
+                    },
+                    {
+                        "filename": "001.mp4",
+                        "ffprobe_seconds": 5
+                    }
+                ]
+            }
+        }
+    }
+
+    cases = [(single_file, 1), (false_start, 1), (false_end, 2)]
+
+    for data, expected in cases:
+        upload = uploader.Upload(data)
+        assert (len(upload.s3_filenames["speaker_view"]) == expected)
+
+
 def test_file_param_generator():
     # each `cases` item is a list containing two iterables
     # - first element in list gets turned into the s3_filenames data

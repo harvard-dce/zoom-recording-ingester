@@ -45,7 +45,7 @@ def sqs_resource():
 def handler(event, context):
     """
     This function receives an event on each new entry in the download urls
-    DyanmoDB table
+    DynamoDB table
     """
 
     ignore_schedule = event.get("ignore_schedule", False)
@@ -66,7 +66,7 @@ def handler(event, context):
         dl = Download(sqs, dl_data)
 
         # this is checking for ~total~ duration of the recording as reported
-        # by zoom in the webook payload data. There is a separate check later
+        # by zoom in the webhook payload data. There is a separate check later
         # for the duration potentially different sets of files
         if dl.duration >= MINIMUM_DURATION:
             if dl.oc_series_found(ignore_schedule, override_series_id):
@@ -169,48 +169,13 @@ class Download:
             # collect the recording files here as ZoomFile objs
             zoom_files = []
 
-            # we'll set this to true once we're past any false start
-            # track sets
-            take_all = False
-
             # track sets refers to the sets of recording files that
             # are generated when a host stops and restarts a meeting
-            # Here we group the files by track set to allow ignoring any
-            # too-short segments that happen at the beginning of the meeting
-            # a.k.a. false starts
             for track_set_num, start_time in enumerate(track_set_start_times):
                 # all the files from this segment
-                track_set_files = [f for f in files
-                             if f["recording_start"] == start_time]
-                # parse their start/end times
-                track_set_start = datetime.strptime(
-                    track_set_files[0]["recording_start"],
-                    TIMESTAMP_FORMAT
-                )
-                track_set_end = datetime.strptime(
-                    track_set_files[0]["recording_end"],
-                    TIMESTAMP_FORMAT
-                )
-                # get the duration of the segment
-                duration_sec = (track_set_end - track_set_start).seconds
-
-                logger.info({
-                    "track_set": {
-                        "number": track_set_num,
-                        "file_count": len(track_set_files),
-                        "start": track_set_start,
-                        "end": track_set_end,
-                        "duration": duration_sec
-                    }
-                })
-
-                # skip any initial track sets < minimum duration
-                if not take_all and duration_sec < MINIMUM_DURATION * 60:
-                    logger.info("skipping track set {}".format(track_set_num))
-                    continue
-
-                # once past the minimum duration we take everything else
-                take_all = True
+                track_set_files = [
+                    f for f in files if f["recording_start"] == start_time
+                ]
 
                 for file in track_set_files:
                     file["meeting_uuid"] = self.uuid

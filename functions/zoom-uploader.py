@@ -28,6 +28,8 @@ OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
 OC_OP_COUNT_FUNCTION = env("OC_OP_COUNT_FUNCTION")
 OC_TRACK_UPLOAD_MAX = int(env("OC_TRACK_UPLOAD_MAX", 5))
+# Ignore recordings that are less than MIN_DURATION (in minutes)
+MINIMUM_DURATION = int(env("MINIMUM_DURATION", 2))
 
 s3 = boto3.resource("s3")
 aws_lambda = boto3.client("lambda")
@@ -228,8 +230,16 @@ class Upload:
     def s3_filenames(self):
         if not hasattr(self, "_s3_filenames"):
             self._s3_filenames = {}
-            for view, file in self.data["s3_files"].items():
-                self._s3_filenames[view] = [data["filename"] for data in file["segments"]]
+            for view, file_info in self.data["s3_files"].items():
+                segments = file_info["segments"]
+
+                # skip false starts
+                if segments[0]["ffprobe_seconds"] < MINIMUM_DURATION * 60:
+                    segments = segments[1:]
+
+                self._s3_filenames[view] = [
+                    segment["filename"] for segment in segments
+                ]
 
         return self._s3_filenames
 
