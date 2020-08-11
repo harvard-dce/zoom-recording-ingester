@@ -33,3 +33,4 @@ aws-cdk.aws_iam
 -r function_requirements/zoom-log-notifications.in
 -r function_requirements/opencast-op-counts.in
 -r function_requirements/zoom-on-demand.in
+-r function_requirements/schedule-update.in

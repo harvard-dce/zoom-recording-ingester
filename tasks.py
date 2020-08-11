@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import zoom_api_request
+from functions.common import zoom_api_request, gsheets_token
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
 from cdk import names
@@ -192,6 +192,11 @@ def deploy(ctx, function=None, do_release=False):
         __update_function(ctx, func)
         if do_release:
             release(ctx, func)
+
+
+@task(pre=[production_failsafe])
+def deploy_schedule_update(ctx, do_release=False):
+    deploy(ctx, names.SCHEDULE_UPDATE_FUNCTION, do_release)
 
 
 @task(pre=[production_failsafe])
@@ -736,12 +741,32 @@ def logs_uploader(ctx, watch=False):
     logs(ctx, names.UPLOAD_FUNCTION, watch)
 
 
+@task
+def gen_gsheets_token(ctx):
+    """
+    Generate a google sheets login.
+    """
+    if not gsheets_token(allow_login=True):
+        print(
+            "No google sheets token generated.\n"
+            "The file `credentials.json` is required to generate a token.\n"
+            "Generate a `credentials.json` file in the Google API console.\n"
+            "https://developers.google.com/sheets/api/guides/authorizing"
+        )
+    else:
+        print(
+            "Google sheets token created or valid `token.pickle` "
+            "already exists."
+        )
+
+
 ns = Collection()
 ns.add_task(test)
 ns.add_task(codebuild)
 ns.add_task(package)
 ns.add_task(release)
 ns.add_task(update_requirements)
+ns.add_task(gen_gsheets_token)
 
 stack_ns = Collection('stack')
 stack_ns.add_task(status)
@@ -755,6 +780,7 @@ ns.add_collection(stack_ns)
 
 deploy_ns = Collection('deploy')
 deploy_ns.add_task(deploy, 'all')
+deploy_ns.add_task(deploy_schedule_update, 'schedule-update')
 deploy_ns.add_task(deploy_webhook, 'webhook')
 deploy_ns.add_task(deploy_downloader, 'downloader')
 deploy_ns.add_task(deploy_uploader, 'uploader')
@@ -795,6 +821,7 @@ logs_ns.add_task(logs_downloader, 'downloader')
 logs_ns.add_task(logs_uploader, 'uploader')
 logs_ns.add_task(recording)
 ns.add_collection(logs_ns)
+
 
 ###############################################################################
 

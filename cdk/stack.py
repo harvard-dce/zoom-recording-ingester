@@ -12,13 +12,15 @@ from .function import (
     ZipUploaderFunction,
     ZipOpCountsFunction,
     ZipWebhookFunction,
-    ZipLogNotificationsFunction
+    ZipLogNotificationsFunction,
+    ZipScheduleUpdateFunction,
 )
 from .api import ZipApi
 from .events import ZipEvent
 from .codebuild import ZipCodebuildProject
 from .monitoring import ZipMonitoring
 from . import names
+
 
 class ZipStack(core.Stack):
 
@@ -47,8 +49,11 @@ class ZipStack(core.Stack):
             downloader_event_rate,
             uploader_event_rate,
             project_git_url,
+            gsheets_doc_id,
+            gsheets_sheet_name,
             **kwargs
             ) -> None:
+        
         super().__init__(scope, id, **kwargs)
 
         monitoring = ZipMonitoring(self, 'ZipMonitoring',
@@ -65,6 +70,15 @@ class ZipStack(core.Stack):
         queues = ZipQueues(self, "Queues")
 
         schedule = ZipSchedule(self, "Schedule")
+
+        ZipScheduleUpdateFunction(self, "ScheduleUpdateFunction",
+            name=names.SCHEDULE_UPDATE_FUNCTION,
+            lambda_code_bucket=lambda_code_bucket,
+            environment={
+                "GSHEETS_DOC_ID": gsheets_doc_id,
+                "GSHEETS_SHEET_NAME": gsheets_sheet_name,
+            }
+        )
 
         on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,

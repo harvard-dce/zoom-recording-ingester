@@ -6,7 +6,11 @@ import aws_lambda_logging
 from functools import wraps
 from os import getenv as env
 from dotenv import load_dotenv
-from os.path import join, dirname
+from os.path import join, dirname, exists
+# google sheets imports
+import pickle
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 
 logger = logging.getLogger()
 
@@ -18,10 +22,39 @@ ZOOM_API_BASE_URL = "https://api.zoom.us/v2/"
 ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+GSHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 
 
 class ZoomApiRequestError(Exception):
     pass
+
+
+def gsheets_token(allow_login=False):
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens,
+    # and is created automatically when the authorization flow completes
+    # for the first time.
+    if exists("token.pickle"):
+        with open("token.pickle", "rb") as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, 
+    # try to refresh the token or let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        elif allow_login:
+            if not exists("credentials.json"):
+                return None
+            flow = InstalledAppFlow.from_client_secrets_file(
+                "credentials.json", [GSHEETS_SCOPE]
+            )
+            creds = flow.run_local_server(port=0)
+        else:
+            return None
+        # Save the credentials for the next run
+        with open("token.pickle", "wb") as token:
+            pickle.dump(creds, token)
+    return creds
 
 
 def setup_logging(handler_func):

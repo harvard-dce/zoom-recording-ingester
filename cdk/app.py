@@ -54,6 +54,8 @@ stack_props = {
     "oc_db_url": oc_db_url(),
     "zoom_admin_id": zoom_admin_id(),
     "project_git_url": "https://github.com/harvard-dce/zoom-recording-ingester.git",
+    "gsheets_doc_id": getenv("GSHEETS_DOC_ID"),
+    "gsheets_sheet_name": getenv("GSHEETS_SHEET_NAME"),
 }
 
 app = core.App()
