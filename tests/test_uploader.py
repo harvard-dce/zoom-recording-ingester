@@ -201,7 +201,15 @@ def test_s3_filename_filter_false_start():
             "speaker_view": {
                 "segments": [
                     {
-                        "filename": "000.mp4",
+                        "filename": "a/b/000-speaker_view.mp4",
+                        "ffprobe_seconds": 500
+                    }
+                ]
+            },
+            "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-shared_screen.mp4",
                         "ffprobe_seconds": 500
                     }
                 ]
@@ -214,11 +222,23 @@ def test_s3_filename_filter_false_start():
             "speaker_view": {
                 "segments": [
                     {
-                        "filename": "000.mp4",
+                        "filename": "a/b/000-speaker_view.mp4",
                         "ffprobe_seconds": 5
                     },
                     {
-                        "filename": "001.mp4",
+                        "filename": "a/b/001-speaker_view.mp4",
+                        "ffprobe_seconds": 500
+                    }
+                ]
+            },
+             "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-shared_screen.mp4",
+                        "ffprobe_seconds": 5
+                    },
+                    {
+                        "filename": "a/b/001-shared_screen.mp4",
                         "ffprobe_seconds": 500
                     }
                 ]
@@ -231,11 +251,23 @@ def test_s3_filename_filter_false_start():
             "speaker_view": {
                 "segments": [
                     {
-                        "filename": "000.mp4",
+                        "filename": "a/b/000-speaker_view.mp4",
                         "ffprobe_seconds": 500
                     },
                     {
-                        "filename": "001.mp4",
+                        "filename": "a/b/001-speaker_view.mp4",
+                        "ffprobe_seconds": 5
+                    }
+                ]
+            },
+            "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-shared_screen.mp4",
+                        "ffprobe_seconds": 500
+                    },
+                    {
+                        "filename": "a/b/001-shared_screen.mp4",
                         "ffprobe_seconds": 5
                     }
                 ]
@@ -243,11 +275,52 @@ def test_s3_filename_filter_false_start():
         }
     }
 
-    cases = [(single_file, 1), (false_start, 1), (false_end, 2)]
+    segment_mismatch = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-speaker_view.mp4",
+                        "ffprobe_seconds": 5
+                    },
+                    {
+                        "filename": "a/b/001-speaker_view.mp4",
+                        "ffprobe_seconds": 10
+                    },
+                    {
+                        "filename": "a/b/002-speaker_view.mp4",
+                        "ffprobe_seconds": 500
+                    }
+                ]
+            },
+            "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/001-shared_screen.mp4",
+                        "ffprobe_seconds": 10
+                    },
+                    {
+                        "filename": "a/b/002-shared_screen.mp4",
+                        "ffprobe_seconds": 500
+                    }
+                ]
+            }
+        }
+    }
 
-    for data, expected in cases:
+    cases = [
+        (single_file, 1, 1),
+        (false_start, 1, 1),
+        (false_end, 2, 2),
+        (segment_mismatch, 2, 2)
+    ]
+
+    for data, expected_speaker, expected_screen_share in cases:
         upload = uploader.Upload(data)
-        assert (len(upload.s3_filenames["speaker_view"]) == expected)
+        assert (len(upload.s3_filenames["speaker_view"]) == expected_speaker)
+        assert (
+            len(upload.s3_filenames["screen_share"]) == expected_screen_share
+        )
 
 
 def test_file_param_generator():

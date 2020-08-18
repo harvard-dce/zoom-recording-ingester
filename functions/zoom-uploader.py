@@ -235,7 +235,12 @@ class Upload:
 
                 # skip false starts
                 if segments[0]["ffprobe_seconds"] < MINIMUM_DURATION * 60:
-                    segments = segments[1:]
+                    # first segment for each view might not be the overall
+                    # first segment, need to check
+                    filename = segments[0]["filename"]
+                    segment_no = int(filename.split("/")[-1].split("-")[0])
+                    if segment_no == 0:
+                        segments = segments[1:]
 
                 self._s3_filenames[view] = [
                     segment["filename"] for segment in segments
