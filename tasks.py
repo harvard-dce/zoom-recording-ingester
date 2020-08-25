@@ -5,8 +5,6 @@ from botocore.exceptions import ClientError
 import requests
 from requests.auth import HTTPDigestAuth
 import time
-import csv
-import itertools
 import shutil
 from datetime import datetime, timedelta, date as datetime_date
 from invoke import task, Collection
@@ -16,7 +14,8 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import zoom_api_request, gsheets_token
+from functions.common import zoom_api_request, GSheetsToken, \
+    schedule_json_to_dynamo, schedule_csv_to_dynamo
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
 from cdk import names
@@ -36,6 +35,10 @@ OC_CLUSTER_NAME = env('OC_CLUSTER_NAME')
 PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env('NONINTERACTIVE')
 INGEST_ALLOWED_IPS = env('INGEST_ALLOWED_IPS', '')
+
+LAMBDA_CODE_BUCKET = env("LAMBDA_CODE_BUCKET")
+LAMBDA_CODE_URI = f"s3://{LAMBDA_CODE_BUCKET}/{STACK_NAME}"
+RECORDINGS_URI = f"s3://{STACK_NAME}-{names.RECORDINGS_BUCKET}"
 
 if AWS_PROFILE is not None:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
@@ -149,13 +152,10 @@ def stack_delete(ctx):
     """
     Deletes the cdk CloudFormation stack
     """
-    recordings_uri = f"s3://{STACK_NAME}-{names.RECORDINGS_BUCKET}"
-    lambda_code_uri = f"s3://{getenv('LAMBDA_CODE_BUCKET')}/{STACK_NAME}"
-
     empty_bucket_cmd = (f"aws {profile_arg()} s3 rm "
-                        f"--recursive {recordings_uri}")
+                        f"--recursive {RECORDINGS_URI}")
     lambda_code_cmd = (f"aws {profile_arg()} s3 rm "
-                       f"--recursive {lambda_code_uri}")
+                       f"--recursive {LAMBDA_CODE_URI}")
     delete_cmd = f"cdk destroy --force -c VIA_INVOKE=true {profile_arg()}"
 
     confirm = (f"\nAre you sure you want to delete stack '{STACK_NAME}'?\n"
@@ -509,7 +509,10 @@ def import_schedule_from_file(ctx, filename):
     if not filename.endswith(".json"):
         print("Invalid file type {}. File must be .json".format(filename))
 
-    __schedule_json_to_dynamo(ctx, filename)
+    schedule_json_to_dynamo(names.SCHEDULE_TABLE, filename)
+
+    print("Schedule updated")
+
 
 
 @task(pre=[production_failsafe])
@@ -595,96 +598,18 @@ def import_schedule_from_opencast(ctx, endpoint=None):
             raise Exit("Failed converting to dynamo item format: {}\n{}" \
                        .format(str(e), json.dumps(event, indent=2)))
 
-    __schedule_json_to_dynamo(ctx, schedule_data=schedule_data)
+    schedule_json_to_dynamo(
+        ctx,
+        names.SCHEDULE_TABLE,
+        schedule_data=schedule_data
+    )
+
+    print("Schedule updated")
 
 
 @task(pre=[production_failsafe])
 def import_schedule_from_csv(ctx, filepath):
-    valid_days = ["M", "T", "W", "R", "F", "S", "U"]
-
-    # make it so we can use lower-case keys in our row dicts;
-    # there are lots of ways this spreadsheet data import could go wrong and
-    # this is only one, but we do what we can.
-    def lower_case_first_line(iter):
-        header = next(iter).lower()
-        return itertools.chain([header], iter)
-
-    with open(filepath, "r") as f:
-        reader = csv.DictReader(lower_case_first_line(f))
-        rows = list(reader)
-
-    required_columns = [
-        "course code",
-        "day",
-        "start",
-        "meeting id with password",
-        "oc series"
-    ]
-    for col in required_columns:
-        if col not in rows[0]:
-            raise Exception(f"Missing required field \"{col}\"")
-
-    schedule_data = {}
-    for row in rows:
-
-        meeting_id_with_pwd = row["meeting id with password"]
-        if not meeting_id_with_pwd:
-            print(f"{row['course code']}: \tMissing zoom link")
-            continue
-
-        try:
-            zoom_link = urlparse(row["meeting id with password"].strip())
-            assert zoom_link.scheme.startswith("https")
-        except AssertionError:
-            print(f"{row['course code']}: \tInvalid zoom link")
-
-        zoom_series_id = zoom_link.path.split("/")[-1]
-        schedule_data.setdefault(zoom_series_id, {})
-        schedule_data[zoom_series_id]["zoom_series_id"] = zoom_series_id
-
-        opencast_series_id = urlparse(row["oc series"]) \
-            .fragment.replace("/", "")
-        if not opencast_series_id:
-            print(f"{row['course code']}: \tMissing oc series")
-        schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
-
-        subject = "{} - {}".format(row["course code"], row["type"])
-        schedule_data[zoom_series_id]["opencast_subject"] = subject
-
-        schedule_data[zoom_series_id].setdefault("Days", set())
-
-        days_value = row["day"].strip()
-
-        # value might look like "MW", "TR" or "MWF"
-        if len(days_value) > 1 and " " not in days_value:
-            days = list(days_value)
-        else:
-            split_by = " "
-            if "," in days_value:
-                split_by = ","
-            days = [day.strip() for day in days_value.split(split_by)]
-
-        for day in days:
-            if day not in valid_days:
-                print(
-                    f"{row['course code']}: \tbad day value \"{day}\""
-                )
-                continue
-            schedule_data[zoom_series_id]["Days"].add(day)
-
-        schedule_data[zoom_series_id].setdefault("Time", set())
-        time_object = datetime.strptime(row["start"], "%H:%M")
-        schedule_data[zoom_series_id]["Time"].update([
-            datetime.strftime(time_object, "%H:%M"),
-            (time_object + timedelta(minutes=30)).strftime("%H:%M"),
-            (time_object + timedelta(hours=1)).strftime("%H:%M")
-        ])
-
-    for id, item in schedule_data.items():
-        item["Days"] = list(item["Days"])
-        item["Time"] = list(item["Time"])
-
-    __schedule_json_to_dynamo(ctx, schedule_data=schedule_data)
+    schedule_csv_to_dynamo(names.SCHEDULE_TABLE, filepath)
 
 
 @task
@@ -746,9 +671,11 @@ def gen_gsheets_token(ctx):
     """
     Generate a google sheets login.
     """
-    if not gsheets_token(allow_login=True):
+
+    token = GSheetsToken()
+    if not token.valid():
         print(
-            "No google sheets token generated.\n"
+            "No valid google sheets token.\n"
             "The file `credentials.json` is required to generate a token.\n"
             "Generate a `credentials.json` file in the Google API console.\n"
             "https://developers.google.com/sheets/api/guides/authorizing"
@@ -945,10 +872,11 @@ def __build_function(ctx, func, upload_to_s3=False):
         ctx.run("zip -r {} .".format(zip_path), hide=1)
 
     if upload_to_s3:
-        bucket = getenv("LAMBDA_CODE_BUCKET")
-        s3_path = f"s3://{bucket}/{STACK_NAME}/{func}.zip"
+        s3_path = f"{LAMBDA_CODE_URI}/{func}.zip"
         print(f"uploading {func} to {s3_path}")
         ctx.run(f"aws {profile_arg()} s3 cp {zip_path} {s3_path}", hide=1)
+        if func == names.SCHEDULE_UPDATE_FUNCTION:
+            __upload_gsheets_token()
 
 
 def __update_function(ctx, func):
@@ -967,6 +895,17 @@ def __update_function(ctx, func):
                 zip_path
             )
     ctx.run(cmd, hide=1)
+
+    if func == names.SCHEDULE_UPDATE_FUNCTION:
+        __upload_gsheets_token()
+    
+
+def __upload_gsheets_token(ctx):
+    # include token to access gsheets
+    s3_path = f"{LAMBDA_CODE_URI}/token.pickle"
+    token_path = join(dirname(__file__), "token.pickle")
+    print(f"uploading token.pickle to {s3_path}")
+    ctx.run(f"aws {profile_arg()} s3 cp {token_path} {s3_path}", hide=1)
 
 
 def __set_debug(ctx, debug_val):
@@ -1133,38 +1072,6 @@ def __view_messages(queue_url, limit):
             if 'MessageAttributes' in message and 'FailedReason' in message['MessageAttributes']:
                 print("{}: {}".format('ReportedError', message['MessageAttributes']['FailedReason']['StringValue']))
             print()
-
-
-def __schedule_json_to_dynamo(ctx, json_file=None, schedule_data=None):
-
-    if json_file is not None:
-        with open(json_file, "r") as file:
-            try:
-                schedule_data = json.load(file)
-            except Exception as e:
-                print("Unable to load {}: {}" \
-                      .format(json_file, str(e)))
-                return
-    elif schedule_data is None:
-        raise Exit("{} called with no json_file or schedule_data args".format(
-            sys._getframe().f_code.co_name
-        ))
-
-    try:
-        dynamodb = boto3.resource('dynamodb')
-        table_name = f"{STACK_NAME}-{names.SCHEDULE_TABLE}"
-        table = dynamodb.Table(table_name)
-
-        for item in schedule_data.values():
-            table.put_item(Item=item)
-    except ClientError as e:
-        error = e.response['Error']
-        raise Exit("{}: {}".format(error['Code'], error['Message']))
-
-    print("Schedule updated")
-
-    # todo print diff using value from `__get_dyanmo_schedule`
-    # pprint(__get_dynamo_schedule(ctx, table_name))
 
 
 def __get_dynamo_schedule(ctx, table_name):

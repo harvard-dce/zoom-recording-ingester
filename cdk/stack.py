@@ -71,14 +71,17 @@ class ZipStack(core.Stack):
 
         schedule = ZipSchedule(self, "Schedule")
 
-        ZipScheduleUpdateFunction(self, "ScheduleUpdateFunction",
+        schedule_update = ZipScheduleUpdateFunction(self, "ScheduleUpdateFunction",
             name=names.SCHEDULE_UPDATE_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
+                "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
                 "GSHEETS_DOC_ID": gsheets_doc_id,
                 "GSHEETS_SHEET_NAME": gsheets_sheet_name,
             }
         )
+        # grant schedule update function access to dynamo
+        schedule.table.grant_read_write_data(schedule_update.function)
 
         on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
