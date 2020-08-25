@@ -645,7 +645,7 @@ def import_schedule_from_csv(ctx, filepath):
 
         subject = "{} - {}".format(row["course code"], row["type"])
         schedule_data[zoom_series_id]["opencast_subject"] = subject
-      
+   
         schedule_data[zoom_series_id].setdefault("Days", set())
         split_by = " "
         if "," in row["day"]:
@@ -653,9 +653,10 @@ def import_schedule_from_csv(ctx, filepath):
         days = [day.strip() for day in row["day"].split(split_by)]
         for day in days:
             if day not in valid_days:
-                raise Exit(
-                    f"Got bad day value \"{day}\" for series {zoom_series_id}"
+                print(
+                    f"{row['course code']}: \tbad day value \"{day}\""
                 )
+                continue
             schedule_data[zoom_series_id]["Days"].add(day)
 
         schedule_data[zoom_series_id].setdefault("Time", set())
