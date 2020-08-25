@@ -608,19 +608,30 @@ def import_schedule_from_csv(ctx, filepath):
         reader = csv.DictReader(lower_case_first_line(f))
         rows = list(reader)
 
+    required_columns = [
+        "course code",
+        "day",
+        "start",
+        "meeting id with password",
+        "oc series"
+    ]
+    for col in required_columns:
+        if col not in rows[0]:
+            raise Exception(f"Missing required field \"{col}\"")
+
     schedule_data = {}
     for row in rows:
 
+        meeting_id_with_pwd = row["meeting id with password"]
+        if not meeting_id_with_pwd:
+            print(f"{row['course code']}: \tMissing zoom link")
+            continue
+
         try:
-            zoom_link = urlparse(row["meeting id with password"])
+            zoom_link = urlparse(row["meeting id with password"].strip())
             assert zoom_link.scheme.startswith("https")
         except AssertionError:
-            zoom_link = None
-
-        if zoom_link is None:
-            print("Invalid zoom link value for {}: {}" \
-                  .format(row["course code"], zoom_link))
-            continue
+            print(f"{row['course code']}: \tInvalid zoom link")
 
         zoom_series_id = zoom_link.path.split("/")[-1]
         schedule_data.setdefault(zoom_series_id, {})
@@ -628,13 +639,19 @@ def import_schedule_from_csv(ctx, filepath):
 
         opencast_series_id = urlparse(row["oc series"]) \
             .fragment.replace("/", "")
+        if not opencast_series_id:
+            print(f"{row['course code']}: \tMissing oc series")
         schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
 
         subject = "{} - {}".format(row["course code"], row["type"])
         schedule_data[zoom_series_id]["opencast_subject"] = subject
-        
+      
         schedule_data[zoom_series_id].setdefault("Days", set())
-        for day in row["day"].strip():
+        split_by = " "
+        if "," in row["day"]:
+            split_by = ","
+        days = [day.strip() for day in row["day"].split(split_by)]
+        for day in days:
             if day not in valid_days:
                 raise Exit(
                     f"Got bad day value \"{day}\" for series {zoom_series_id}"
