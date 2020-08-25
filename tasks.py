@@ -636,7 +636,9 @@ def import_schedule_from_csv(ctx, filepath):
         schedule_data[zoom_series_id].setdefault("Days", set())
         for day in row["day"].strip():
             if day not in valid_days:
-                raise Exit("Got bad day value: {}".format(day))
+                raise Exit(
+                    f"Got bad day value \"{day}\" for series {zoom_series_id}"
+                )
             schedule_data[zoom_series_id]["Days"].add(day)
 
         schedule_data[zoom_series_id].setdefault("Time", set())
