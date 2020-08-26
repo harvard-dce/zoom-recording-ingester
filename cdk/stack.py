@@ -187,6 +187,7 @@ class ZipStack(core.Stack):
         api = ZipApi(self, "RestApi",
             on_demand_function=on_demand.function,
             webhook_function=webhook.function,
+            schedule_update_function=schedule_update.function,
             ingest_allowed_ips=ingest_allowed_ips
         )
 

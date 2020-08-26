@@ -38,6 +38,7 @@ REST_API="api"
 API_STAGE="live"
 WEBHOOK_ENDPOINT="webhook"
 ON_DEMAND_ENDPOINT="ingest"
+SCHEDULE_UPDATE_ENDPOINT="schedule"
 
 CODEBUILD_PROJECT="codebuild"
 
