@@ -595,7 +595,7 @@ def import_schedule_from_opencast(ctx, endpoint=None):
 
 @task(pre=[production_failsafe])
 def import_schedule_from_csv(ctx, filepath):
-    valid_days = ["M", "T", "W", "R", "F"]
+    valid_days = ["M", "T", "W", "R", "F", "S", "U"]
 
     # make it so we can use lower-case keys in our row dicts;
     # there are lots of ways this spreadsheet data import could go wrong and
