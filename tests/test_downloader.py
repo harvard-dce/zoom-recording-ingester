@@ -533,7 +533,7 @@ def test_recording_files(download):
 
     zoom_files = download.recording_files
     assert len(zoom_files) == 2
-    assert all(x._track_set == 0 for x in zoom_files)
+    assert all(x.segment_num == 0 for x in zoom_files)
 
 def test_recording_files_multi_set(download):
     test_data = [
@@ -552,7 +552,7 @@ def test_recording_files_multi_set(download):
 
     zoom_files = download.recording_files
     assert len(zoom_files) == 5
-    assert sum(1 for x in zoom_files if x._track_set == 1) == 3
+    assert sum(1 for x in zoom_files if x.segment_num == 1) == 3
 
 
 @pytest.fixture
@@ -569,4 +569,3 @@ def test_zoom_filename_ext(mocker, zoomfile):
     ]:
         zoomfile._zoom_filename = filename
         assert zoomfile.file_extension == expected
-

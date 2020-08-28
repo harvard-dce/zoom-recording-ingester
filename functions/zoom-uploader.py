@@ -228,22 +228,54 @@ class Upload:
 
     @property
     def s3_filenames(self):
+        """
+        Pulls out the s3 filenames grouped by view type.
+
+        This is also the point where we need to filter out any
+        segments that are less than our MINIMUM_DURATION value. This is
+        tricky because the data is grouped by view instead of segment.
+
+        Basically we want to correctly handle a situation like this:
+
+            speaker view:
+              - foo/bar/000-speaker_view.mp4 (1m)
+              - foo/bar/001-speaker_view.mp4 (5m)
+              - foo/bar/002-speaker_view.mp4 (2h)
+
+            shared screen:
+              - foo/bar/001-shared_screen.mp4 (5m)
+              - foo/bar/002-shared_screen.mp4 (2h)
+
+        Here we have 3 segments of lenght 1m, 5m and 2h. However, the first
+        segment is only present in the "speaker" view. So we can't simply throw
+        away the first file from each view; we have to make sure it's from the
+        "000" segment.
+
+        :return: [description]
+        :rtype: [type]
+        """
+
         if not hasattr(self, "_s3_filenames"):
             self._s3_filenames = {}
-            for view, file_info in self.data["s3_files"].items():
-                segments = file_info["segments"]
+            # the s3_files dict is keyed on view type, e.g. gallery, speaker, etc
 
-                # skip false starts
-                if segments[0]["ffprobe_seconds"] < MINIMUM_DURATION * 60:
-                    # first segment for each view might not be the overall
-                    # first segment, need to check
-                    filename = segments[0]["filename"]
-                    segment_no = int(filename.split("/")[-1].split("-")[0])
-                    if segment_no == 0:
-                        segments = segments[1:]
+            # In this loop we're going to check the first file (segment) of each view.
+            # If it's < our MINIMUM_DURATION value
+            for view, file_info in self.data["s3_files"].items():
+
+                segment_files = file_info["segments"]
+
+                # check the duration of the first file in this view
+                too_short = segment_files[0]["ffprobe_seconds"] < (MINIMUM_DURATION * 60);
+
+                # check if this is part of the first segment
+                is_first_segment = segment_files[0]["segment_num"] == 0
+
+                if too_short and is_first_segment:
+                    segment_files = segment_files[1:]
 
                 self._s3_filenames[view] = [
-                    segment["filename"] for segment in segments
+                    file["filename"] for file in segment_files
                 ]
 
         return self._s3_filenames
@@ -480,4 +512,3 @@ class FileParamGenerator(object):
             raise RuntimeError("Unable to find a presenter view")
 
         return self._params
-

@@ -202,7 +202,8 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
                     }
                 ]
             },
@@ -210,7 +211,8 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/000-shared_screen.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
                     }
                 ]
             }
@@ -223,11 +225,13 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
-                        "ffprobe_seconds": 5
+                        "ffprobe_seconds": 5,
+                        "segment_num": 0
                     },
                     {
                         "filename": "a/b/001-speaker_view.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 1
                     }
                 ]
             },
@@ -235,11 +239,13 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/000-shared_screen.mp4",
-                        "ffprobe_seconds": 5
+                        "ffprobe_seconds": 5,
+                        "segment_num": 0
                     },
                     {
                         "filename": "a/b/001-shared_screen.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 1
                     }
                 ]
             }
@@ -252,11 +258,13 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
                     },
                     {
                         "filename": "a/b/001-speaker_view.mp4",
-                        "ffprobe_seconds": 5
+                        "ffprobe_seconds": 5,
+                        "segment_num": 1
                     }
                 ]
             },
@@ -264,11 +272,13 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/000-shared_screen.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
                     },
                     {
                         "filename": "a/b/001-shared_screen.mp4",
-                        "ffprobe_seconds": 5
+                        "ffprobe_seconds": 5,
+                        "segment_num": 1
                     }
                 ]
             }
@@ -281,15 +291,18 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
-                        "ffprobe_seconds": 5
+                        "ffprobe_seconds": 5,
+                        "segment_num": 0
                     },
                     {
                         "filename": "a/b/001-speaker_view.mp4",
-                        "ffprobe_seconds": 10
+                        "ffprobe_seconds": 10,
+                        "segment_num": 1
                     },
                     {
                         "filename": "a/b/002-speaker_view.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 2
                     }
                 ]
             },
@@ -297,11 +310,13 @@ def test_s3_filename_filter_false_start():
                 "segments": [
                     {
                         "filename": "a/b/001-shared_screen.mp4",
-                        "ffprobe_seconds": 10
+                        "ffprobe_seconds": 10,
+                        "segment_num": 1
                     },
                     {
                         "filename": "a/b/002-shared_screen.mp4",
-                        "ffprobe_seconds": 500
+                        "ffprobe_seconds": 500,
+                        "segment_num": 2
                     }
                 ]
             }
