@@ -29,7 +29,7 @@ SAMPLE_MESSAGE_BODY = {
     "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
 }
 
-DAYS = ["M", "T", "W", "R", "F", "Sa", "Sn"]
+DAYS = ["M", "T", "W", "R", "F", "S", "U"]
 
 SAMPLE_SCHEDULE = {
         "Days": [
@@ -273,12 +273,12 @@ class TestDownloader(unittest.TestCase):
                 "opencast_series_id": "thursday_bad",
             }
         saturday_schedule = {
-                "Days": ["Sa"],
+                "Days": ["S"],
                 "Time": [self.local_hour(saturday_start_time)],
                 "opencast_series_id": "saturday_good",
             }
         bad_saturday_schedule = {
-                "Days": ["Sa"],
+                "Days": ["S"],
                 "Time": ["20:00"],
                 "opencast_series_id": "saturday_bad",
             }

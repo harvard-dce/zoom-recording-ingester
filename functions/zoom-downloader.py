@@ -281,8 +281,8 @@ class Download:
             ("W", "Wednesdays"),
             ("R", "Thursdays"),
             ("F", "Fridays"),
-            ("Sa", "Saturday"),
-            ("Sn", "Sunday")
+            ("S", "Saturday"),
+            ("U", "Sunday")
         ])
         day_code = list(days.keys())[zoom_time.weekday()]
         if day_code not in schedule["Days"]:
