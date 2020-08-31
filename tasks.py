@@ -264,7 +264,7 @@ def exec_on_demand(ctx, uuid, oc_series_id=None, allow_multiple_ingests=False):
         event_body["allow_multiple_ingests"] = allow_multiple_ingests
 
     print(event_body)
-    
+
     resp = __invoke_api(on_demand_resource_id(), event_body)
 
     print("Returned with status code: {}. {}".format(
@@ -645,12 +645,20 @@ def import_schedule_from_csv(ctx, filepath):
 
         subject = "{} - {}".format(row["course code"], row["type"])
         schedule_data[zoom_series_id]["opencast_subject"] = subject
-   
+
         schedule_data[zoom_series_id].setdefault("Days", set())
-        split_by = " "
-        if "," in row["day"]:
-            split_by = ","
-        days = [day.strip() for day in row["day"].split(split_by)]
+
+        days_value = row["day"].strip()
+
+        # value might look like "MW", "TR" or "MWF"
+        if len(days_value) > 1 and " " not in days_value:
+            days = list(days_value)
+        else:
+            split_by = " "
+            if "," in days_value:
+                split_by = ","
+            days = [day.strip() for day in days_value.split(split_by)]
+
         for day in days:
             if day not in valid_days:
                 print(
@@ -1330,4 +1338,3 @@ def webhook_resource_id():
 
 def on_demand_resource_id():
     return cfn_export_value(f"{names.ON_DEMAND_ENDPOINT}-resource-id")
-
