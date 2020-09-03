@@ -105,7 +105,14 @@ class ZipApi(core.Construct):
             ]
         )
 
-        self.schedule_update_resource = self.api.root.add_resource("schedule_update")
+        self.schedule_update_resource = self.api.root.add_resource("schedule_update",
+            default_cors_preflight_options=apigw.CorsOptions(
+                allow_origins=apigw.Cors.ALL_ORIGINS,
+                allow_methods=["POST", "OPTIONS"],
+                allow_headers=apigw.Cors.DEFAULT_HEADERS \
+                              + ["Accept-Language","X-Requested-With"]
+            )
+        )
         schedule_update_integration = apigw.LambdaIntegration(schedule_update_function)
         self.schedule_update_method = self.schedule_update_resource.add_method(
             "POST",

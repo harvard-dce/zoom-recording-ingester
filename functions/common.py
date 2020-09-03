@@ -14,6 +14,8 @@ import csv
 import itertools
 from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
+import codecs
+
 import boto3
 # google sheets imports
 import pickle
@@ -120,15 +122,18 @@ def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
 
 class GSheetsToken():
     def __init__(self, in_lambda=False):
-        self.creds = None
+        self.ssm = boto3.client("ssm")
         self.load_token()
         if not self.creds:
             if in_lambda:
                 raise Exception("Cannot find token.pickle file.")
             else:
+                print("create a new")
                 self.create_token()
+                self.save_token()
         elif not self.creds.valid:
             self.refresh_token()
+            self.save_token()
 
     def valid(self):
         return self.creds and self.creds.valid
@@ -137,11 +142,16 @@ class GSheetsToken():
         # The file token.pickle stores the user's access and refresh tokens,
         # and is created automatically when the authorization flow completes
         # for the first time.
-        if exists("token.pickle"):
-            print("FOUND TOKEN PICKLE")
-            logger.debug("Found token.pickle")
-            with open("token.pickle", "rb") as token:
-                self.creds = pickle.load(token)
+        try:
+            r = self.ssm.get_parameter(
+                Name="token.pickle",
+                WithDecryption=True,
+            )
+            token = r["Parameter"]["Value"]
+            self.creds = pickle.loads(codecs.decode(token.encode(), "base64"))
+        except self.ssm.exceptions.ParameterNotFound:
+            print("token.pickle not found")
+            self.creds = None
 
     def create_token(self):
         print("prompt user to login to generate gsheets token")
@@ -161,8 +171,14 @@ class GSheetsToken():
 
     def save_token(self):
         # Save the credentials for the next run
-        with open("token.pickle", "wb") as token:
-            pickle.dump(self.creds, token)
+        r = self.ssm.put_parameter(
+            Name="token.pickle",
+            Description="Token for gsheets authorization",
+            Value=codecs.encode(pickle.dumps(self.creds), "base64").decode(),
+            Type="SecureString",
+            Overwrite=True,
+        )
+        print(f"Saved token version {r['Version']}")
 
 
 class GSheet:

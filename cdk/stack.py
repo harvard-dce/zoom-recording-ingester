@@ -1,6 +1,7 @@
 from aws_cdk import (
     core,
-    aws_s3 as s3
+    aws_s3 as s3,
+    aws_iam as iam
 )
 
 from .bucket import ZipRecordingsBucket
@@ -20,7 +21,6 @@ from .events import ZipEvent
 from .codebuild import ZipCodebuildProject
 from .monitoring import ZipMonitoring
 from . import names
-
 
 class ZipStack(core.Stack):
 
@@ -79,6 +79,11 @@ class ZipStack(core.Stack):
                 "GSHEETS_DOC_ID": gsheets_doc_id,
                 "GSHEETS_SHEET_NAME": gsheets_sheet_name,
             }
+        )
+        schedule_update.function.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["ssm:GetParameter"]
+            )
         )
         # grant schedule update function access to dynamo
         schedule.table.grant_read_write_data(schedule_update.function)

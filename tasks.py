@@ -876,7 +876,7 @@ def __build_function(ctx, func, upload_to_s3=False):
         print(f"uploading {func} to {s3_path}")
         ctx.run(f"aws {profile_arg()} s3 cp {zip_path} {s3_path}", hide=1)
         if func == names.SCHEDULE_UPDATE_FUNCTION:
-            __upload_gsheets_token()
+            __upload_gsheets_token(ctx)
 
 
 def __update_function(ctx, func):
@@ -895,17 +895,6 @@ def __update_function(ctx, func):
                 zip_path
             )
     ctx.run(cmd, hide=1)
-
-    if func == names.SCHEDULE_UPDATE_FUNCTION:
-        __upload_gsheets_token()
-    
-
-def __upload_gsheets_token(ctx):
-    # include token to access gsheets
-    s3_path = f"{LAMBDA_CODE_URI}/token.pickle"
-    token_path = join(dirname(__file__), "token.pickle")
-    print(f"uploading token.pickle to {s3_path}")
-    ctx.run(f"aws {profile_arg()} s3 cp {token_path} {s3_path}", hide=1)
 
 
 def __set_debug(ctx, debug_val):
