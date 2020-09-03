@@ -192,6 +192,152 @@ def test_get_current_upload_count(mocker):
     assert uploader.get_current_upload_count() == None
 
 
+def test_s3_filename_filter_false_start():
+    # entire meetings < MINIMUM_DURATION should have been filtered out
+    # in the downloader code so I don't test that case here
+
+    single_file = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-speaker_view.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
+                    }
+                ]
+            },
+            "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-shared_screen.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
+                    }
+                ]
+            }
+        }
+    }
+
+    false_start = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-speaker_view.mp4",
+                        "ffprobe_seconds": 5,
+                        "segment_num": 0
+                    },
+                    {
+                        "filename": "a/b/001-speaker_view.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 1
+                    }
+                ]
+            },
+             "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-shared_screen.mp4",
+                        "ffprobe_seconds": 5,
+                        "segment_num": 0
+                    },
+                    {
+                        "filename": "a/b/001-shared_screen.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 1
+                    }
+                ]
+            }
+        }
+    }
+
+    false_end = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-speaker_view.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
+                    },
+                    {
+                        "filename": "a/b/001-speaker_view.mp4",
+                        "ffprobe_seconds": 5,
+                        "segment_num": 1
+                    }
+                ]
+            },
+            "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-shared_screen.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 0
+                    },
+                    {
+                        "filename": "a/b/001-shared_screen.mp4",
+                        "ffprobe_seconds": 5,
+                        "segment_num": 1
+                    }
+                ]
+            }
+        }
+    }
+
+    segment_mismatch = {
+        "s3_files": {
+            "speaker_view": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-speaker_view.mp4",
+                        "ffprobe_seconds": 5,
+                        "segment_num": 0
+                    },
+                    {
+                        "filename": "a/b/001-speaker_view.mp4",
+                        "ffprobe_seconds": 10,
+                        "segment_num": 1
+                    },
+                    {
+                        "filename": "a/b/002-speaker_view.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 2
+                    }
+                ]
+            },
+            "screen_share": {
+                "segments": [
+                    {
+                        "filename": "a/b/001-shared_screen.mp4",
+                        "ffprobe_seconds": 10,
+                        "segment_num": 1
+                    },
+                    {
+                        "filename": "a/b/002-shared_screen.mp4",
+                        "ffprobe_seconds": 500,
+                        "segment_num": 2
+                    }
+                ]
+            }
+        }
+    }
+
+    cases = [
+        (single_file, 1, 1),
+        (false_start, 1, 1),
+        (false_end, 2, 2),
+        (segment_mismatch, 2, 2)
+    ]
+
+    for data, expected_speaker, expected_screen_share in cases:
+        upload = uploader.Upload(data)
+        assert (len(upload.s3_filenames["speaker_view"]) == expected_speaker)
+        assert (
+            len(upload.s3_filenames["screen_share"]) == expected_screen_share
+        )
+
+
 def test_file_param_generator():
     # each `cases` item is a list containing two iterables
     # - first element in list gets turned into the s3_filenames data

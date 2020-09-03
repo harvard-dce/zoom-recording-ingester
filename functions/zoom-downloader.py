@@ -45,7 +45,7 @@ def sqs_resource():
 def handler(event, context):
     """
     This function receives an event on each new entry in the download urls
-    DyanmoDB table
+    DynamoDB table
     """
 
     ignore_schedule = event.get("ignore_schedule", False)
@@ -66,7 +66,7 @@ def handler(event, context):
         dl = Download(sqs, dl_data)
 
         # this is checking for ~total~ duration of the recording as reported
-        # by zoom in the webook payload data. There is a separate check later
+        # by zoom in the webhook payload data. There is a separate check later
         # for the duration potentially different sets of files
         if dl.duration >= MINIMUM_DURATION:
             if dl.oc_series_found(ignore_schedule, override_series_id):
@@ -161,62 +161,28 @@ class Download:
             # all incoming files
             files = self.data["recording_files"]
 
-            # number of distinct start times is the count of track sets
-            track_set_start_times = sorted(set(
+            # number of distinct start times is the count of segements
+            segment_start_times = sorted(set(
                 [file["recording_start"] for file in files]
             ))
 
             # collect the recording files here as ZoomFile objs
             zoom_files = []
 
-            # we'll set this to true once we're past any false start
-            # track sets
-            take_all = False
-
-            # track sets refers to the sets of recording files that
+            # segement refers to the sets of recording files that
             # are generated when a host stops and restarts a meeting
-            # Here we group the files by track set to allow ignoring any
-            # too-short segments that happen at the beginning of the meeting
-            # a.k.a. false starts
-            for track_set_num, start_time in enumerate(track_set_start_times):
+            # NOTE: segment numbering starts at 0 (zero)
+            for segment_num, start_time in enumerate(segment_start_times):
                 # all the files from this segment
-                track_set_files = [f for f in files
-                             if f["recording_start"] == start_time]
-                # parse their start/end times
-                track_set_start = datetime.strptime(
-                    track_set_files[0]["recording_start"],
-                    TIMESTAMP_FORMAT
-                )
-                track_set_end = datetime.strptime(
-                    track_set_files[0]["recording_end"],
-                    TIMESTAMP_FORMAT
-                )
-                # get the duration of the segment
-                duration_sec = (track_set_end - track_set_start).seconds
+                segment_files = [
+                    f for f in files if f["recording_start"] == start_time
+                ]
 
-                logger.info({
-                    "track_set": {
-                        "number": track_set_num,
-                        "file_count": len(track_set_files),
-                        "start": track_set_start,
-                        "end": track_set_end,
-                        "duration": duration_sec
-                    }
-                })
-
-                # skip any initial track sets < minimum duration
-                if not take_all and duration_sec < MINIMUM_DURATION * 60:
-                    logger.info("skipping track set {}".format(track_set_num))
-                    continue
-
-                # once past the minimum duration we take everything else
-                take_all = True
-
-                for file in track_set_files:
+                for file in segment_files:
                     file["meeting_uuid"] = self.uuid
                     file["zoom_series_id"] = self.zoom_series_id
                     file["created_local"] = self._created_local
-                    zoom_files.append(ZoomFile(file, track_set_num))
+                    zoom_files.append(ZoomFile(file, segment_num))
 
             self._recording_files = zoom_files
 
@@ -346,6 +312,7 @@ class Download:
             for file in self.recording_files:
                 segment = {
                     "filename": file.s3_filename,
+                    "segment_num": file.segment_num,
                     "recording_start": file.file_data["recording_start"],
                     "recording_end": file.file_data["recording_end"],
                     "ffprobe_bytes": file.file_data["ffprobe_bytes"],
@@ -468,9 +435,9 @@ class SQSMessage():
 
 class ZoomFile:
 
-    def __init__(self, file_data, track_set):
+    def __init__(self, file_data, segment_num):
         self.file_data = file_data
-        self._track_set = track_set
+        self.segment_num = segment_num
         self.recording_type = self.__standardized_recording_type(
             file_data["recording_type"]
         )
@@ -540,14 +507,12 @@ class ZoomFile:
 
     @property
     def s3_filename(self):
-        if not hasattr(self, "_track_set"):
-            return None
         if not hasattr(self, "_s3_filename"):
             ts = int(self.file_data["created_local"].timestamp())
             self._s3_filename = "{}/{}/{:03d}-{}.{}".format(
                                     self.file_data["zoom_series_id"],
                                     ts,
-                                    self._track_set,
+                                    self.segment_num,
                                     self.recording_type,
                                     self.file_extension
                                 )
@@ -644,7 +609,7 @@ class ZoomFile:
                         self.upload_part, mpu["UploadId"], part_number, chunk
                     )
                     future_map[f] = part_number
-                
+
                 for future in concurrent.futures.as_completed(future_map):
                     part_number = future_map[future]
                     part = future.result()

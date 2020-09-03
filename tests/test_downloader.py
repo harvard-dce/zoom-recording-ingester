@@ -521,7 +521,7 @@ def test_recording_files(download):
             {
                 "recording_start": "2020-03-31T12:00:00Z",
                 "recording_end": "2020-03-31T11:00:00Z",
-                "recording_type":"foo"
+                "recording_type": "foo"
             },
             {
                 "recording_start": "2020-03-31T12:00:00Z",
@@ -533,7 +533,7 @@ def test_recording_files(download):
 
     zoom_files = download.recording_files
     assert len(zoom_files) == 2
-    assert all(x._track_set == 0 for x in zoom_files)
+    assert all(x.segment_num == 0 for x in zoom_files)
 
 def test_recording_files_multi_set(download):
     test_data = [
@@ -552,29 +552,8 @@ def test_recording_files_multi_set(download):
 
     zoom_files = download.recording_files
     assert len(zoom_files) == 5
-    assert sum(1 for x in zoom_files if x._track_set == 1) == 3
+    assert sum(1 for x in zoom_files if x.segment_num == 1) == 3
 
-def test_recording_files_multi_set_false_start(download):
-    test_data = [
-        # This set is at the beginning and too short of a duration
-        # so should get ignored
-        ("2020-03-31T12:00:00Z", "2020-03-31T12:01:00Z", "foo"),
-        ("2020-03-31T12:00:00Z", "2020-03-31T12:01:00Z", "bar"),
-
-        ("2020-03-31T12:03:00Z", "2020-03-31T13:30:00Z", "foo"),
-        ("2020-03-31T12:03:00Z", "2020-03-31T13:30:00Z", "bar"),
-        ("2020-03-31T12:03:00Z", "2020-03-31T13:30:00Z", "baz"),
-    ]
-    download.data.update({
-        "recording_files": [
-            {"recording_start": x, "recording_end": y, "recording_type": z}
-            for x, y, z in test_data
-        ]
-    })
-
-    zoom_files = download.recording_files
-    assert len(zoom_files) == 3
-    assert sum(1 for x in zoom_files if x._track_set == 1) == 3
 
 @pytest.fixture
 def zoomfile(mocker):
@@ -590,4 +569,3 @@ def test_zoom_filename_ext(mocker, zoomfile):
     ]:
         zoomfile._zoom_filename = filename
         assert zoomfile.file_extension == expected
-
