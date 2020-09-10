@@ -82,7 +82,8 @@ class ZipStack(core.Stack):
         )
         schedule_update.function.add_to_role_policy(
             iam.PolicyStatement(
-                actions=["ssm:GetParameter"]
+                actions=["ssm:GetParameter", "ssm:PutParameter"],
+                resources=["*"]
             )
         )
         # grant schedule update function access to dynamo
