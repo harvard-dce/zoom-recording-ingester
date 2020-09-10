@@ -18,7 +18,7 @@ def handler(event, context):
     """
     TODO: Explain the purpose of this function.
     """
-    sheet = GSheet(GSHEETS_DOC_ID)
+    sheet = GSheet(GSHEETS_DOC_ID, in_lambda=True)
     sheet.import_to_dynamo(GSHEETS_SHEET_NAME)
 
     return {
