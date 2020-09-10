@@ -669,22 +669,10 @@ def logs_uploader(ctx, watch=False):
 @task
 def gen_gsheets_token(ctx):
     """
-    Generate a google sheets login.
+    Generate a google sheets token.
     """
 
-    token = GSheetsToken()
-    if not token.valid():
-        print(
-            "No valid google sheets token.\n"
-            "The file `credentials.json` is required to generate a token.\n"
-            "Generate a `credentials.json` file in the Google API console.\n"
-            "https://developers.google.com/sheets/api/guides/authorizing"
-        )
-    else:
-        print(
-            "Google sheets token created or valid `token.pickle` "
-            "already exists."
-        )
+    __gen_gsheets_token()
 
 
 ns = Collection()
@@ -693,7 +681,6 @@ ns.add_task(codebuild)
 ns.add_task(package)
 ns.add_task(release)
 ns.add_task(update_requirements)
-ns.add_task(gen_gsheets_token)
 
 stack_ns = Collection('stack')
 stack_ns.add_task(status)
@@ -738,6 +725,7 @@ ns.add_collection(queue_ns)
 schedule_ns = Collection('schedule')
 schedule_ns.add_task(import_schedule_from_opencast, 'oc-import')
 schedule_ns.add_task(import_schedule_from_csv, 'csv-import')
+schedule_ns.add_task(gen_gsheets_token, 'token')
 ns.add_collection(schedule_ns)
 
 logs_ns = Collection('logs')
@@ -871,12 +859,13 @@ def __build_function(ctx, func, upload_to_s3=False):
     with ctx.cd(build_path):
         ctx.run("zip -r {} .".format(zip_path), hide=1)
 
+    if func == names.SCHEDULE_UPDATE_FUNCTION:
+        __gen_gsheets_token()
+
     if upload_to_s3:
         s3_path = f"{LAMBDA_CODE_URI}/{func}.zip"
         print(f"uploading {func} to {s3_path}")
         ctx.run(f"aws {profile_arg()} s3 cp {zip_path} {s3_path}", hide=1)
-        if func == names.SCHEDULE_UPDATE_FUNCTION:
-            __upload_gsheets_token(ctx)
 
 
 def __update_function(ctx, func):
@@ -895,6 +884,26 @@ def __update_function(ctx, func):
                 zip_path
             )
     ctx.run(cmd, hide=1)
+
+
+def __gen_gsheets_token():
+    """
+    Generate a google sheets login.
+    """
+
+    token = GSheetsToken()
+    if not token.valid():
+        print(
+            "No valid google sheets token.\n"
+            "The file `credentials.json` is required to generate a token.\n"
+            "Generate a `credentials.json` file in the Google API console.\n"
+            "https://developers.google.com/sheets/api/guides/authorizing"
+        )
+    else:
+        print(
+            "Google sheets token created or valid `token.pickle` "
+            "already exists."
+        )
 
 
 def __set_debug(ctx, debug_val):
