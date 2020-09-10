@@ -123,6 +123,7 @@ def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
 class GSheetsToken():
     def __init__(self, in_lambda=False):
         self.ssm = boto3.client("ssm")
+        self.ssm_path = f"{STACK_NAME}/token.pickle"
         self.load_token()
         if not self.creds:
             if in_lambda:
@@ -144,13 +145,13 @@ class GSheetsToken():
         # for the first time.
         try:
             r = self.ssm.get_parameter(
-                Name="token.pickle",
+                Name=self.ssm_path,
                 WithDecryption=True,
             )
             token = r["Parameter"]["Value"]
             self.creds = pickle.loads(codecs.decode(token.encode(), "base64"))
         except self.ssm.exceptions.ParameterNotFound:
-            print("token.pickle not found")
+            print(f"SSM Parameter {self.ssm_path} not found")
             self.creds = None
 
     def create_token(self):
@@ -172,7 +173,7 @@ class GSheetsToken():
     def save_token(self):
         # Save the credentials for the next run
         r = self.ssm.put_parameter(
-            Name="token.pickle",
+            Name=self.ssm_path,
             Description="Token for gsheets authorization",
             Value=codecs.encode(pickle.dumps(self.creds), "base64").decode(),
             Type="SecureString",
