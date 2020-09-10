@@ -123,7 +123,7 @@ def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
 class GSheetsToken():
     def __init__(self, in_lambda=False):
         self.ssm = boto3.client("ssm")
-        self.ssm_path = f"{STACK_NAME}/token.pickle"
+        self.ssm_path = f"/{STACK_NAME}/token.pickle"
         self.load_token()
         if not self.creds:
             if in_lambda:
