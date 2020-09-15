@@ -221,6 +221,7 @@ class ZipStack(core.Stack):
             ]
         )
 
+        schedule_update.add_monitoring(monitoring)
         on_demand.add_monitoring(monitoring)
         webhook.add_monitoring(monitoring)
         downloader.add_monitoring(monitoring)

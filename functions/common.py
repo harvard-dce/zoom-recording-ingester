@@ -328,12 +328,12 @@ def schedule_csv_to_dynamo(schedule_table, filepath):
         time_object = datetime.strptime(row["start"], "%H:%M")
         schedule_data[zoom_series_id]["Time"].update([
             datetime.strftime(time_object, "%H:%M"),
-            (time_object + timedelta(minutes=30)ß).strftime("%H:%M"),
+            (time_object + timedelta(minutes=30)).strftime("%H:%M"),
             (time_object + timedelta(hours=1)).strftime("%H:%M")
         ])
 
     for id, item in schedule_data.items():
         item["Days"] = list(item["Days"])
-        item["Time"] = list(item["Time"])ß
+        item["Time"] = list(item["Time"])
 
     schedule_json_to_dynamo(schedule_table, schedule_data=schedule_data)
