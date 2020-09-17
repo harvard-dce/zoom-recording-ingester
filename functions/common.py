@@ -183,7 +183,10 @@ class GSheetsToken():
 
     def delete_token(self):
         r = self.ssm.delete_parameter(Name=self.ssm_path)
-        print(f"Deleted token {r}")
+        if (r["ResponseMetadata"]["HTTPStatusCode"] == 200):
+            print(f"Successfully destroyed ssm parameter {self.ssm_path}")
+        else:
+            print(f"Failed to destroy ssm parameter {self.ssm_path}")
 
 
 class GSheet:
