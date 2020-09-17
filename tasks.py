@@ -160,14 +160,17 @@ def stack_delete(ctx):
 
     confirm = (f"\nAre you sure you want to delete stack '{STACK_NAME}'?\n"
                "WARNING: This will also delete all recording files "
-               f"in '{recordings_uri}' and all lambda function code "
-               f"in '{lambda_code_uri}'.\n"
+               f"in '{RECORDINGS_URI}' and all lambda function code "
+               f"in '{LAMBDA_CODE_URI}'.\n"
                "Type the stack name to confirm deletion: ")
 
     if input(confirm).strip() == STACK_NAME:
         ctx.run(empty_bucket_cmd)
         ctx.run(lambda_code_cmd)
         ctx.run(delete_cmd)
+
+        token = GSheetsToken()
+        token.delete_token()
 
 
 @task(help={'function': 'name of a specific function'})

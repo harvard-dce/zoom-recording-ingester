@@ -181,6 +181,10 @@ class GSheetsToken():
         )
         print(f"Saved token version {r['Version']}")
 
+    def delete_token(self):
+        r = self.ssm.delete_parameter(Name=self.ssm_path)
+        print(f"Deleted token {r}")
+
 
 class GSheet:
     def __init__(self, spreadsheet_id, in_lambda=False):
