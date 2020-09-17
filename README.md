@@ -81,7 +81,7 @@ Info on Zoom's API and webhook functionality can be found at:
 1. Run `invoke test` to confirm the installation.
 1. (Optional) run `invoke -l` to see a list of all available tasks + descriptions.
 
-#### Google sheets setup
+#### Google Sheets API setup
 
 1. Fill in google sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAME`
 1. Follow the instructions to set up gsheets authentication via a google account. You need to generate a `credentials.json` file and store it locally in the project folder. You do not need to generate the token yourself, Zoom Ingester setup will do this for you using the `credentials.json` file.
@@ -99,7 +99,7 @@ name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`.
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
 
-### Setting up the GoogleSheets trigger
+### Setting up the schedule update trigger from Google Sheets
 
 1. Insert image into google sheet
 1. Create the script (below) via Tools > Script Editor
