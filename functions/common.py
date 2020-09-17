@@ -129,10 +129,11 @@ class GSheetsToken():
             if in_lambda:
                 raise Exception("Cannot find token.pickle file.")
             else:
-                print("create a new")
+                logger.info("Create a new gsheets token")
                 self.create_token()
                 self.save_token()
         elif not self.creds.valid:
+            logger.info("Refresh existing gsheets token")
             self.refresh_token()
             self.save_token()
 
@@ -151,11 +152,10 @@ class GSheetsToken():
             token = r["Parameter"]["Value"]
             self.creds = pickle.loads(codecs.decode(token.encode(), "base64"))
         except self.ssm.exceptions.ParameterNotFound:
-            print(f"SSM Parameter {self.ssm_path} not found")
+            logger.error(f"SSM Parameter {self.ssm_path} not found")
             self.creds = None
 
     def create_token(self):
-        print("prompt user to login to generate gsheets token")
         if not exists("credentials.json"):
             raise Exception("Missing required credentials.json file.")
         flow = InstalledAppFlow.from_client_secrets_file(
@@ -167,7 +167,6 @@ class GSheetsToken():
         # If there are no (valid) credentials available, 
         # try to refresh the token or let the user log in.
         if self.creds and self.creds.expired and self.creds.refresh_token:
-            print("try to refresh gsheets token")
             self.creds.refresh(Request())
 
     def save_token(self):
@@ -179,14 +178,14 @@ class GSheetsToken():
             Type="SecureString",
             Overwrite=True,
         )
-        print(f"Saved token version {r['Version']}")
+        logger.info(f"Saved token version {r['Version']}")
 
     def delete_token(self):
         r = self.ssm.delete_parameter(Name=self.ssm_path)
         if (r["ResponseMetadata"]["HTTPStatusCode"] == 200):
-            print(f"Successfully destroyed ssm parameter {self.ssm_path}")
+            logger.info(f"Successfully destroyed ssm parameter {self.ssm_path}")
         else:
-            print(f"Failed to destroy ssm parameter {self.ssm_path}")
+            logger.info(f"Failed to destroy ssm parameter {self.ssm_path}")
 
 
 class GSheet:
@@ -212,7 +211,6 @@ class GSheet:
             .execute()
         )
 
-        print(result.get("values"))
         # /tmp is the only directory you can write to in a lambda function
         file_path = f"/tmp/{sheet_name.replace('/', '-')}.csv"
 
@@ -238,8 +236,7 @@ def schedule_json_to_dynamo(schedule_table, json_file=None, schedule_data=None):
             try:
                 schedule_data = json.load(file)
             except Exception as e:
-                print("Unable to load {}: {}" \
-                      .format(json_file, str(e)))
+                logger.error("Unable to load {}: {}".format(json_file, str(e)))
                 return
     elif schedule_data is None:
         raise Exception("{} called with no json_file or schedule_data args".format(
@@ -288,14 +285,14 @@ def schedule_csv_to_dynamo(schedule_table, filepath):
 
         meeting_id_with_pwd = row["meeting id with password"]
         if not meeting_id_with_pwd:
-            print(f"{row['course code']}: \tMissing zoom link")
+            logger.warning(f"{row['course code']}: \tMissing zoom link")
             continue
 
         try:
             zoom_link = urlparse(row["meeting id with password"].strip())
             assert zoom_link.scheme.startswith("https")
         except AssertionError:
-            print(f"{row['course code']}: \tInvalid zoom link")
+            logger.error(f"{row['course code']}: \tInvalid zoom link")
 
         zoom_series_id = zoom_link.path.split("/")[-1]
         schedule_data.setdefault(zoom_series_id, {})
@@ -304,7 +301,7 @@ def schedule_csv_to_dynamo(schedule_table, filepath):
         opencast_series_id = urlparse(row["oc series"]) \
             .fragment.replace("/", "")
         if not opencast_series_id:
-            print(f"{row['course code']}: \tMissing oc series")
+            logger.warning(f"{row['course code']}: \tMissing oc series")
         schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
 
         subject = "{} - {}".format(row["course code"], row["type"])
@@ -325,7 +322,7 @@ def schedule_csv_to_dynamo(schedule_table, filepath):
 
         for day in days:
             if day not in valid_days:
-                print(
+                logger.warning(
                     f"{row['course code']}: \tbad day value \"{day}\""
                 )
                 continue
