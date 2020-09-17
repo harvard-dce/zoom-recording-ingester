@@ -20,10 +20,13 @@ from multiprocessing import Process
 from urllib.parse import urlparse, quote
 from cdk import names
 from functools import lru_cache
+import logging
 
 # suppress warnings for cases where we want to ignore dev cluster dummy certificates
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path, override=True)
