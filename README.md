@@ -84,7 +84,7 @@ Info on Zoom's API and webhook functionality can be found at:
 #### Google Sheets API setup
 
 1. Fill in google sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAME`
-1. Follow the instructions to set up gsheets authentication via a google account. You need to generate a `credentials.json` file and store it locally in the project folder. You do not need to generate the token yourself, Zoom Ingester setup will do this for you using the `credentials.json` file.
+1. Follow the instructions to set up gsheets authentication via a google account. You need to generate a `credentials.json` file and store it locally in the project folder. You do not need to generate the token yourself, Zoom Ingester setup will do this for you using the `credentials.json` file. [https://developers.google.com/sheets/api/guides/authorizing](https://developers.google.com/sheets/api/guides/authorizing)
 1. The first time that you create the stack you must log into your google account in the browser in order to authenticate the initial token.
 
 #### deployment
