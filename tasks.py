@@ -865,9 +865,6 @@ def __build_function(ctx, func, upload_to_s3=False):
     with ctx.cd(build_path):
         ctx.run("zip -r {} .".format(zip_path), hide=1)
 
-    if func == names.SCHEDULE_UPDATE_FUNCTION:
-        __gen_gsheets_token()
-
     if upload_to_s3:
         s3_path = f"{LAMBDA_CODE_URI}/{func}.zip"
         print(f"uploading {func} to {s3_path}")

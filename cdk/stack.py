@@ -49,11 +49,9 @@ class ZipStack(core.Stack):
             downloader_event_rate,
             uploader_event_rate,
             project_git_url,
-            gsheets_doc_id,
-            gsheets_sheet_name,
             **kwargs
             ) -> None:
-        
+
         super().__init__(scope, id, **kwargs)
 
         monitoring = ZipMonitoring(self, 'ZipMonitoring',
@@ -77,8 +75,6 @@ class ZipStack(core.Stack):
             environment={
                 "STACK_NAME": self.stack_name,
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
-                "GSHEETS_DOC_ID": gsheets_doc_id,
-                "GSHEETS_SHEET_NAME": gsheets_sheet_name,
             }
         )
         schedule_update.function.add_to_role_policy(
@@ -230,4 +226,3 @@ class ZipStack(core.Stack):
         log_notify.add_monitoring(monitoring)
         api.add_monitoring(monitoring)
         queues.add_monitoring(monitoring)
-

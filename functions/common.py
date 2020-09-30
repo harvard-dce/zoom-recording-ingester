@@ -33,7 +33,6 @@ ZOOM_API_BASE_URL = "https://api.zoom.us/v2/"
 ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-GSHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 STACK_NAME = env("STACK_NAME")
 
@@ -164,7 +163,7 @@ class GSheetsToken():
         self.creds = flow.run_local_server(port=0)
 
     def refresh_token(self):
-        # If there are no (valid) credentials available, 
+        # If there are no (valid) credentials available,
         # try to refresh the token or let the user log in.
         if self.creds and self.creds.expired and self.creds.refresh_token:
             self.creds.refresh(Request())
