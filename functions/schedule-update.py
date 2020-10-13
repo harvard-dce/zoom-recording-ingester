@@ -1,9 +1,7 @@
-import pickle
-import os.path
-import csv
 from os import getenv as env
 import logging
-from common import setup_logging, GSheet
+from common import setup_logging
+from gsheets import GSheet
 
 # If modifying scopes or the spreadsheet id,
 # a new token.pickle file must be generated
@@ -16,9 +14,9 @@ logger = logging.getLogger()
 @setup_logging
 def handler(event, context):
     """
-    TODO: Explain the purpose of this function.
+    Load google sheet, parse, and import into dynamoDB.
     """
-    sheet = GSheet(GSHEETS_DOC_ID, in_lambda=True)
+    sheet = GSheet(GSHEETS_DOC_ID)
     sheet.import_to_dynamo(GSHEETS_SHEET_NAME)
 
     return {

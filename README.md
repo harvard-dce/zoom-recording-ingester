@@ -84,8 +84,8 @@ Info on Zoom's API and webhook functionality can be found at:
 #### Google Sheets API setup
 
 1. Fill in google sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAME`
-1. Follow the instructions to set up gsheets authentication via a google account. You need to generate a `credentials.json` file and store it locally in the project folder. You do not need to generate the token yourself, Zoom Ingester setup will do this for you using the `credentials.json` file. [https://developers.google.com/sheets/api/guides/authorizing](https://developers.google.com/sheets/api/guides/authorizing)
-1. The first time that you create the stack you must log into your google account in the browser in order to authenticate the initial token.
+1. Set up a Google API service account and download the `service_account.json` credentials file.
+1. Store the credentials file in SSM using `invoke schedule.save-creds [-f credentials-filename]`
 
 #### deployment
 
@@ -101,14 +101,20 @@ state of the CloudFormation stack and the Lambda functions run `invoke stack.sta
 
 ### Setting up the schedule update trigger from Google Sheets
 
-1. Insert image into google sheet
-1. Create the script (below) via Tools > Script Editor
-1. Finally, click on the 3 dots on the upper right of the image, select "Assign script" and search for and assign your recently created script
-1. Click on the image to test the script
+1. Share the google sheet with your service account
+1. From the google sheet, under Tools > Script Editor, create this script:
 
 ```
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  // Or DocumentApp or FormApp.
+  ui.createMenu('ZIP')
+      .addItem('Update ZIP Schedule', 'updateZoomIngester')
+      .addToUi();
+}
+
 function updateZoomIngester() {
-  var url = "[your schedule update endpoint here]";
+  var url = "[your stack endpoint]/schedule_update";
   var options = {
   'method' : 'POST',
   };

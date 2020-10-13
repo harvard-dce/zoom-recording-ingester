@@ -75,7 +75,6 @@ class ZipStack(core.Stack):
             name=names.SCHEDULE_UPDATE_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
-                "STACK_NAME": self.stack_name,
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
                 "GSHEETS_DOC_ID": gsheets_doc_id,
                 "GSHEETS_SHEET_NAME": gsheets_sheet_name,

@@ -1,7 +1,6 @@
 import sys
 import json
 import boto3
-from botocore.exceptions import ClientError
 import requests
 from requests.auth import HTTPDigestAuth
 import time
@@ -14,7 +13,8 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import zoom_api_request, GSheetsToken, \
+from functions.common import zoom_api_request
+from functions.gsheets import GSheetsAuth, \
     schedule_json_to_dynamo, schedule_csv_to_dynamo
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
@@ -171,9 +171,6 @@ def stack_delete(ctx):
         ctx.run(empty_bucket_cmd)
         ctx.run(lambda_code_cmd)
         ctx.run(delete_cmd)
-
-        token = GSheetsToken()
-        token.delete_token()
 
 
 @task(help={'function': 'name of a specific function'})
@@ -673,12 +670,14 @@ def logs_uploader(ctx, watch=False):
 
 
 @task
-def gen_gsheets_token(ctx):
+def save_gsheets_creds(ctx, filename=None):
     """
-    Generate a google sheets token.
+    Save gsheets credentials (service_account.json) in SSM.
     """
-
-    __gen_gsheets_token()
+    try:
+        __save_gsheets_credentials(filename)
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 ns = Collection()
@@ -731,7 +730,7 @@ ns.add_collection(queue_ns)
 schedule_ns = Collection('schedule')
 schedule_ns.add_task(import_schedule_from_opencast, 'oc-import')
 schedule_ns.add_task(import_schedule_from_csv, 'csv-import')
-schedule_ns.add_task(gen_gsheets_token, 'token')
+schedule_ns.add_task(save_gsheets_creds, 'save-creds')
 ns.add_collection(schedule_ns)
 
 logs_ns = Collection('logs')
@@ -845,7 +844,7 @@ def __build_function(ctx, func, upload_to_s3=False):
     if exists(req_file):
         ctx.run("pip install -U -r {} -t {}".format(req_file, build_path), hide=1)
 
-    for module in [func, 'common']:
+    for module in [func, 'common', 'gsheets']:
         module_path = join(dirname(__file__), 'functions/{}.py'.format(module))
         module_dist_path = join(build_path, '{}.py'.format(module))
         try:
@@ -864,9 +863,6 @@ def __build_function(ctx, func, upload_to_s3=False):
 
     with ctx.cd(build_path):
         ctx.run("zip -r {} .".format(zip_path), hide=1)
-
-    if func == names.SCHEDULE_UPDATE_FUNCTION:
-        __gen_gsheets_token()
 
     if upload_to_s3:
         s3_path = f"{LAMBDA_CODE_URI}/{func}.zip"
@@ -892,24 +888,11 @@ def __update_function(ctx, func):
     ctx.run(cmd, hide=1)
 
 
-def __gen_gsheets_token():
-    """
-    Generate a google sheets login.
-    """
-
-    token = GSheetsToken()
-    if not token.valid():
-        print(
-            "No valid google sheets token.\n"
-            "The file `credentials.json` is required to generate a token.\n"
-            "Generate a `credentials.json` file in the Google API console.\n"
-            "https://developers.google.com/sheets/api/guides/authorizing"
-        )
-    else:
-        print(
-            "Google sheets token created or valid `token.pickle` "
-            "already exists."
-        )
+def __save_gsheets_credentials(filename):
+    auth = GSheetsAuth()
+    if not filename:
+        filename = "service_account.json"
+    auth.save_to_ssm(filename)
 
 
 def __set_debug(ctx, debug_val):
