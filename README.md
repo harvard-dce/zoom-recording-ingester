@@ -83,7 +83,7 @@ Info on Zoom's API and webhook functionality can be found at:
 
 #### Google Sheets API setup
 
-1. Fill in google sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAME`
+1. Fill in Google Sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAME`
 1. Set up a Google API service account and download the `service_account.json` credentials file.
 1. Store the credentials file in SSM using `invoke schedule.save-creds [-f credentials-filename]`
 
@@ -101,13 +101,12 @@ state of the CloudFormation stack and the Lambda functions run `invoke stack.sta
 
 ### Setting up the schedule update trigger from Google Sheets
 
-1. Share the google sheet with your service account
-1. From the google sheet, under Tools > Script Editor, create this script:
+1. Share the Google Sheet with your service account
+1. From the Google Sheet, under Tools > Script Editor, create this script:
 
 ```
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
-  // Or DocumentApp or FormApp.
   ui.createMenu('ZIP')
       .addItem('Update ZIP Schedule', 'updateZoomIngester')
       .addToUi();
