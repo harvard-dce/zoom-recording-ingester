@@ -125,7 +125,7 @@ class GSheet:
         schedule_csv_to_dynamo(SCHEDULE_TABLE, file_path)
 
 
-def schedule_json_to_dynamo(schedule_table, json_file=None, schedule_data=None):
+def schedule_json_to_dynamo(dynamo_table_name, json_file=None, schedule_data=None):
     if json_file is not None:
         with open(json_file, "r") as file:
             try:
@@ -140,7 +140,6 @@ def schedule_json_to_dynamo(schedule_table, json_file=None, schedule_data=None):
 
     try:
         dynamodb = boto3.resource('dynamodb')
-        table_name = f"{schedule_table}"
         table = dynamodb.Table(table_name)
 
         for item in schedule_data.values():
@@ -150,7 +149,7 @@ def schedule_json_to_dynamo(schedule_table, json_file=None, schedule_data=None):
         raise Exception("{}: {}".format(error['Code'], error['Message']))
 
 
-def schedule_csv_to_dynamo(schedule_table, filepath):
+def schedule_csv_to_dynamo(dynamo_table_name, filepath):
     valid_days = ["M", "T", "W", "R", "F", "S", "U"]
 
     # make it so we can use lower-case keys in our row dicts;
@@ -226,13 +225,14 @@ def schedule_csv_to_dynamo(schedule_table, filepath):
         schedule_data[zoom_series_id].setdefault("Time", set())
         time_object = datetime.strptime(row["start"], "%H:%M")
         schedule_data[zoom_series_id]["Time"].update([
-            datetime.strftime(time_object, "%H:%M"),
-            (time_object + timedelta(minutes=30)).strftime("%H:%M"),
-            (time_object + timedelta(hours=1)).strftime("%H:%M")
+            datetime.strftime(time_object, "%H:%M")
         ])
 
-    for id, item in schedule_data.items():
-        item["Days"] = list(item["Days"])
+    for item in schedule_data.values():
+        # sort days for easier testing
+        item["Days"] = sorted(
+            list(item["Days"]), key=lambda x: valid_days.index(x[0])
+        )
         item["Time"] = list(item["Time"])
 
-    schedule_json_to_dynamo(schedule_table, schedule_data=schedule_data)
+    schedule_json_to_dynamo(dynamo_table_name, schedule_data=schedule_data)
