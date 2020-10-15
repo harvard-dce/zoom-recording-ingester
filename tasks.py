@@ -517,7 +517,6 @@ def import_schedule_from_file(ctx, filename):
     print("Schedule updated")
 
 
-
 @task(pre=[production_failsafe])
 def import_schedule_from_opencast(ctx, endpoint=None):
     """
@@ -601,11 +600,7 @@ def import_schedule_from_opencast(ctx, endpoint=None):
             raise Exit("Failed converting to dynamo item format: {}\n{}" \
                        .format(str(e), json.dumps(event, indent=2)))
 
-    schedule_json_to_dynamo(
-        ctx,
-        names.SCHEDULE_TABLE,
-        schedule_data=schedule_data
-    )
+    schedule_json_to_dynamo(names.SCHEDULE_TABLE, schedule_data=schedule_data)
 
     print("Schedule updated")
 

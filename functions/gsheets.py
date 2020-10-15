@@ -64,7 +64,7 @@ class GSheetsAuth():
 
         data = ""
         with open(filename, "r") as f:
-            data = json.dumps(f.read())
+            data = json.load(f)
 
         r = self.ssm.put_parameter(
             Name=self.ssm_path,
