@@ -6,6 +6,7 @@ import gsheets
 
 
 def test_schedule_parsing(mocker):
+    mock_table_name = "mock_table_name"
     mock_json_to_dynamo = mocker.patch.object(
         gsheets, "schedule_json_to_dynamo"
     )
@@ -27,12 +28,23 @@ def test_schedule_parsing(mocker):
         },
     }
 
-    # pass something into schedule csv
-    gsheets.schedule_csv_to_dynamo("mock_table", "tests/input/schedule1.csv")
+    schedule2_expected = {
+        "0123456789": {
+            "Days": ["T"],
+            "Time": ["20:10"],
+            "opencast_series_id": "20210112345",
+            "opencast_subject": "BIOS E-18 - Section",
+            "zoom_series_id": "0123456789"
+        }
+    }
 
-    mock_json_to_dynamo.assert_called_once_with(
-        "mock_table", schedule_data=schedule1_expected
+    # pass something into schedule csv
+    gsheets.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule1.csv")
+    mock_json_to_dynamo.assert_called_with(
+        mock_table_name, schedule_data=schedule1_expected
     )
 
-    # assert schedule json called with...
-    pass
+    gsheets.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule2.csv")
+    mock_json_to_dynamo.assert_called_with(
+        mock_table_name, schedule_data=schedule2_expected
+    )
