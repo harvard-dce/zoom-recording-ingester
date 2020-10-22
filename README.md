@@ -106,8 +106,8 @@ only needs to be done once per AWS account:
 
 #### Finding the ZIP stack API endpoint
 
-The ZIP API endpoint is available in the output of `invoke stack.create` or
-`invoke stack.update`, and `invoke stack.status` under `Outputs`.
+The ZIP API endpoint is available in the output of `invoke stack.create`,
+`invoke stack.update` and `invoke stack.status` under `Outputs`.
 
 #### Setting up the schedule update trigger from Google Sheets
 
@@ -125,12 +125,15 @@ function onOpen() {
 }
 
 function updateZoomIngester() {
-  var url = "[your stack endpoint]/schedule_update";
+  var url = "[your stack endpoint]";
   var options = {
   'method' : 'POST',
   };
   var response = UrlFetchApp.fetch(url, options);
   Logger.log(response);
+  SpreadsheetApp
+    .getActiveSpreadsheet()
+    .toast(response.getContentText(), "Schedule Updated", 3);
 }
 
 ```
