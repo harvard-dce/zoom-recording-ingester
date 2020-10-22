@@ -140,7 +140,7 @@ def schedule_json_to_dynamo(dynamo_table_name, json_file=None, schedule_data=Non
 
     try:
         dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table(table_name)
+        table = dynamodb.Table(dynamo_table_name)
 
         for item in schedule_data.values():
             table.put_item(Item=item)
