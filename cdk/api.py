@@ -13,6 +13,7 @@ class ZipApi(core.Construct):
     def __init__(self, scope: core.Construct, id: str,
             webhook_function,
             on_demand_function,
+            schedule_update_function,
             ingest_allowed_ips):
         super().__init__(scope, id)
 
@@ -104,6 +105,21 @@ class ZipApi(core.Construct):
             ]
         )
 
+        self.schedule_update_resource = self.api.root.add_resource("schedule_update")
+        schedule_update_integration = apigw.LambdaIntegration(schedule_update_function)
+        self.schedule_update_method = self.schedule_update_resource.add_method(
+            "POST",
+            schedule_update_integration,
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    }
+                )
+            ]
+        )
+
         def endpoint_url(resource_name):
             return (f"https://{self.api.rest_api_id}.execute-api."
                     f"{core.Stack.of(self).region}.amazonaws.com/"
@@ -124,6 +140,11 @@ class ZipApi(core.Construct):
             value=endpoint_url("ingest")
         )
 
+        core.CfnOutput(self, "ScheduleUpdateEndpoint",
+            export_name=f"{stack_name}-{names.SCHEDULE_UPDATE_ENDPOINT}-url",
+            value=endpoint_url("schedule_update")
+        )
+
         core.CfnOutput(self, "WebhookResourceId",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-resource-id",
             value=self.new_recording_resource.resource_id
@@ -132,6 +153,11 @@ class ZipApi(core.Construct):
         core.CfnOutput(self, "OnDemandResourceId",
             export_name=f"{stack_name}-{names.ON_DEMAND_ENDPOINT}-resource-id",
             value=self.ingest_resource.resource_id
+        )
+
+        core.CfnOutput(self, "ScheduleUpdateResourceId",
+            export_name=f"{stack_name}-{names.SCHEDULE_UPDATE_ENDPOINT}-resource-id",
+            value=self.schedule_update_resource.resource_id
         )
 
         core.CfnOutput(self, "RestApiId",

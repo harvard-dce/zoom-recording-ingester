@@ -93,6 +93,52 @@ name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`.
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
 
+### Google Sheets integration setup
+
+#### Google Sheets API Auth
+
+1. Fill in Google Sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAME`
+
+Since these credentials are shared within an AWS account, the following setup
+only needs to be done once per AWS account:
+1. Set up a Google API service account and download the `service_account.json` credentials file.
+1. Store the credentials file in SSM using `invoke schedule.save-creds [-f credentials-filename]`
+
+#### Finding the ZIP stack API endpoint
+
+The ZIP API endpoint is available in the output of `invoke stack.create`,
+`invoke stack.update` and `invoke stack.status` under `Outputs`.
+
+#### Setting up the schedule update trigger from Google Sheets
+
+1. Share the Google Sheet with your service account
+1. From the Google Sheet, under Tools > Script Editor, create a script.
+The following script is an example which creates a menu item in the
+Google Sheet that triggers the schedule update function.
+
+```
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('ZIP')
+      .addItem('Update ZIP Schedule', 'updateZoomIngester')
+      .addToUi();
+}
+
+function updateZoomIngester() {
+  var url = "[your stack endpoint]";
+  var options = {
+  'method' : 'POST',
+  };
+  var response = UrlFetchApp.fetch(url, options);
+  Logger.log(response);
+  SpreadsheetApp
+    .getActiveSpreadsheet()
+    .toast(response.getContentText(), "Schedule Updated", 3);
+}
+
+```
+
+
 ### Setup Zoom webhook notifications (Optional)
 
 Once the Zoom Ingester pipeline is operational you can configure your Zoom account to

@@ -1,6 +1,7 @@
 from aws_cdk import (
     core,
-    aws_s3 as s3
+    aws_s3 as s3,
+    aws_iam as iam
 )
 
 from .bucket import ZipRecordingsBucket
@@ -12,7 +13,8 @@ from .function import (
     ZipUploaderFunction,
     ZipOpCountsFunction,
     ZipWebhookFunction,
-    ZipLogNotificationsFunction
+    ZipLogNotificationsFunction,
+    ZipScheduleUpdateFunction,
 )
 from .api import ZipApi
 from .events import ZipEvent
@@ -47,8 +49,11 @@ class ZipStack(core.Stack):
             downloader_event_rate,
             uploader_event_rate,
             project_git_url,
+            gsheets_doc_id,
+            gsheets_sheet_name,
             **kwargs
             ) -> None:
+        
         super().__init__(scope, id, **kwargs)
 
         monitoring = ZipMonitoring(self, 'ZipMonitoring',
@@ -65,6 +70,24 @@ class ZipStack(core.Stack):
         queues = ZipQueues(self, "Queues")
 
         schedule = ZipSchedule(self, "Schedule")
+
+        schedule_update = ZipScheduleUpdateFunction(self, "ScheduleUpdateFunction",
+            name=names.SCHEDULE_UPDATE_FUNCTION,
+            lambda_code_bucket=lambda_code_bucket,
+            environment={
+                "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
+                "GSHEETS_DOC_ID": gsheets_doc_id,
+                "GSHEETS_SHEET_NAME": gsheets_sheet_name,
+            }
+        )
+        schedule_update.function.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["ssm:GetParameter", "ssm:PutParameter"],
+                resources=["*"]
+            )
+        )
+        # grant schedule update function access to dynamo
+        schedule.table.grant_read_write_data(schedule_update.function)
 
         on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
@@ -170,6 +193,7 @@ class ZipStack(core.Stack):
         api = ZipApi(self, "RestApi",
             on_demand_function=on_demand.function,
             webhook_function=webhook.function,
+            schedule_update_function=schedule_update.function,
             ingest_allowed_ips=ingest_allowed_ips
         )
 
@@ -192,10 +216,12 @@ class ZipStack(core.Stack):
                 downloader.function.function_arn,
                 uploader.function.function_arn,
                 op_counts.function.function_arn,
-                log_notify.function.function_arn
+                log_notify.function.function_arn,
+                schedule_update.function.function_arn
             ]
         )
 
+        schedule_update.add_monitoring(monitoring)
         on_demand.add_monitoring(monitoring)
         webhook.add_monitoring(monitoring)
         downloader.add_monitoring(monitoring)
