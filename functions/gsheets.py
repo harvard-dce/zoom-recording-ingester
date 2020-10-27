@@ -69,7 +69,7 @@ class GSheetsAuth():
         r = self.ssm.put_parameter(
             Name=self.ssm_path,
             Description="Service account creds for gsheets authorization",
-            Value=json.loads(data),
+            Value=json.dumps(data),
             Type="SecureString",
             Overwrite=True,
         )
