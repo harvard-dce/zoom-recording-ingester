@@ -36,6 +36,10 @@ class PermanentDownloadError(Exception):
     pass
 
 
+class ZoomFileAccessError(Exception):
+    pass
+
+
 # abstraction for unit testing
 def sqs_resource():
     return boto3.resource("sqs")
@@ -161,7 +165,7 @@ class Download:
             # all incoming files
             files = self.data["recording_files"]
 
-            # number of distinct start times is the count of segements
+            # number of distinct start times is the count of segments
             segment_start_times = sorted(set(
                 [file["recording_start"] for file in files]
             ))
@@ -169,7 +173,7 @@ class Download:
             # collect the recording files here as ZoomFile objs
             zoom_files = []
 
-            # segement refers to the sets of recording files that
+            # segment refers to the sets of recording files that
             # are generated when a host stops and restarts a meeting
             # NOTE: segment numbering starts at 0 (zero)
             for segment_num, start_time in enumerate(segment_start_times):
@@ -372,8 +376,21 @@ class Download:
 
         logger.info("downloading {} files".format(len(self.recording_files)))
 
+        downloaded_files_count = 0
         for file in self.recording_files:
-            file.stream_file_to_s3()
+            try:
+                file.stream_file_to_s3()
+                downloaded_files_count += 1
+            except ZoomFileAccessError:
+                logger.warning(
+                    {"Error accessing possibly deleted file": file.file_data}
+                )
+                continue
+        if not downloaded_files_count:
+            raise PermanentDownloadError(
+                "No files could be downloaded for this recording"
+            )
+        logger.info(f"successfully downloaded {downloaded_files_count} files")
 
     def send_to_deadletter_queue(self, error):
         deadletter_queue = self.sqs.get_queue_by_name(
@@ -473,9 +490,15 @@ class ZoomFile:
             r = requests.get(url, allow_redirects=False)
             r.raise_for_status
 
-            # If the request is not authorized, Zoom will return 200
-            # and an HTML error page
-            if "Content-Type" in r.headers and r.headers["Content-Type"] == "text/html":
+            # If the file has been deleted or if the request is not authorized,
+            # Zoom will return 200 and an HTML error page.
+            # This is bad, but we have no choice but to try to interpret the
+            # content that Zoom returns to us.
+            if "Content-Type" in r.headers and "text/html" in r.headers["Content-Type"]:
+                # Most likely deleted file
+                if "Cannot download the recording" in str(r.content):
+                    raise ZoomFileAccessError()
+                # Most likely an access issue
                 error_message = "Request for download stream not authorized.\n"
                 if "Error" in str(r.content):
                     raise PermanentDownloadError(
