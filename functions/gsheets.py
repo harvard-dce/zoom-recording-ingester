@@ -116,7 +116,7 @@ class GSheet:
 
         f.close()
 
-        logger.debug(f"Successfully downloaded {sheet_name}.csv")
+        logger.info(f"Successfully downloaded {sheet_name}.csv")
         return file_path
 
     def import_to_dynamo(self, sheet_name):
@@ -144,6 +144,7 @@ def schedule_json_to_dynamo(dynamo_table_name, json_file=None, schedule_data=Non
 
         for item in schedule_data.values():
             table.put_item(Item=item)
+        logger.info(f"Loaded schedule into dynamo table {dynamo_table_name}")
     except ClientError as e:
         error = e.response['Error']
         raise Exception("{}: {}".format(error['Code'], error['Message']))
@@ -235,4 +236,5 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
         )
         item["Time"] = list(item["Time"])
 
+    logger.info({"Parsed schedule": schedule_data})
     schedule_json_to_dynamo(dynamo_table_name, schedule_data=schedule_data)
