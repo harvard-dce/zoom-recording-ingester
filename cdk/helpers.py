@@ -89,3 +89,16 @@ def oc_db_url():
 def aws_account_id():
     return boto3.client('sts').get_caller_identity()["Account"]
 
+def stack_tags():
+    """
+    STACK_TAGS looks like 'Key=foo,Value=1 Key=bar,Value=baz'
+    """
+    env_tags = getenv("STACK_TAGS", False);
+
+    if env_tags is None:
+        return {}
+
+    return dict([
+        [ x.split("=")[1] for x in y.split(",") ]
+        for y in env_tags.split()
+    ])

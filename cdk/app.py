@@ -14,7 +14,8 @@ from .helpers import (
     oc_base_url,
     oc_db_url,
     zoom_admin_id,
-    aws_account_id
+    aws_account_id,
+    stack_tags
 )
 from .stack import ZipStack
 
@@ -71,10 +72,8 @@ stack = ZipStack(
     env=core.Environment(
         account=aws_account_id(),
         region=AWS_REGION
-    )
+    ),
+    tags=stack_tags()
 )
 
 app.synth()
-
-
-
