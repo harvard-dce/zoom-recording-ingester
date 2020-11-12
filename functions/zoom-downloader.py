@@ -131,6 +131,7 @@ class Download:
         self.sqs = sqs
         self.data = data
         self.opencast_series_id = None
+        self.title = "Lecture"  # default title
 
         logger.info({"download_message": self.data})
 
@@ -222,13 +223,13 @@ class Download:
             Key={"zoom_series_id": str(self.data["zoom_series_id"])}
         )
 
-        if "Item" not in r:
-            return None
-        else:
+        if "Item" in r:
             schedule = r["Item"]
             # DynamoDB sometimes returns type decimal.Decimal
             schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
             return schedule
+        else:
+            return None
 
     @property
     def _series_id_from_schedule(self):
@@ -242,9 +243,6 @@ class Download:
         if not schedule:
             return None
 
-        zoom_time = self._created_local
-        logger.info({"meeting creation time": zoom_time,
-                     "course schedule": schedule})
         days = OrderedDict([
             ("M", "Mondays"),
             ("T", "Tuesdays"),
@@ -254,26 +252,35 @@ class Download:
             ("S", "Saturday"),
             ("U", "Sunday")
         ])
-        day_code = list(days.keys())[zoom_time.weekday()]
-        if day_code not in schedule["Days"]:
-            logger.debug("No opencast recording scheduled on {}."
-                         .format(days[day_code]))
-            return None
 
-        for t in schedule["Time"]:
-            scheduled_time = datetime.strptime(t, "%H:%M")
+        zoom_time = self._created_local
+        logger.info({"meeting creation time": zoom_time,
+                     "course schedule": schedule})
+        zoom_day_code = list(days.keys())[zoom_time.weekday()]
+
+        # events is a list of {title, day, time} dictionaries
+        for event in schedule["events"]:
+            # match day
+            if zoom_day_code != event["day"]:
+                continue
+
+            # match time
+            scheduled_time = datetime.strptime(event["time"], "%H:%M")
             timedelta = abs(zoom_time -
                             zoom_time.replace(hour=scheduled_time.hour,
                                               minute=scheduled_time.minute)
                             ).total_seconds()
             if timedelta < (BUFFER_MINUTES * 60):
+                # Found schedule match
+                self.title = event["title"]
                 return schedule["opencast_series_id"]
+            else:
+                logger.info(
+                    f"Match for day {event['day']} but not within"
+                    f" {BUFFER_MINUTES} minutes of time {event['time']}"
+                )
 
-        logger.debug("Meeting started more than {} minutes before or after "
-                     "opencast scheduled start time."
-                     .format(BUFFER_MINUTES))
-
-        print("reached end of function")
+        logger.info("No opencast series match found")
         return None
 
     def oc_series_found(self, ignore_schedule=False, override_series_id=None):
@@ -350,6 +357,7 @@ class Download:
                 "uuid": self.data["uuid"],
                 "zoom_series_id": self.data["zoom_series_id"],
                 "opencast_series_id": self.opencast_series_id,
+                "oc_title": self.title,
                 "host_name": self.host_name,
                 "topic": self.data["topic"],
                 "created": datetime.strftime(

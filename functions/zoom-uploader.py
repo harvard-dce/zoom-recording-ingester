@@ -20,7 +20,6 @@ OPENCAST_BASE_URL = env("OPENCAST_BASE_URL")
 OPENCAST_API_USER = env("OPENCAST_API_USER")
 OPENCAST_API_PASSWORD = env("OPENCAST_API_PASSWORD")
 ZOOM_VIDEOS_BUCKET = env("ZOOM_VIDEOS_BUCKET")
-ZOOM_RECORDING_TYPE_NUM = "L01"
 ZOOM_OPENCAST_WORKFLOW = env("OC_WORKFLOW")
 ZOOM_OPENCAST_FLAVOR = env("OC_FLAVOR")
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
@@ -208,7 +207,12 @@ class Upload:
 
     @property
     def type_num(self):
-        return ZOOM_RECORDING_TYPE_NUM
+        if self.data["oc_title"] == "Lecture":
+            return "L"
+        elif self.data["oc_title"] == "Section":
+            return "S"
+        else:
+            return "P"
 
     @property
     def publisher(self):
@@ -340,7 +344,7 @@ class Upload:
         params = [
             ("creator", (None, escape(self.creator))),
             ("identifier", (None, self.mediapackage_id)),
-            ("title", (None, "Lecture")),
+            ("title", (None, self.data["oc_title"])),
             ("type", (None, self.type_num)),
             ("isPartOf", (None, self.opencast_series_id)),
             ("license", (None, "Creative Commons 3.0: Attribution-NonCommercial-NoDerivs")),
