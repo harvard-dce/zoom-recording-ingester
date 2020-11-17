@@ -13,15 +13,18 @@ def test_schedule_parsing(mocker):
 
     schedule1_expected = {
         "0123456789": {
-            "Days": ["T"],
-            "Time": ["20:10"],
+            "events": [
+                {"day": "T", "time": "20:10", "title": "Section"}
+            ],
             "opencast_series_id": "20210112345",
             "opencast_subject": "BIOS E-18 - Section",
             "zoom_series_id": "0123456789"
         },
         "9876543210": {
-            "Days": ["M", "W"],
-            "Time": ["19:40"],
+            "events": [
+                {"day": "M", "time": "19:40", "title": "Lecture"},
+                {"day": "W", "time": "19:40", "title": "Lecture"}
+            ],
             "opencast_series_id": "20210155555",
             "opencast_subject": "BIOS E-18 - Lecture",
             "zoom_series_id": "9876543210"
@@ -30,8 +33,9 @@ def test_schedule_parsing(mocker):
 
     schedule2_expected = {
         "0123456789": {
-            "Days": ["T"],
-            "Time": ["20:10"],
+            "events": [
+                {"day": "T", "time": "20:10", "title": "Section"}
+            ],
             "opencast_series_id": "20210112345",
             "opencast_subject": "BIOS E-18 - Section",
             "zoom_series_id": "0123456789"
