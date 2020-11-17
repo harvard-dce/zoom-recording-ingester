@@ -253,46 +253,61 @@ class TestDownloader(unittest.TestCase):
         saturday_start_time = "2020-01-04T16:00:05Z"
 
         monday_schedule = {
-                "Days": ["M"],
-                "Time": [self.local_hour(monday_start_time)],
-                "opencast_series_id": "monday_good",
-            }
-        bad_monday_schedule = {
-                "Days": ["M"],
-                "Time": [],
-                "opencast_series_id": "monday_bad",
-            }
+            "events": [{
+                "day": "M",
+                "time": self.local_hour(monday_start_time),
+                "title": "Lecture"
+            }],
+            "opencast_series_id": "monday_good",
+        }
         thursday_schedule = {
-                "Days": ["R"],
-                "Time": [self.local_hour(thursday_start_time)],
-                "opencast_series_id": "thursday_good",
-            }
+            "events": [{
+                "day": "R",
+                "time": self.local_hour(thursday_start_time),
+                "title": "Lecture"
+            }],
+            "opencast_series_id": "thursday_good",
+        }
         bad_thursday_schedule = {
-                "Days": ["Th"],
-                "Time": ["11:00"],
-                "opencast_series_id": "thursday_bad",
-            }
+            "events": [{
+                "day": "Th",
+                "time": "11:00",
+                "title": "Lecture"
+            }],
+            "opencast_series_id": "thursday_bad",
+        }
         saturday_schedule = {
-                "Days": ["S"],
-                "Time": [self.local_hour(saturday_start_time)],
-                "opencast_series_id": "saturday_good",
-            }
+            "events": [{
+                "day": "S",
+                "time": self.local_hour(saturday_start_time),
+                "title": "Lecture"
+            }],
+            "opencast_series_id": "saturday_good",
+        }
         bad_saturday_schedule = {
-                "Days": ["S"],
-                "Time": ["20:00"],
-                "opencast_series_id": "saturday_bad",
-            }
+            "events": [{
+                "day": "S",
+                "time": "20:00",
+                "title": "Lecture"
+            }],
+            "opencast_series_id": "saturday_bad",
+        }
         multiple_day_schedule = {
-                "Days": ["M", "W"],
-                "Time": [self.local_hour(wednesday_start_time)],
-                "opencast_series_id": "multiple_days",
-            }
+            "events": [
+                {"day": "M",
+                 "time": self.local_hour(wednesday_start_time),
+                 "title": "Lecture"},
+                {"day": "W",
+                 "time": self.local_hour(wednesday_start_time),
+                 "title": "Lecture"},
+            ],
+            "opencast_series_id": "multiple_days",
+        }
 
         cases = [
             # Mondays
             (monday_start_time, monday_schedule,
                 monday_schedule["opencast_series_id"]),
-            (monday_start_time, bad_monday_schedule, None),
             # Thursdays
             (thursday_start_time, thursday_schedule,
                 thursday_schedule["opencast_series_id"]),
