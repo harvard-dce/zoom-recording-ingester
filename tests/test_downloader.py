@@ -31,21 +31,6 @@ SAMPLE_MESSAGE_BODY = {
 
 DAYS = ["M", "T", "W", "R", "F", "S", "U"]
 
-SAMPLE_SCHEDULE = {
-        "Days": [
-            DAYS[datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT).weekday()]
-        ],
-        "zoom_series_id": "123456789",
-        "opencast_series_id": "20200299999",
-        "Time": [
-            datetime.strftime(
-                datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT),
-                "%H:%M"
-            )
-        ],
-        "opencast_subject": "TEST E-61"
-    }
-
 
 class MockContext():
     def __init__(self, aws_request_id):

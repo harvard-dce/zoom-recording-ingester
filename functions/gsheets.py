@@ -204,12 +204,11 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
         schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
 
         # Add descriptions
-        subject = "{} - {}".format(row["course code"], row["type"])
-        schedule_data[zoom_series_id]["opencast_subject"] = subject
+        schedule_data[zoom_series_id]["course_code"] = row["course code"]
 
         # Construct events - list of {day, time, title}
         schedule_data[zoom_series_id].setdefault("events", [])
-        title = row["type"].strip().capitalize()
+        title = row["type"].strip().title()
         time_object = datetime.strptime(row["start"], "%H:%M")
         time = datetime.strftime(time_object, "%H:%M")
         # value might look like "MW", "TR" or "MWF"
