@@ -13,31 +13,42 @@ def test_schedule_parsing(mocker):
 
     schedule1_expected = {
         "0123456789": {
+            "course_code": "BIOS E-18",
             "events": [
                 {"day": "T", "time": "20:10", "title": "Section"}
             ],
             "opencast_series_id": "20210112345",
-            "opencast_subject": "BIOS E-18 - Section",
             "zoom_series_id": "0123456789"
         },
         "9876543210": {
+            "course_code": "BIOS E-18",
             "events": [
                 {"day": "M", "time": "19:40", "title": "Lecture"},
                 {"day": "W", "time": "19:40", "title": "Lecture"}
             ],
             "opencast_series_id": "20210155555",
-            "opencast_subject": "BIOS E-18 - Lecture",
             "zoom_series_id": "9876543210"
         },
+        "555555555": {
+            "course_code": "CSCI E-61",
+            "events": [
+                {"day": "T", "time": "09:15", "title": "Lecture"},
+                {"day": "W", "time": "12:00", "title": "Staff Meeting"},
+                {"day": "R", "time": "20:00", "title": "Section"},
+                {"day": "F", "time": "13:15", "title": "Lecture"}
+            ],
+            "opencast_series_id": "20210161616",
+            "zoom_series_id": "555555555"
+        }
     }
 
     schedule2_expected = {
         "0123456789": {
+            "course_code": "BIOS E-18",
             "events": [
                 {"day": "T", "time": "20:10", "title": "Section"}
             ],
             "opencast_series_id": "20210112345",
-            "opencast_subject": "BIOS E-18 - Section",
             "zoom_series_id": "0123456789"
         }
     }
