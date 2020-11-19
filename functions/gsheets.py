@@ -190,6 +190,7 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
             assert zoom_link.scheme.startswith("https")
         except AssertionError:
             logger.error(f"{row['course code']}: \tInvalid zoom link")
+            continue
 
         # Add zoom series id
         zoom_series_id = zoom_link.path.split("/")[-1]
@@ -201,6 +202,7 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
             .fragment.replace("/", "")
         if not opencast_series_id:
             logger.warning(f"{row['course code']}: \tMissing oc series")
+            continue
         schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
 
         # Add descriptions
