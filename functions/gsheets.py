@@ -178,13 +178,13 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
 
     schedule_data = {}
     for row in rows:
-
-        # Validate meeting link
+        # Check for missing zoom link
         meeting_id_with_pwd = row["meeting id with password"]
         if not meeting_id_with_pwd:
             logger.warning(f"{row['course code']}: \tMissing zoom link")
             continue
 
+        # Validate zoom link
         try:
             zoom_link = urlparse(row["meeting id with password"].strip())
             assert zoom_link.scheme.startswith("https")
@@ -192,17 +192,28 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
             logger.error(f"{row['course code']}: \tInvalid zoom link")
             continue
 
-        # Add zoom series id
-        zoom_series_id = zoom_link.path.split("/")[-1]
-        schedule_data.setdefault(zoom_series_id, {})
-        schedule_data[zoom_series_id]["zoom_series_id"] = zoom_series_id
-
-        # Add opencast series id
+        # Validate meeting time
+        try:
+            datetime.strptime(row["start"], "%H:%M")
+        except ValueError:
+            logger.error(
+                f"{row['course code']}: Invalid start time: {row['start']}"
+            )
+            continue
+        # Validate opencast series id
         opencast_series_id = urlparse(row["oc series"]) \
             .fragment.replace("/", "")
         if not opencast_series_id:
             logger.warning(f"{row['course code']}: \tMissing oc series")
             continue
+
+        # Add zoom series id
+        zoom_series_id = zoom_link.path.split("/")[-1]
+        schedule_data.setdefault(zoom_series_id, {})
+        schedule_data[zoom_series_id]["zoom_series_id"] = zoom_series_id
+        print(schedule_data)
+
+        # Add opencast series id
         schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
 
         # Add descriptions
@@ -211,8 +222,8 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
         # Construct events - list of {day, time, title}
         schedule_data[zoom_series_id].setdefault("events", [])
         title = row["type"].strip().title()
-        time_object = datetime.strptime(row["start"], "%H:%M")
-        time = datetime.strftime(time_object, "%H:%M")
+        start_time = row["start"]
+
         # value might look like "MW", "TR" or "MWF"
         days_value = row["day"].strip()
         if len(days_value) > 1 and " " not in days_value:
@@ -231,13 +242,15 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
                 continue
 
             schedule_data[zoom_series_id]["events"].append(
-                {"day": day, "time": time, "title": title}
+                {"day": day, "time": start_time, "title": title}
             )
 
+    print(schedule_data)
     for item in schedule_data.values():
+        print(item)
         # sort days for easier testing
         item["events"] = sorted(
-            list(item["events"]), key=lambda x: valid_days.index(x["day"])
+            item["events"], key=lambda x: valid_days.index(x["day"])
         )
 
     logger.info({"Parsed schedule": schedule_data})

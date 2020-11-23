@@ -223,13 +223,13 @@ class Download:
             Key={"zoom_series_id": str(self.data["zoom_series_id"])}
         )
 
-        if "Item" in r:
-            schedule = r["Item"]
-            # DynamoDB sometimes returns type decimal.Decimal
-            schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
-            return schedule
-        else:
+        if "Item" not in r:
             return None
+
+        schedule = r["Item"]
+        # DynamoDB sometimes returns type decimal.Decimal
+        schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
+        return schedule
 
     @property
     def _series_id_from_schedule(self):

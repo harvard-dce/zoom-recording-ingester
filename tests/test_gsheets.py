@@ -14,7 +14,7 @@ def test_schedule_successful_parsing(mocker):
 
     schedule1_expected = {
         "0123456789": {
-            "course_code": "BIOS E-18",
+            "course_code": "BIOS E-18A",
             "events": [
                 {"day": "T", "time": "20:10", "title": "Section"}
             ],
@@ -22,7 +22,7 @@ def test_schedule_successful_parsing(mocker):
             "zoom_series_id": "0123456789"
         },
         "9876543210": {
-            "course_code": "BIOS E-18",
+            "course_code": "BIOS E-18B",
             "events": [
                 {"day": "M", "time": "19:40", "title": "Lecture"},
                 {"day": "W", "time": "19:40", "title": "Lecture"}
@@ -33,7 +33,7 @@ def test_schedule_successful_parsing(mocker):
         "555555555": {
             "course_code": "CSCI E-61",
             "events": [
-                {"day": "T", "time": "09:15", "title": "Lecture"},
+                {"day": "T", "time": "9:15", "title": "Lecture"},
                 {"day": "W", "time": "12:00", "title": "Staff Meeting"},
                 {"day": "R", "time": "20:00", "title": "Section"},
                 {"day": "F", "time": "13:15", "title": "Lecture"}
@@ -84,7 +84,7 @@ def test_schedule_missing_zoom_link(mocker):
     # 2 meetings but 1 does not have a Zoom link so only 1 meeting added
     schedule3_expected = {
         "9876543210": {
-            "course_code": "BIOS E-18",
+            "course_code": "TEST E-2",
             "events": [
                 {"day": "M", "time": "19:40", "title": "Lecture"},
                 {"day": "W", "time": "19:40", "title": "Lecture"}
@@ -109,7 +109,7 @@ def test_schedule_invalid_zoom_link(mocker):
     # 2 meetings but 1 has an invalid Zoom link so only 1 meeting added
     schedule4_expected = {
         "9876543210": {
-            "course_code": "BIOS E-18",
+            "course_code": "TEST E-2",
             "events": [
                 {"day": "M", "time": "19:40", "title": "Lecture"},
                 {"day": "W", "time": "19:40", "title": "Lecture"}
@@ -134,7 +134,7 @@ def test_schedule_missing_oc_series(mocker):
     # 2 meetings but 1 has no opencast series id so only 1 meeting added
     schedule5_expected = {
         "9876543210": {
-            "course_code": "BIOS E-18",
+            "course_code": "TEST E-2",
             "events": [
                 {"day": "M", "time": "19:40", "title": "Lecture"},
                 {"day": "W", "time": "19:40", "title": "Lecture"}
@@ -147,4 +147,28 @@ def test_schedule_missing_oc_series(mocker):
     gsheets.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule5.csv")
     mock_json_to_dynamo.assert_called_with(
         "mock_table_name", schedule_data=schedule5_expected
+    )
+
+
+def test_schedule_invalid_time(mocker):
+    mock_table_name = "mock_table_name"
+    mock_json_to_dynamo = mocker.patch.object(
+        gsheets, "schedule_json_to_dynamo"
+    )
+
+    # 2 meetings but 1 has an invalid time so only 1 meeting added
+    schedule6_expected = {
+        "9876543210": {
+            "course_code": "TEST E-1",
+            "events": [
+                {"day": "T", "time": "20:10", "title": "Section"}
+            ],
+            "opencast_series_id": "20210155555",
+            "zoom_series_id": "9876543210"
+        }
+    }
+
+    gsheets.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule6.csv")
+    mock_json_to_dynamo.assert_called_with(
+        "mock_table_name", schedule_data=schedule6_expected
     )
