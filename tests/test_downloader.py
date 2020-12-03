@@ -475,6 +475,7 @@ def test_zoom_filename(mocker):
             else:
                 assert(file.zoom_filename == expected)
 
+
 def test_handler_duration_check(handler, mocker):
     downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 1
     mocker.patch.object(downloader, 'sqs_resource', mocker.Mock())
@@ -506,6 +507,26 @@ def test_handler_duration_check(handler, mocker):
     assert downloader.Download.oc_series_found.call_count == 0
     assert mock_msg.delete.call_count == 1
 
+
+def test_ignore_duration_check_for_on_demand(handler, mocker):
+    downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 1
+    mocker.patch.object(downloader, 'sqs_resource', mocker.Mock())
+    mocker.patch.object(downloader.Download, 'oc_series_found', mocker.Mock(
+        return_value=False))
+
+    # duration too short
+    mock_msg = mocker.Mock(body=json.dumps({
+        "on_demand_series_id": 1234, "duration": 0
+    }))
+    mocker.patch.object(downloader, 'retrieve_message', mocker.Mock(
+        return_value=mock_msg
+    ))
+    handler(downloader, {})
+
+    # if we got here it means we passed the duration check
+    # should pass because the ingest is an on demand ingest
+    assert downloader.Download.oc_series_found.call_count == 1
+    assert mock_msg.delete.call_count == 1
 
 
 
