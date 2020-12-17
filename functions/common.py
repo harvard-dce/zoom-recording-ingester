@@ -14,7 +14,7 @@ load_dotenv(join(dirname(__file__), '../.env'))
 
 LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
 BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'
-ZOOM_API_BASE_URL = "https://api.zoom.us/v2/"
+ZOOM_API_BASE_URL = env("ZOOM_API_BASE_URL")
 ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
@@ -77,8 +77,9 @@ def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
 
     url = "{}{}".format(ZOOM_API_BASE_URL, endpoint)
     headers = {
-        "Authorization": "Bearer {}"
-        .format(gen_token(key, secret, seconds_valid).decode())
+        "X-Api-Key": ZOOM_API_KEY
+        # "Authorization": "Bearer {}"
+        # .format(gen_token(key, secret, seconds_valid).decode())
     }
 
     while True:
