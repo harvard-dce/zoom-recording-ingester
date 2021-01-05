@@ -82,7 +82,6 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
     else:
         token = gen_token(ZOOM_API_KEY, ZOOM_API_SECRET, seconds_valid).decode()
         headers = {
-            "X-Api-Key": ZOOM_API_KEY,
             "Authorization": f"Bearer {token}"
         }
         logger.info(f"Zoom api request to {url}")
