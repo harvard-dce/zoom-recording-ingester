@@ -69,7 +69,7 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
         raise Exception("Call to zoom_api_request missing endpoint")
 
     if not APIGEE_KEY and not (ZOOM_API_KEY and ZOOM_API_SECRET):
-        raise Exception(("Missing api credentials."
+        raise Exception(("Missing api credentials. "
             "Must have APIGEE_KEY or ZOOM_API_KEY and ZOOM_API_SECRET"))
 
     url = "{}{}".format(ZOOM_API_BASE_URL, endpoint)
@@ -78,15 +78,17 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
         headers = {
             "X-Api-Key": APIGEE_KEY
         }
+        logger.info(f"Apigee request to {url}")
     else:
         token = gen_token(ZOOM_API_KEY, ZOOM_API_SECRET, seconds_valid).decode()
         headers = {
             "X-Api-Key": ZOOM_API_KEY,
             "Authorization": f"Bearer {token}"
         }
+        logger.info(f"Zoom api request to {url}")
+
     while True:
         try:
-            logger.info("zoom api request to {}".format(url))
             r = requests.get(url, headers=headers)
             break
         except (requests.exceptions.ConnectionError,
