@@ -17,6 +17,7 @@ BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'
 ZOOM_API_BASE_URL = env("ZOOM_API_BASE_URL")
 ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
+APIGEE_KEY = env("APIGEE_KEY")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
@@ -63,27 +64,29 @@ def gen_token(key, secret, seconds_valid=60):
     return jwt.encode(payload, secret, headers=header)
 
 
-def zoom_api_request(endpoint, key=ZOOM_API_KEY, secret=ZOOM_API_SECRET,
-                     seconds_valid=60, ignore_failure=False, retries=3):
-    required_params = [("endpoint", endpoint),
-                       ("zoom api key", key),
-                       ("zoom api secret", secret)]
-    for name, param in required_params:
-        if not param:
-            raise Exception(
-                "Call to zoom_api_request "
-                "missing required param '{}'".format(name)
-            )
+def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3):
+    if not endpoint:
+        raise Exception("Call to zoom_api_request missing endpoint")
+
+    if not APIGEE_KEY and not (ZOOM_API_KEY and ZOOM_API_SECRET):
+        raise Exception(("Missing api credentials."
+            "Must have APIGEE_KEY or ZOOM_API_KEY and ZOOM_API_SECRET"))
 
     url = "{}{}".format(ZOOM_API_BASE_URL, endpoint)
-    headers = {
-        "X-Api-Key": ZOOM_API_KEY
-        # "Authorization": "Bearer {}"
-        # .format(gen_token(key, secret, seconds_valid).decode())
-    }
 
+    if APIGEE_KEY:
+        headers = {
+            "X-Api-Key": APIGEE_KEY
+        }
+    else:
+        token = gen_token(ZOOM_API_KEY, ZOOM_API_SECRET, seconds_valid).decode()
+        headers = {
+            "X-Api-Key": ZOOM_API_KEY,
+            "Authorization": f"Bearer {token}"
+        }
     while True:
         try:
+            logger.info("zoom api request to {}".format(url))
             r = requests.get(url, headers=headers)
             break
         except (requests.exceptions.ConnectionError,

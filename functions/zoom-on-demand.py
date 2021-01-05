@@ -71,9 +71,8 @@ def handler(event, context):
         try:
             # zoom api can break if uuid is not double urlencoded
             double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
-            zoom_endpoint = ("/meetings/{}/recordings"
+            zoom_endpoint = ("meetings/{}/recordings"
                              .format(double_urlencoded_uuid))
-            logger.info("zoom api request to {}".format(zoom_endpoint))
             r = zoom_api_request(zoom_endpoint)
             recording_data = r.json()
         except requests.HTTPError as e:
