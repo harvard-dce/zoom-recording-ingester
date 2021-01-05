@@ -3,6 +3,7 @@ import requests
 from os import getenv as env
 from urllib.parse import urlparse, parse_qs, quote
 from common import setup_logging, zoom_api_request
+import uuid
 
 import logging
 logger = logging.getLogger()
@@ -15,16 +16,17 @@ logger = logging.getLogger()
 WEBHOOK_ENDPOINT_URL = env("WEBHOOK_ENDPOINT_URL")
 
 
-def resp(status_code, msg=""):
-    logger.info("returning {} response: '{}'".format(status_code, msg))
+def resp(status_code, msg="", request_id=None):
+    body = {"message": msg}
+    if request_id:
+        body["request_id"] = request_id
+    logger.info(f"returning {status_code} response: '{body}'")
     return {
         "statusCode": status_code,
         "headers": {
             "Access-Control-Allow-Origin": "*"
         },
-        "body": json.dumps({
-            "message": msg
-        })
+        "body": json.dumps(body)
     }
 
 
@@ -55,23 +57,23 @@ def handler(event, context):
         return resp(400, "Missing recording uuid field in webhook notification "
                         "body.")
 
-    uuid = body["uuid"]
-    if uuid.startswith("https"):
+    recording_uuid = body["uuid"]
+    if recording_uuid.startswith("https"):
         # it's a link; parse the uuid from the query string
-        parsed_url = urlparse(uuid)
+        parsed_url = urlparse(recording_uuid)
         query_params = parse_qs(parsed_url.query)
         if "meeting_id" not in query_params:
             return resp(404, "Zoom URL is malformed or missing 'meeting_id' "
                              "param.")
-        uuid = query_params["meeting_id"][0]
+        recording_uuid = query_params["meeting_id"][0]
 
-    logger.info("Got recording uuid: '{}'".format(uuid))
+    logger.info("Got recording uuid: '{}'".format(recording_uuid))
 
     try:
         try:
             # zoom api can break if uuid is not double urlencoded
-            double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
-            zoom_endpoint = ("meetings/{}/recordings"
+            double_urlencoded_uuid = quote(quote(recording_uuid, safe=""), safe="")
+            zoom_endpoint = ("/meetings/{}/recordings"
                              .format(double_urlencoded_uuid))
             r = zoom_api_request(zoom_endpoint)
             recording_data = r.json()
@@ -79,7 +81,7 @@ def handler(event, context):
             # return a 404 if there's no such meeting
             if e.response.status_code == 404:
                 return resp(404, "No zoom recording with id '{}'"
-                            .format(uuid))
+                            .format(recording_uuid))
             else:
                 raise
     # otherwise return a 500 on any other errors (bad json, bad request, etc)
@@ -90,7 +92,7 @@ def handler(event, context):
     if "recording_files" not in recording_data \
             or not len(recording_data["recording_files"]):
         return resp(503, "Zoom api response contained no recording files for {}"
-                    .format(uuid))
+                    .format(recording_uuid))
 
     # verify that all the recording files are actually "completed"
     not_completed = sum(
@@ -117,6 +119,9 @@ def handler(event, context):
     if "allow_multiple_ingests" in body:
         webhook_data["payload"]["allow_multiple_ingests"] = body["allow_multiple_ingests"]
 
+    request_id = str(uuid.uuid4())
+    webhook_data["on_demand_request_id"] = request_id
+
     logger.info({"webhook_data": webhook_data})
     try:
         r = requests.post(WEBHOOK_ENDPOINT_URL,
@@ -133,4 +138,4 @@ def handler(event, context):
         )
         return resp(500, err_msg)
 
-    return resp(200, "Ingest accepted")
+    return resp(200, "Ingest accepted", request_id)
