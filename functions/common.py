@@ -7,6 +7,7 @@ from functools import wraps
 from os import getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname
+from urllib.parse import urljoin
 
 logger = logging.getLogger()
 
@@ -72,7 +73,7 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
         raise Exception(("Missing api credentials. "
             "Must have APIGEE_KEY or ZOOM_API_KEY and ZOOM_API_SECRET"))
 
-    url = "{}{}".format(ZOOM_API_BASE_URL, endpoint)
+    url = f"{ZOOM_API_BASE_URL.strip('/')}/{endpoint.strip('/')}"
 
     if APIGEE_KEY:
         headers = {

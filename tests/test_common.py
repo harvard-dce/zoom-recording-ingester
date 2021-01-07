@@ -77,6 +77,29 @@ def test_zoom_api_key(caplog):
     assert "zoom api request" in caplog.text.lower()
 
 
+def test_url_construction(caplog):
+    common.APIGEE_KEY = None
+    common.ZOOM_API_KEY = "key"
+    common.ZOOM_API_SECRET = "secret"
+    caplog.set_level(logging.INFO)
+
+    cases = [
+        ("https://www.foo.com", "meetings", "https://www.foo.com/meetings"),
+        ("https://www.foo.com/", "meetings", "https://www.foo.com/meetings"),
+        ("https://www.foo.com/", "/meetings", "https://www.foo.com/meetings")
+    ]
+    with requests_mock.mock() as req_mock:
+        req_mock.get(
+            requests_mock.ANY,
+            status_code=200,
+            json={"mock_payload": 123}
+        )
+        for url, endpoint, expected in cases:
+            common.ZOOM_API_BASE_URL = url
+            common.zoom_api_request(endpoint)
+            assert f"zoom api request to https://www.foo.com/meetings" in caplog.text.lower()
+
+
 def test_zoom_api_request_success():
     # test successful call
     cases = [(None, "zoom_key", "zoom_secret"), ("", "zoom_key", "zoom_secret")]
@@ -99,6 +122,7 @@ def test_zoom_api_request_failures():
     common.APIGEE_KEY = None
     common.ZOOM_API_KEY = "zoom_key"
     common.ZOOM_API_SECRET = "zoom_secret"
+    common.ZOOM_API_BASE_URL= "https://api.zoom.us/v2/"
     # test failed call that returns
     with requests_mock.mock() as req_mock:
         req_mock.get(
