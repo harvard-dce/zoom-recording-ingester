@@ -27,8 +27,10 @@ class ZipStack(core.Stack):
     def __init__(self, scope: core.Construct, id: str,
             lambda_code_bucket,
             notification_email,
+            zoom_api_base_url,
             zoom_api_key,
             zoom_api_secret,
+            apigee_key,
             local_time_zone,
             default_series_id,
             download_message_per_invocation,
@@ -93,8 +95,10 @@ class ZipStack(core.Stack):
             name=names.ON_DEMAND_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
+                "ZOOM_API_BASE_URL": zoom_api_base_url,
                 "ZOOM_API_KEY": zoom_api_key,
-                "ZOOM_API_SECRET": zoom_api_secret
+                "ZOOM_API_SECRET": zoom_api_secret,
+                "APIGEE_KEY": apigee_key
             }
         )
 
@@ -126,8 +130,10 @@ class ZipStack(core.Stack):
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
                 "DEBUG": "0",
                 "ZOOM_ADMIN_ID": zoom_admin_id,
+                "ZOOM_API_BASE_URL": zoom_api_base_url,
                 "ZOOM_API_KEY": zoom_api_key,
                 "ZOOM_API_SECRET": zoom_api_secret,
+                "APIGEE_KEY": apigee_key,
                 "LOCAL_TIME_ZONE": local_time_zone,
                 "DEFAULT_SERIES_ID": default_series_id,
                 "DOWNLOAD_MESSAGES_PER_INVOCATION": download_message_per_invocation,

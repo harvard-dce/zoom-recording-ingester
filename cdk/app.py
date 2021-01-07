@@ -33,8 +33,10 @@ default_publisher = getenv("DEFAULT_PUBLISHER", required=False) \
 stack_props = {
     "lambda_code_bucket": getenv("LAMBDA_CODE_BUCKET"),
     "notification_email": getenv("NOTIFICATION_EMAIL"),
+    "zoom_api_base_url": getenv("ZOOM_API_BASE_URL"),
     "zoom_api_key": getenv("ZOOM_API_KEY"),
     "zoom_api_secret": getenv("ZOOM_API_SECRET"),
+    "apigee_key": getenv("APIGEE_KEY"),
     "local_time_zone": getenv("LOCAL_TIME_ZONE"),
     "default_series_id": getenv("DEFAULT_SERIES_ID", required=False),
     "download_message_per_invocation": getenv("DOWNLOAD_MESSAGES_PER_INVOCATION"),
