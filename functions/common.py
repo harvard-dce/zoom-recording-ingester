@@ -73,7 +73,7 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
         raise Exception(("Missing api credentials. "
             "Must have APIGEE_KEY or ZOOM_API_KEY and ZOOM_API_SECRET"))
 
-    url = f"{ZOOM_API_BASE_URL.strip('/')}/{endpoint.strip('/')}"
+    url = f"{ZOOM_API_BASE_URL.rstrip('/')}/{endpoint.lstrip('/')}"
 
     if APIGEE_KEY:
         headers = {
