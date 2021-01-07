@@ -2,7 +2,7 @@ import json
 import requests
 from os import getenv as env
 from urllib.parse import urlparse, parse_qs, quote
-from common import setup_logging, zoom_api_request
+import common
 import uuid
 
 import logging
@@ -30,7 +30,7 @@ def resp(status_code, msg="", request_id=None):
     }
 
 
-@setup_logging
+@common.setup_logging
 def handler(event, context):
     """
     This function acts as a relay to the traditional zoom webhook. The webhook
@@ -75,7 +75,8 @@ def handler(event, context):
             double_urlencoded_uuid = quote(quote(recording_uuid, safe=""), safe="")
             zoom_endpoint = ("/meetings/{}/recordings"
                              .format(double_urlencoded_uuid))
-            r = zoom_api_request(zoom_endpoint)
+            logger.info("zoom api request to {}".format(zoom_endpoint))
+            r = common.zoom_api_request(zoom_endpoint)
             recording_data = r.json()
         except requests.HTTPError as e:
             # return a 404 if there's no such meeting
@@ -120,7 +121,7 @@ def handler(event, context):
         webhook_data["payload"]["allow_multiple_ingests"] = body["allow_multiple_ingests"]
 
     request_id = str(uuid.uuid4())
-    webhook_data["on_demand_request_id"] = request_id
+    webhook_data["payload"]["on_demand_request_id"] = request_id
 
     logger.info({"webhook_data": webhook_data})
     try:
@@ -138,4 +139,6 @@ def handler(event, context):
         )
         return resp(500, err_msg)
 
+    common.set_request_status(
+        request_id, common.PipelineStatus.ON_DEMAND_RECEIVED)
     return resp(200, "Ingest accepted", request_id)
