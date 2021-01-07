@@ -69,6 +69,13 @@ def test_zoom_api_key(caplog):
     common.zoom_api_request("meetings")
     assert "zoom api request" in caplog.text.lower()
 
+    common.APIGEE_KEY = ""
+    common.ZOOM_API_KEY = "key"
+    common.ZOOM_API_SECRET = "secret"
+    caplog.set_level(logging.INFO)
+    common.zoom_api_request("meetings")
+    assert "zoom api request" in caplog.text.lower()
+
 
 def test_zoom_api_request_success():
     # test successful call
