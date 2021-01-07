@@ -72,17 +72,20 @@ def test_zoom_api_key(caplog):
 
 def test_zoom_api_request_success():
     # test successful call
-    common.APIGEE_KEY = None
-    common.ZOOM_API_KEY = "zoom_key"
-    common.ZOOM_API_SECRET = "zoom_secret"
-    with requests_mock.mock() as req_mock:
-        req_mock.get(
-            requests_mock.ANY,
-            status_code=200,
-            json={"mock_payload": 123}
-        )
-        r = common.zoom_api_request("meetings")
-        assert "mock_payload" in r.json()
+    cases = [(None, "zoom_key", "zoom_secret"), ("", "zoom_key", "zoom_secret")]
+    for apigee_key, zoom_key, zoom_secret in cases:
+        common.APIGEE_KEY = apigee_key
+        common.ZOOM_API_KEY = zoom_key
+        common.ZOOM_API_SECRET = zoom_secret
+
+        with requests_mock.mock() as req_mock:
+            req_mock.get(
+                requests_mock.ANY,
+                status_code=200,
+                json={"mock_payload": 123}
+            )
+            r = common.zoom_api_request("meetings")
+            assert "mock_payload" in r.json()
 
 
 def test_zoom_api_request_failures():
