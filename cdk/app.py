@@ -25,18 +25,25 @@ AWS_REGION = getenv("AWS_REGION", required=False) or \
              getenv("AWS_DEFAULT_REGION", required=False) or \
              "us-east-1"
 
-oc_vpc_id, oc_security_group_id =  vpc_components()
+oc_vpc_id, oc_security_group_id = vpc_components()
 ingest_allowed_ips = getenv("INGEST_ALLOWED_IPS").split(',')
 default_publisher = getenv("DEFAULT_PUBLISHER", required=False) \
                     or getenv("NOTIFICATION_EMAIL")
+
+APIGEE_KEY = getenv("APIGEE_KEY", required=False)
+ZOOM_API_KEY = getenv("ZOOM_API_KEY", required=False)
+ZOOM_API_SECRET = getenv("ZOOM_API_SECRET", required=False)
+if not APIGEE_KEY and not (ZOOM_API_KEY and ZOOM_API_SECRET):
+    raise Exception(("Missing api credentials. "
+        "Must have APIGEE_KEY or ZOOM_API_KEY and ZOOM_API_SECRET"))
 
 stack_props = {
     "lambda_code_bucket": getenv("LAMBDA_CODE_BUCKET"),
     "notification_email": getenv("NOTIFICATION_EMAIL"),
     "zoom_api_base_url": getenv("ZOOM_API_BASE_URL"),
-    "zoom_api_key": getenv("ZOOM_API_KEY"),
-    "zoom_api_secret": getenv("ZOOM_API_SECRET"),
-    "apigee_key": getenv("APIGEE_KEY"),
+    "zoom_api_key": ZOOM_API_KEY,
+    "zoom_api_secret": ZOOM_API_SECRET,
+    "apigee_key": APIGEE_KEY,
     "local_time_zone": getenv("LOCAL_TIME_ZONE"),
     "default_series_id": getenv("DEFAULT_SERIES_ID", required=False),
     "download_message_per_invocation": getenv("DOWNLOAD_MESSAGES_PER_INVOCATION"),
