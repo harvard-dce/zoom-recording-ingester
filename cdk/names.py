@@ -5,6 +5,7 @@ NOTIFICATIONS_TOPIC="notifications"
 METRIC_NAMESPACE="log-metrics"
 
 SCHEDULE_TABLE="schedule"
+ON_DEMAND_STATUS_TABLE="on-demand-status"
 
 DOWNLOAD_QUEUE="download"
 DOWNLOAD_DLQ="download-dlq"

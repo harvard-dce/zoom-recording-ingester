@@ -1,6 +1,6 @@
 import json
 from os import getenv as env
-from common import setup_logging, TIMESTAMP_FORMAT
+import common
 from datetime import datetime, timedelta
 from pytz import timezone
 import boto3
@@ -49,7 +49,7 @@ INGEST_EVENT_TYPES = {
 }
 
 
-@setup_logging
+@common.setup_logging
 def handler(event, context):
     """
     This function accepts the incoming POST relay from the API Gateway endpoint
@@ -80,15 +80,25 @@ def handler(event, context):
         return resp_400("Missing payload field in webhook notification body.")
     payload = body["payload"]
 
+    if "on_demand_request_id" in payload:
+        correlation_id = payload["on_demand_request_id"]
+    else:
+        correlation_id = context.aws_request_id
+
     try:
         validate_payload(payload)
+        if "on_demand_request_id" in payload:
+            common.set_request_status(
+                correlation_id,
+                common.PipelineStatus.WEBHOOK_RECEIVED
+            )
     except BadWebhookData as e:
         return resp_400("Bad data: {}".format(str(e)))
     except NoMp4Files as e:
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
 
-    sqs_message = construct_sqs_message(payload, context, zoom_event)
+    sqs_message = construct_sqs_message(payload, correlation_id, zoom_event)
     logger.info({"sqs_message": sqs_message})
 
     if zoom_event == "on.demand.ingest":
@@ -169,10 +179,10 @@ def validate_payload(payload):
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
 
-def construct_sqs_message(payload, context, zoom_event):
+def construct_sqs_message(payload, correlation_id, zoom_event):
     now = datetime.strftime(
                 timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
-                TIMESTAMP_FORMAT)
+                common.TIMESTAMP_FORMAT)
 
     if "allow_multiple_ingests" in payload:
         allow_multiple_ingests = payload["allow_multiple_ingests"]
@@ -200,7 +210,7 @@ def construct_sqs_message(payload, context, zoom_event):
         "host_id": payload["object"]["host_id"],
         "recording_files": recording_files,
         "allow_multiple_ingests": allow_multiple_ingests,
-        "correlation_id": context.aws_request_id,
+        "correlation_id": correlation_id,
         "received_time": now
     }
 
@@ -222,7 +232,7 @@ def construct_sqs_message(payload, context, zoom_event):
 
 
 def estimated_processing_mins(start_ts, duration_in_minutes):
-    rec_start = datetime.strptime(start_ts, TIMESTAMP_FORMAT)
+    rec_start = datetime.strptime(start_ts, common.TIMESTAMP_FORMAT)
     rec_end = rec_start + timedelta(minutes=duration_in_minutes)
     processing_time = datetime.utcnow() - rec_end
     return processing_time.total_seconds() // 60
