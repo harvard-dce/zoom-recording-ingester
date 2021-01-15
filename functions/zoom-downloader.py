@@ -3,7 +3,7 @@ import json
 import requests
 from os import getenv as env
 from pathlib import Path
-from common import setup_logging, zoom_api_request, TIMESTAMP_FORMAT
+import common
 import subprocess
 from pytz import timezone
 from datetime import datetime
@@ -37,6 +37,10 @@ class PermanentDownloadError(Exception):
     pass
 
 
+class RetryableDownloadError(Exception):
+    pass
+
+
 class ZoomDownloadLinkError(Exception):
     pass
 
@@ -46,7 +50,7 @@ def sqs_resource():
     return boto3.resource("sqs")
 
 
-@setup_logging
+@common.setup_logging
 def handler(event, context):
     """
     This function receives an event on each new entry in the download urls
@@ -75,11 +79,25 @@ def handler(event, context):
         # for the duration potentially different sets of files
         if dl.duration >= MINIMUM_DURATION or "on_demand_series_id" in dl_data:
             if dl.oc_series_found(ignore_schedule, override_series_id):
+                common.set_pipeline_status(
+                    dl_data["correlation_id"],
+                    common.PipelineStatus.OC_SERIES_FOUND
+                )
                 break
             else:
                 failure_msg = {"no_oc_series_found": dl_data}
+                common.set_pipeline_status(
+                    dl_data["correlation_id"],
+                    common.PipelineStatus.IGNORED,
+                    reason="No opencast series match"
+                )
         else:
             failure_msg = {"recording_too_short": dl_data}
+            common.set_pipeline_status(
+                    dl_data["correlation_id"],
+                    common.PipelineStatus.IGNORED,
+                    reason=f"Recording <{MINIMUM_DURATION} minutes"
+                )
 
         # discard and keep checking messages for schedule match
         logger.info(failure_msg)
@@ -98,9 +116,25 @@ def handler(event, context):
         dl.upload_to_s3()
     except PermanentDownloadError as e:
         # push message to deadletter queue, add error reason to message
+        common.set_pipeline_status(
+            dl.data["correlation_id"],
+            common.PipelineStatus.DOWNLOADER_FAILED,
+            reason=f"permanent failure: {e}"
+        )
         message = dl.send_to_deadletter_queue(e)
+        common.set_pipeline_status(
+            dl.data["correlation_id"],
+            common.PipelineStatus.SENT_TO_UPLOADER
+        )
         download_message.delete()
         logger.error({"Error": e, "Sent to deadletter": message})
+        raise
+    except RetryableDownloadError as e:
+        common.set_pipeline_status(
+            dl.data["correlation_id"],
+            common.PipelineStatus.DOWNLOADER_FAILED,
+            reason=f"retryable failure: {e}"
+        )
         raise
 
     # send a message to the opencast uploader
@@ -114,7 +148,7 @@ def retrieve_message(queue):
         MaxNumberOfMessages=1,
         VisibilityTimeout=700
     )
-    if (len(messages) == 0):
+    if not messages:
         return None
 
     return messages[0]
@@ -122,7 +156,7 @@ def retrieve_message(queue):
 
 def get_admin_token():
     # get admin level zak token from admin id
-    r = zoom_api_request("users/{}/token?type=zak".format(ZOOM_ADMIN_ID))
+    r = common.zoom_api_request("users/{}/token?type=zak".format(ZOOM_ADMIN_ID))
     return r.json()["token"]
 
 
@@ -140,7 +174,7 @@ class Download:
     @property
     def host_name(self):
         if not hasattr(self, "_host_name"):
-            resp = zoom_api_request(
+            resp = common.zoom_api_request(
                     "users/{}".format(self.data["host_id"])
                    ).json()
             logger.info({"Host details": resp})
@@ -201,7 +235,7 @@ class Download:
         UTC time object for recording start.
         """
         utc = datetime.strptime(
-            self.data["start_time"], TIMESTAMP_FORMAT) \
+            self.data["start_time"], common.TIMESTAMP_FORMAT) \
             .replace(tzinfo=timezone("UTC"))
         return utc
 
@@ -363,10 +397,10 @@ class Download:
                 "host_name": self.host_name,
                 "topic": self.data["topic"],
                 "created": datetime.strftime(
-                    self._created_utc, TIMESTAMP_FORMAT
+                    self._created_utc, common.TIMESTAMP_FORMAT
                 ),
                 "created_local": datetime.strftime(
-                    self._created_local, TIMESTAMP_FORMAT
+                    self._created_local, common.TIMESTAMP_FORMAT
                 ),
                 "webhook_received_time": self.data["received_time"],
                 "correlation_id": self.data["correlation_id"],
@@ -438,7 +472,6 @@ class SQSMessage():
                 }}
 
         try:
-
             if "fifo" in self.queue.url:
                 message_sent = self.queue.send_message(
                     MessageBody=json.dumps(self.message),
@@ -451,8 +484,12 @@ class SQSMessage():
                     MessageAttributes=message_attributes
                 )
         except Exception as e:
-            logger.exception(
-                f"Error when sending SQS message to queue {self.queue.url}:{e}"
+            msg = f"Error when sending SQS message to queue {self.queue.url}:{e}"
+            logger.exception(msg)
+            common.set_pipeline_status(
+                self.message["correlation_id"],
+                common.PipelineStatus.DOWNLOADER_FAILED,
+                reason=f"retryable failure: {msg}"
             )
             raise
 
@@ -661,6 +698,6 @@ class ZoomFile:
         if self.file_extension == "mp4":
             if not self.valid_mp4_file():
                 self.stream.close()
-                raise Exception("MP4 failed to transfer.")
+                raise RetryableDownloadError("MP4 failed to transfer.")
 
         self.stream.close()

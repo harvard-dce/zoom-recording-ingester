@@ -139,6 +139,9 @@ def handler(event, context):
         )
         return resp(500, err_msg)
 
-    common.set_request_status(
-        request_id, common.PipelineStatus.ON_DEMAND_RECEIVED)
+    common.set_pipeline_status(
+        request_id, common.PipelineStatus.ON_DEMAND_RECEIVED,
+        meeting_id=webhook_data["payload"]["object"]["id"],
+        recording_id=recording_uuid, on_demand=True
+    )
     return resp(200, "Ingest accepted", request_id)

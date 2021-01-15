@@ -14,6 +14,7 @@ class ZipApi(core.Construct):
             webhook_function,
             on_demand_function,
             schedule_update_function,
+            status_query_function,
             ingest_allowed_ips):
         super().__init__(scope, id)
 
@@ -120,6 +121,24 @@ class ZipApi(core.Construct):
             ]
         )
 
+        self.status_query_resource = self.api.root.add_resource("status")
+        status_query_integration = apigw.LambdaIntegration(status_query_function)
+        self.status_query_method = self.status_query_resource.add_method(
+            "GET",
+            status_query_integration,
+            request_parameters={
+                "method.request.querystring.request_id": False,
+                "method.request.querystring.meeting_id": False,
+                "method.request.querystring.recording_id": False
+            },
+            method_responses=[apigw.MethodResponse(
+                status_code="200",
+                response_models={
+                    "application/json": apigw.Model.EMPTY_MODEL
+                }
+            )]
+        )
+
         def endpoint_url(resource_name):
             return (f"https://{self.api.rest_api_id}.execute-api."
                     f"{core.Stack.of(self).region}.amazonaws.com/"
@@ -145,6 +164,11 @@ class ZipApi(core.Construct):
             value=endpoint_url("schedule_update")
         )
 
+        core.CfnOutput(self, "StatusQueryEndpoint",
+            export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-url",
+            value=endpoint_url("status")
+        )
+
         core.CfnOutput(self, "WebhookResourceId",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-resource-id",
             value=self.new_recording_resource.resource_id
@@ -158,6 +182,11 @@ class ZipApi(core.Construct):
         core.CfnOutput(self, "ScheduleUpdateResourceId",
             export_name=f"{stack_name}-{names.SCHEDULE_UPDATE_ENDPOINT}-resource-id",
             value=self.schedule_update_resource.resource_id
+        )
+
+        core.CfnOutput(self, "StatusQueryResourceId",
+            export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-resource-id",
+            value=self.status_query_resource.resource_id
         )
 
         core.CfnOutput(self, "RestApiId",

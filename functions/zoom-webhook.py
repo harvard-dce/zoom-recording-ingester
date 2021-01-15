@@ -12,8 +12,10 @@ DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
 
+
 class BadWebhookData(Exception):
     pass
+
 
 class NoMp4Files(Exception):
     pass
@@ -87,14 +89,22 @@ def handler(event, context):
 
     try:
         validate_payload(payload)
-        if "on_demand_request_id" in payload:
-            common.set_request_status(
-                correlation_id,
-                common.PipelineStatus.WEBHOOK_RECEIVED
-            )
+        common.set_pipeline_status(
+            correlation_id, common.PipelineStatus.WEBHOOK_RECEIVED,
+            meeting_id=payload["object"]["id"],
+            recording_id=payload["object"]["uuid"]
+        )
     except BadWebhookData as e:
-        return resp_400("Bad data: {}".format(str(e)))
+        common.set_pipeline_status(
+            correlation_id, common.PipelineStatus.WEBHOOK_FAILED,
+            reason="bad webhook data"
+        )
+        return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
+        common.set_pipeline_status(
+            correlation_id, common.PipelineStatus.WEBHOOK_FAILED,
+            reason="no mp4 files"
+        )
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
 
@@ -106,6 +116,9 @@ def handler(event, context):
     else:
         delay = DEFAULT_MESSAGE_DELAY
     send_sqs_message(sqs_message, delay)
+    common.set_pipeline_status(
+        correlation_id, common.PipelineStatus.SENT_TO_DOWNLOADER
+    )
 
     return {
         "statusCode": 200,

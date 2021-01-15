@@ -19,5 +19,6 @@ class ZipOnDemandStatus(core.Construct):
             ),
             read_capacity=1,
             write_capacity=1,
-            removal_policy=core.RemovalPolicy.DESTROY
+            removal_policy=core.RemovalPolicy.DESTROY,
+            time_to_live_attribute="expiration"
         )

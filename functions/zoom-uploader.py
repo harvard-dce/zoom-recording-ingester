@@ -9,7 +9,7 @@ from xml.sax.saxutils import escape
 from datetime import datetime
 from hashlib import md5
 from uuid import UUID, uuid4
-from common import TIMESTAMP_FORMAT, setup_logging
+import common
 
 
 import logging
@@ -62,7 +62,7 @@ def oc_api_request(method, endpoint, **kwargs):
     return resp
 
 
-@setup_logging
+@common.setup_logging
 def handler(event, context):
 
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
@@ -71,11 +71,11 @@ def handler(event, context):
         MaxNumberOfMessages=1,
         VisibilityTimeout=900
     )
-    if len(messages) == 0:
+    if not messages:
         logger.warning("No upload queue messages available.")
         return
     else:
-        logger.info("{} upload messages in queue".format(len(messages)))
+        logger.info(f"{len(messages)} upload messages in queue")
 
     # don't ingest of opencast is overloaded
     current_uploads = get_current_upload_count()
@@ -83,14 +83,10 @@ def handler(event, context):
         logger.error("Unable to determine number of existing upload ops")
         return
     elif current_uploads >= OC_TRACK_UPLOAD_MAX:
-        logger.warning(
-            "Too many current track uploads: {}".format(current_uploads)
-        )
+        logger.warning(f"Too many current track uploads: {current_uploads}")
         return
     else:
-        logger.info(
-            "Opencast upload count looks good: {}".format(current_uploads)
-        )
+        logger.info(f"Opencast upload count looks good: {current_uploads}")
 
     upload_message = messages[0]
     logger.debug({
@@ -99,25 +95,43 @@ def handler(event, context):
         }
     })
 
+    upload_data = None
     try:
         upload_data = json.loads(upload_message.body)
         logger.debug({"processing": upload_data})
+        common.set_pipeline_status(
+            upload_data["correlation_id"],
+            upload_data["uuid"],
+            common.PipelineStatus.UPLOADER_RECEIVED
+        )
 
         wf_id = process_upload(upload_data)
         upload_message.delete()
         if wf_id:
             logger.info(f"Workflow id {wf_id} initiated.")
             # only ingest one per invocation
+            common.set_pipeline_status(
+                upload_data["correlation_id"],
+                upload_data["uuid"],
+                common.PipelineStatus.SENT_TO_OPENCAST
+            )
         else:
             logger.info("No workflow initiated.")
 
     except Exception as e:
         logger.exception(e)
+        if upload_data and "correlation_id" in upload_data and "uuid" in upload_data:
+            common.set_pipeline_status(
+                upload_data["correlation_id"], upload_data["uuid"],
+                common.PipelineStatus.UPLOADER_FAILED
+            )
         raise
 
 
 def minutes_in_pipeline(webhook_received_time):
-    start_time = datetime.strptime(webhook_received_time, TIMESTAMP_FORMAT)
+    start_time = datetime.strptime(
+        webhook_received_time, common.TIMESTAMP_FORMAT
+    )
     ingest_time = datetime.utcnow()
     duration = ingest_time - start_time
     return duration.total_seconds() // 60
@@ -174,6 +188,12 @@ class Upload:
                     logger.warning(
                         "Episode with deterministic mediapackage id"
                         f" {mpid} already ingested"
+                    )
+                    common.set_pipeline_status(
+                        self.data["correlation_id"],
+                        self.meeting_uuid,
+                        self.PipelineStatus.IGNORED,
+                        reason="Already in opencast"
                     )
                     mpid = None
             else:
@@ -246,7 +266,7 @@ class Upload:
               - foo/bar/001-shared_screen.mp4 (5m)
               - foo/bar/002-shared_screen.mp4 (2h)
 
-        Here we have 3 segments of lenght 1m, 5m and 2h. However, the first
+        Here we have 3 segments of length 1m, 5m and 2h. However, the first
         segment is only present in the "speaker" view. So we can't simply throw
         away the first file from each view; we have to make sure it's from the
         "000" segment.
@@ -355,7 +375,7 @@ class Upload:
         try:
             file_params = fpg.generate()
         except Exception as e:
-            logger.exception("Failed to generate file upload params")
+            logger.exception(f"Failed to generate file upload params: {e}")
             raise
 
         params.extend(file_params)
