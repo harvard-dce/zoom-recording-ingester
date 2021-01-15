@@ -10,7 +10,7 @@ from os.path import join, dirname
 from enum import Enum
 import boto3
 from botocore.exceptions import ClientError
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger()
 
@@ -31,17 +31,12 @@ class PipelineStatus(Enum):
     WEBHOOK_RECEIVED = "WEBHOOK_RECEIVED"
     WEBHOOK_FAILED = "WEBHOOK_FAILED"
     SENT_TO_DOWNLOADER = "SENT_TO_DOWNLOADER"
-    DOWNLOADER_RECEIVED = "DOWNLOADER_RECEIVED"
     OC_SERIES_FOUND = "OC_SERIES_FOUND"
-    NO_OC_SERIES_FOUND = "NO_OC_SERIES_FOUND"
-    RECORDING_TOO_SHORT = "RECORDING_TOO_SHORT"
-    # note some failures will be retried
-    # not sure if we want a separate state for a retryable failure
+    IGNORED = "IGNORED"
     DOWNLOADER_FAILED = "DOWNLOADER_FAILED"
     SENT_TO_UPLOADER = "SENT_TO_UPLOADER"
     UPLOADER_RECEIVED = "UPLOADER_RECEIVED"
     SENT_TO_OPENCAST = "SENT_TO_OPENCAST"
-    ALREADY_INGESTED = "ALREADY_INGESTED"
     UPLOADER_FAILED = "UPLOADER_FAILED"
 
 
@@ -131,23 +126,39 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
     return r
 
 
-def set_request_status(request_id, state, optional_data=None):
+def set_pipeline_status(
+    request_id, state, meeting_id=None,
+    recording_id=None, reason=None, on_demand=False
+):
     try:
+        update_expression = "set last_update=:l, expiration=:e, pipeline_state=:s"
+        expression_attribute_values = {
+            ":l": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT),
+            ":e": int((datetime.now() + timedelta(days=2)).timestamp()),
+            ":s": state.value
+        }
+        if meeting_id:
+            update_expression += ", meeting_id=:m"
+            expression_attribute_values[":m"] = meeting_id
+        if recording_id:
+            update_expression += ", recording_id=:u"
+            expression_attribute_values[":u"] = recording_id
+        if reason:
+            update_expression += ", reason=:r"
+            expression_attribute_values[":r"] = reason
+        if on_demand:
+            update_expression += ", on_demand=:d"
+            expression_attribute_values[":d"] = True
+
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(ON_DEMAND_STATUS_TABLE)
-
-        new_item = {
-            "request_id": request_id,
-            "last update": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT),
-            "status": state.value
-        }
-        logger.debug({"update state": new_item})
-        if optional_data:
-            new_item.update(optional_data)
-
-        table.put_item(Item=new_item)
+        table.update_item(
+            Key={"request_id": request_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values
+        )
     except ClientError as e:
         error = e.response["Error"]
-        logger.exception("{}: {}".format(error["Code"], error["Message"]))
+        logger.exception(f"{error['Code']}: {error['Message']}")
     except Exception as e:
         logger.exception(f"Something went wrong updating pipeline status: {e}")

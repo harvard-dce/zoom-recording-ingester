@@ -10,12 +10,13 @@ from .schedule import ZipSchedule
 from .on_demand_status import ZipOnDemandStatus
 from .function import (
     ZipDownloaderFunction,
-    ZipOnDemandFunction,
+    ZipOnDemandFunction, ZipStatusQueryFunction,
     ZipUploaderFunction,
     ZipOpCountsFunction,
     ZipWebhookFunction,
     ZipLogNotificationsFunction,
     ZipScheduleUpdateFunction,
+    ZipStatusQueryFunction,
 )
 from .api import ZipApi
 from .events import ZipEvent
@@ -94,6 +95,17 @@ class ZipStack(core.Stack):
         # grant schedule update function access to dynamo
         schedule.table.grant_read_write_data(schedule_update.function)
 
+        status_query = ZipStatusQueryFunction(self, "StatusFunction",
+            name=names.STATUS_FUNCTION,
+            lambda_code_bucket=lambda_code_bucket,
+            environment={
+                "ON_DEMAND_STATUS_TABLE": on_demand_status.table.table_name
+            }
+        )
+
+        # grant status query function permissions
+        on_demand_status.table.grant_read_write_data(status_query.function)
+
         on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
@@ -115,7 +127,8 @@ class ZipStack(core.Stack):
             environment={
                 "DOWNLOAD_QUEUE_NAME": queues.download_queue.queue_name,
                 "LOCAL_TIME_ZONE": local_time_zone,
-                "DEBUG": "0"
+                "DEBUG": "0",
+                "ON_DEMAND_STATUS_TABLE": on_demand_status.table.table_name
             }
         )
 
@@ -216,6 +229,7 @@ class ZipStack(core.Stack):
             on_demand_function=on_demand.function,
             webhook_function=webhook.function,
             schedule_update_function=schedule_update.function,
+            status_query_function=status_query.function,
             ingest_allowed_ips=ingest_allowed_ips
         )
 
@@ -244,6 +258,7 @@ class ZipStack(core.Stack):
         )
 
         schedule_update.add_monitoring(monitoring)
+        status_query.add_monitoring(monitoring)
         on_demand.add_monitoring(monitoring)
         webhook.add_monitoring(monitoring)
         downloader.add_monitoring(monitoring)

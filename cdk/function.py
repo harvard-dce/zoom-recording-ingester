@@ -190,3 +190,7 @@ class ZipLogNotificationsFunction(ZipFunction):
 
 class ZipScheduleUpdateFunction(ZipFunction):
     pass
+
+
+class ZipStatusQueryFunction(ZipFunction):
+    pass
