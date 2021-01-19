@@ -192,5 +192,5 @@ class ZipScheduleUpdateFunction(ZipFunction):
     pass
 
 
-class ZipStatusLookupFunction(ZipFunction):
+class ZipStatusQueryFunction(ZipFunction):
     pass
