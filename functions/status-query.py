@@ -8,7 +8,7 @@ from urllib.parse import unquote
 import logging
 logger = logging.getLogger()
 
-PIPELINE_STATUS_TABLE = env("ON_DEMAND_STATUS_TABLE")
+PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
 
 
 def resp_400(msg):
