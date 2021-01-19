@@ -16,7 +16,7 @@ from .function import (
     ZipWebhookFunction,
     ZipLogNotificationsFunction,
     ZipScheduleUpdateFunction,
-    ZipStatusLookupFunction,
+    ZipStatusQueryFunction,
 )
 from .api import ZipApi
 from .events import ZipEvent
@@ -95,16 +95,16 @@ class ZipStack(core.Stack):
         # grant schedule update function access to dynamo
         schedule.table.grant_read_write_data(schedule_update.function)
 
-        status_lookup = ZipStatusLookupFunction(self, "StatusFunction",
+        status_query = ZipStatusQueryFunction(self, "StatusFunction",
             name=names.STATUS_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
-                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
             }
         )
 
         # grant status query function permissions
-        pipeline_status.table.grant_read_write_data(status_lookup.function)
+        pipeline_status.table.grant_read_write_data(status_query.function)
 
         on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
@@ -114,7 +114,7 @@ class ZipStack(core.Stack):
                 "ZOOM_API_KEY": zoom_api_key,
                 "ZOOM_API_SECRET": zoom_api_secret,
                 "APIGEE_KEY": apigee_key,
-                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
             }
         )
 
@@ -149,7 +149,7 @@ class ZipStack(core.Stack):
                 "DEADLETTER_QUEUE_NAME": queues.download_dlq.queue.queue_name,
                 "UPLOAD_QUEUE_NAME": queues.upload_queue.queue_name,
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
-                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name,
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
                 "DEBUG": "0",
                 "ZOOM_ADMIN_ID": zoom_admin_id,
                 "ZOOM_API_BASE_URL": zoom_api_base_url,
@@ -202,7 +202,7 @@ class ZipStack(core.Stack):
                 "UPLOAD_QUEUE_NAME": queues.upload_queue.queue_name,
                 "DEBUG": "0",
                 "OC_OP_COUNT_FUNCTION": op_counts.function.function_name,
-                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
             }
         )
 
@@ -229,7 +229,7 @@ class ZipStack(core.Stack):
             on_demand_function=on_demand.function,
             webhook_function=webhook.function,
             schedule_update_function=schedule_update.function,
-            status_query_function=status_lookup.function,
+            status_query_function=status_query.function,
             ingest_allowed_ips=ingest_allowed_ips
         )
 
@@ -258,7 +258,7 @@ class ZipStack(core.Stack):
         )
 
         schedule_update.add_monitoring(monitoring)
-        status_lookup.add_monitoring(monitoring)
+        status_query.add_monitoring(monitoring)
         on_demand.add_monitoring(monitoring)
         webhook.add_monitoring(monitoring)
         downloader.add_monitoring(monitoring)

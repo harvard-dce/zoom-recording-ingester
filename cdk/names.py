@@ -25,7 +25,7 @@ UPLOAD_FUNCTION="zoom-uploader"
 OP_COUNTS_FUNCTION="opencast-op-counts"
 LOG_NOTIFICATION_FUNCTION="zoom-log-notifications"
 SCHEDULE_UPDATE_FUNCTION="schedule-update"
-STATUS_FUNCTION="status-lookup"
+STATUS_FUNCTION="status-query"
 FUNCTIONS=[
     ON_DEMAND_FUNCTION,
     WEBHOOK_FUNCTION,
