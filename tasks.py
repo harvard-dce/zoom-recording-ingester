@@ -705,7 +705,7 @@ deploy_ns.add_task(deploy_downloader, 'downloader')
 deploy_ns.add_task(deploy_uploader, 'uploader')
 deploy_ns.add_task(deploy_opencast_op_counts, 'opencast-op-counts')
 deploy_ns.add_task(deploy_on_demand, 'on-demand')
-deploy_ns.add_task(deploy_status, 'status')
+deploy_ns.add_task(deploy_status, 'status-query')
 ns.add_collection(deploy_ns)
 
 exec_ns = Collection('exec')
