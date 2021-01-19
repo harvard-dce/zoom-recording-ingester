@@ -5,7 +5,7 @@ NOTIFICATIONS_TOPIC="notifications"
 METRIC_NAMESPACE="log-metrics"
 
 SCHEDULE_TABLE="schedule"
-ON_DEMAND_STATUS_TABLE="on-demand-status"
+PIPELINE_STATUS_TABLE="status"
 
 DOWNLOAD_QUEUE="download"
 DOWNLOAD_DLQ="download-dlq"
@@ -25,7 +25,7 @@ UPLOAD_FUNCTION="zoom-uploader"
 OP_COUNTS_FUNCTION="opencast-op-counts"
 LOG_NOTIFICATION_FUNCTION="zoom-log-notifications"
 SCHEDULE_UPDATE_FUNCTION="schedule-update"
-STATUS_FUNCTION="status"
+STATUS_FUNCTION="status-lookup"
 FUNCTIONS=[
     ON_DEMAND_FUNCTION,
     WEBHOOK_FUNCTION,

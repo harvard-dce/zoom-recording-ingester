@@ -83,8 +83,10 @@ def handler(event, context):
     payload = body["payload"]
 
     if "on_demand_request_id" in payload:
+        origin = "on_demand"
         correlation_id = payload["on_demand_request_id"]
     else:
+        origin = "webhook_notification"
         correlation_id = context.aws_request_id
 
     try:
@@ -92,18 +94,21 @@ def handler(event, context):
         common.set_pipeline_status(
             correlation_id, common.PipelineStatus.WEBHOOK_RECEIVED,
             meeting_id=payload["object"]["id"],
-            recording_id=payload["object"]["uuid"]
+            recording_id=payload["object"]["uuid"],
+            origin=origin
         )
     except BadWebhookData as e:
         common.set_pipeline_status(
             correlation_id, common.PipelineStatus.WEBHOOK_FAILED,
-            reason="bad webhook data"
+            reason="bad webhook data",
+            origin=origin
         )
         return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
         common.set_pipeline_status(
             correlation_id, common.PipelineStatus.WEBHOOK_FAILED,
-            reason="no mp4 files"
+            reason="no mp4 files",
+            origin=origin
         )
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))

@@ -7,16 +7,16 @@ from aws_cdk import (
 from .bucket import ZipRecordingsBucket
 from .queues import ZipQueues
 from .schedule import ZipSchedule
-from .on_demand_status import ZipOnDemandStatus
+from .status import ZipStatus
 from .function import (
     ZipDownloaderFunction,
-    ZipOnDemandFunction, ZipStatusQueryFunction,
+    ZipOnDemandFunction,
     ZipUploaderFunction,
     ZipOpCountsFunction,
     ZipWebhookFunction,
     ZipLogNotificationsFunction,
     ZipScheduleUpdateFunction,
-    ZipStatusQueryFunction,
+    ZipStatusLookupFunction,
 )
 from .api import ZipApi
 from .events import ZipEvent
@@ -75,7 +75,7 @@ class ZipStack(core.Stack):
 
         schedule = ZipSchedule(self, "Schedule")
 
-        on_demand_status = ZipOnDemandStatus(self, "Status")
+        pipeline_status = ZipStatus(self, "Status")
 
         schedule_update = ZipScheduleUpdateFunction(self, "ScheduleUpdateFunction",
             name=names.SCHEDULE_UPDATE_FUNCTION,
@@ -95,16 +95,16 @@ class ZipStack(core.Stack):
         # grant schedule update function access to dynamo
         schedule.table.grant_read_write_data(schedule_update.function)
 
-        status_query = ZipStatusQueryFunction(self, "StatusFunction",
+        status_lookup = ZipStatusLookupFunction(self, "StatusFunction",
             name=names.STATUS_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
-                "ON_DEMAND_STATUS_TABLE": on_demand_status.table.table_name
+                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name
             }
         )
 
         # grant status query function permissions
-        on_demand_status.table.grant_read_write_data(status_query.function)
+        pipeline_status.table.grant_read_write_data(status_lookup.function)
 
         on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
@@ -114,12 +114,12 @@ class ZipStack(core.Stack):
                 "ZOOM_API_KEY": zoom_api_key,
                 "ZOOM_API_SECRET": zoom_api_secret,
                 "APIGEE_KEY": apigee_key,
-                "ON_DEMAND_STATUS_TABLE": on_demand_status.table.table_name
+                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name
             }
         )
 
         # grant on demand function permissions
-        on_demand_status.table.grant_read_write_data(on_demand.function)
+        pipeline_status.table.grant_read_write_data(on_demand.function)
 
         webhook = ZipWebhookFunction(self, "WebhookFunction",
             name=names.WEBHOOK_FUNCTION,
@@ -128,13 +128,13 @@ class ZipStack(core.Stack):
                 "DOWNLOAD_QUEUE_NAME": queues.download_queue.queue_name,
                 "LOCAL_TIME_ZONE": local_time_zone,
                 "DEBUG": "0",
-                "ON_DEMAND_STATUS_TABLE": on_demand_status.table.table_name
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
             }
         )
 
         # grant webhook function permissions
         queues.download_queue.grant_send_messages(webhook.function)
-        on_demand_status.table.grant_read_write_data(webhook.function)
+        pipeline_status.table.grant_read_write_data(webhook.function)
 
         # downloader lambda checks for matches with the course schedule
         # and uploads matching recordings to S3
@@ -149,7 +149,7 @@ class ZipStack(core.Stack):
                 "DEADLETTER_QUEUE_NAME": queues.download_dlq.queue.queue_name,
                 "UPLOAD_QUEUE_NAME": queues.upload_queue.queue_name,
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
-                "ON_DEMAND_STATUS_TABLE": on_demand_status.table.table_name,
+                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name,
                 "DEBUG": "0",
                 "ZOOM_ADMIN_ID": zoom_admin_id,
                 "ZOOM_API_BASE_URL": zoom_api_base_url,
@@ -168,7 +168,7 @@ class ZipStack(core.Stack):
         queues.download_dlq.queue.grant_send_messages(downloader.function)
         queues.upload_queue.grant_send_messages(downloader.function)
         schedule.table.grant_read_write_data(downloader.function)
-        on_demand_status.table.grant_read_write_data(downloader.function)
+        pipeline_status.table.grant_read_write_data(downloader.function)
         recordings_bucket.bucket.grant_write(downloader.function)
 
         op_counts = ZipOpCountsFunction(self, 'OpCountsFunction',
@@ -202,7 +202,7 @@ class ZipStack(core.Stack):
                 "UPLOAD_QUEUE_NAME": queues.upload_queue.queue_name,
                 "DEBUG": "0",
                 "OC_OP_COUNT_FUNCTION": op_counts.function.function_name,
-                "ON_DEMAND_STATUS_TABLE": on_demand_status.table.table_name
+                "ON_DEMAND_STATUS_TABLE": pipeline_status.table.table_name
             }
         )
 
@@ -211,7 +211,7 @@ class ZipStack(core.Stack):
         queues.upload_dlq.queue.grant_consume_messages(uploader.function)
         queues.upload_dlq.queue.grant_send_messages(uploader.function)
         op_counts.function.grant_invoke(uploader.function)
-        on_demand_status.table.grant_read_write_data(uploader.function)
+        pipeline_status.table.grant_read_write_data(uploader.function)
         # this is required so that the presigned s3 urls generated by
         # the downloader function (ffprobe check)
         # and the uploader function (for Opencast)
@@ -229,7 +229,7 @@ class ZipStack(core.Stack):
             on_demand_function=on_demand.function,
             webhook_function=webhook.function,
             schedule_update_function=schedule_update.function,
-            status_query_function=status_query.function,
+            status_query_function=status_lookup.function,
             ingest_allowed_ips=ingest_allowed_ips
         )
 
@@ -258,7 +258,7 @@ class ZipStack(core.Stack):
         )
 
         schedule_update.add_monitoring(monitoring)
-        status_query.add_monitoring(monitoring)
+        status_lookup.add_monitoring(monitoring)
         on_demand.add_monitoring(monitoring)
         webhook.add_monitoring(monitoring)
         downloader.add_monitoring(monitoring)
