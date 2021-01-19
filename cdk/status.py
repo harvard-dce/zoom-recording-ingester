@@ -1,7 +1,7 @@
 from aws_cdk import core, aws_dynamodb as dynamodb
 from . import  names
 
-class ZipOnDemandStatus(core.Construct):
+class ZipStatus(core.Construct):
 
     def __init__(self, scope: core.Construct, id: str):
         """
@@ -12,7 +12,7 @@ class ZipOnDemandStatus(core.Construct):
 
         self.table = dynamodb.Table(
             self, "table",
-            table_name=f"{stack_name}-{names.ON_DEMAND_STATUS_TABLE}",
+            table_name=f"{stack_name}-{names.PIPELINE_STATUS_TABLE}",
             partition_key=dynamodb.Attribute(
                 name="request_id",
                 type=dynamodb.AttributeType.STRING

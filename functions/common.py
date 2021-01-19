@@ -23,7 +23,8 @@ ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
 APIGEE_KEY = env("APIGEE_KEY")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-ON_DEMAND_STATUS_TABLE = env("ON_DEMAND_STATUS_TABLE")
+PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
+PIPELINE_STATUS_TABLE_KEY = env("PIPELINE_STATUS_TABLE_KEY")
 
 
 class PipelineStatus(Enum):
@@ -128,13 +129,13 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
 
 def set_pipeline_status(
     request_id, state, meeting_id=None,
-    recording_id=None, reason=None, on_demand=False
+    recording_id=None, reason=None, origin=None
 ):
     try:
         update_expression = "set last_update=:l, expiration=:e, pipeline_state=:s"
         expression_attribute_values = {
             ":l": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT),
-            ":e": int((datetime.now() + timedelta(days=2)).timestamp()),
+            ":e": int((datetime.now() + timedelta(days=7)).timestamp()),
             ":s": state.value
         }
         if meeting_id:
@@ -146,17 +147,18 @@ def set_pipeline_status(
         if reason:
             update_expression += ", reason=:r"
             expression_attribute_values[":r"] = reason
-        if on_demand:
-            update_expression += ", on_demand=:d"
-            expression_attribute_values[":d"] = True
+        if origin:
+            update_expression += ", origin=:o"
+            expression_attribute_values[":o"] = origin
 
         dynamodb = boto3.resource("dynamodb")
-        table = dynamodb.Table(ON_DEMAND_STATUS_TABLE)
+        table = dynamodb.Table(PIPELINE_STATUS_TABLE)
         table.update_item(
             Key={"request_id": request_id},
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values
         )
+        logger.info(f"Set pipeline status to {state.value} for id {request_id}")
     except ClientError as e:
         error = e.response["Error"]
         logger.exception(f"{error['Code']}: {error['Message']}")
