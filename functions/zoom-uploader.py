@@ -9,7 +9,8 @@ from xml.sax.saxutils import escape
 from datetime import datetime
 from hashlib import md5
 from uuid import UUID, uuid4
-import common
+from common import setup_logging, set_pipeline_status, PipelineStatus, \
+    TIMESTAMP_FORMAT
 
 
 import logging
@@ -62,7 +63,7 @@ def oc_api_request(method, endpoint, **kwargs):
     return resp
 
 
-@common.setup_logging
+@setup_logging
 def handler(event, context):
 
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
@@ -99,10 +100,9 @@ def handler(event, context):
     try:
         upload_data = json.loads(upload_message.body)
         logger.debug({"processing": upload_data})
-        common.set_pipeline_status(
+        set_pipeline_status(
             upload_data["correlation_id"],
-            upload_data["uuid"],
-            common.PipelineStatus.UPLOADER_RECEIVED
+            PipelineStatus.UPLOADER_RECEIVED
         )
 
         wf_id = process_upload(upload_data)
@@ -110,27 +110,26 @@ def handler(event, context):
         if wf_id:
             logger.info(f"Workflow id {wf_id} initiated.")
             # only ingest one per invocation
-            common.set_pipeline_status(
+            set_pipeline_status(
                 upload_data["correlation_id"],
-                upload_data["uuid"],
-                common.PipelineStatus.SENT_TO_OPENCAST
+                PipelineStatus.SENT_TO_OPENCAST
             )
         else:
             logger.info("No workflow initiated.")
 
     except Exception as e:
         logger.exception(e)
-        if upload_data and "correlation_id" in upload_data and "uuid" in upload_data:
-            common.set_pipeline_status(
-                upload_data["correlation_id"], upload_data["uuid"],
-                common.PipelineStatus.UPLOADER_FAILED
+        if upload_data and "correlation_id" in upload_data:
+            set_pipeline_status(
+                upload_data["correlation_id"],
+                PipelineStatus.UPLOADER_FAILED
             )
         raise
 
 
 def minutes_in_pipeline(webhook_received_time):
     start_time = datetime.strptime(
-        webhook_received_time, common.TIMESTAMP_FORMAT
+        webhook_received_time, TIMESTAMP_FORMAT
     )
     ingest_time = datetime.utcnow()
     duration = ingest_time - start_time
@@ -189,10 +188,10 @@ class Upload:
                         "Episode with deterministic mediapackage id"
                         f" {mpid} already ingested"
                     )
-                    common.set_pipeline_status(
+                    set_pipeline_status(
                         self.data["correlation_id"],
                         self.meeting_uuid,
-                        self.PipelineStatus.IGNORED,
+                        PipelineStatus.IGNORED,
                         reason="Already in opencast"
                     )
                     mpid = None

@@ -2,7 +2,7 @@ import json
 import requests
 from os import getenv as env
 from urllib.parse import urlparse, parse_qs, quote
-import common
+from common import zoom_api_request, set_pipeline_status, PipelineStatus, setup_logging
 import uuid
 
 import logging
@@ -30,7 +30,7 @@ def resp(status_code, msg="", request_id=None):
     }
 
 
-@common.setup_logging
+@setup_logging
 def handler(event, context):
     """
     This function acts as a relay to the traditional zoom webhook. The webhook
@@ -76,7 +76,7 @@ def handler(event, context):
             zoom_endpoint = ("/meetings/{}/recordings"
                              .format(double_urlencoded_uuid))
             logger.info("zoom api request to {}".format(zoom_endpoint))
-            r = common.zoom_api_request(zoom_endpoint)
+            r = zoom_api_request(zoom_endpoint)
             recording_data = r.json()
         except requests.HTTPError as e:
             # return a 404 if there's no such meeting
@@ -139,8 +139,8 @@ def handler(event, context):
         )
         return resp(500, err_msg)
 
-    common.set_pipeline_status(
-        request_id, common.PipelineStatus.ON_DEMAND_RECEIVED,
+    set_pipeline_status(
+        request_id, PipelineStatus.ON_DEMAND_RECEIVED,
         meeting_id=webhook_data["payload"]["object"]["id"],
         recording_id=recording_uuid, origin="on_demand"
     )
