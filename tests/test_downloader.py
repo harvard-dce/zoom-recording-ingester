@@ -25,6 +25,7 @@ tz = timezone(LOCAL_TIME_ZONE)
 FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 
 SAMPLE_MESSAGE_BODY = {
+    "correlation_id": "abc",
     "duration": 30,
     "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
 }
@@ -89,6 +90,10 @@ class TestHandler(unittest.TestCase):
         self.mocker.patch.object(
             downloader.Download, "_class_schedule", return_value={}
         )
+        mock_set_pipeline_status = self.mocker.Mock(return_value=None)
+        self.mocker.patch.object(
+            downloader, 'set_pipeline_status', mock_set_pipeline_status
+        )
 
         with self.assertLogs(level="INFO") as cm:
             resp = downloader.handler({}, self.context)
@@ -112,6 +117,11 @@ class TestHandler(unittest.TestCase):
 
         match_message = MockDownloadMessage(
             copy.deepcopy(SAMPLE_MESSAGE_BODY)
+        )
+
+        mock_set_pipeline_status = self.mocker.Mock(return_value=None)
+        self.mocker.patch.object(
+            downloader, 'set_pipeline_status', mock_set_pipeline_status
         )
 
         messages = [no_match_message] * downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
@@ -178,6 +188,10 @@ class TestHandler(unittest.TestCase):
             return_value=True
         )
         self.mocker.patch.object(downloader, "get_admin_token")
+        mock_set_pipeline_status = self.mocker.Mock(return_value=None)
+        self.mocker.patch.object(
+            downloader, 'set_pipeline_status', mock_set_pipeline_status
+        )
 
         error_msg = "Error while uploading to S3"
         self.mocker.patch.object(
@@ -547,9 +561,15 @@ def test_handler_duration_check(handler, mocker):
     mocker.patch.object(downloader, 'sqs_resource', mocker.Mock())
     mocker.patch.object(downloader.Download, 'oc_series_found', mocker.Mock(
         return_value=False))
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        downloader, 'set_pipeline_status', mock_set_pipeline_status
+    )
 
     # duration should be good
-    mock_msg = mocker.Mock(body=json.dumps({"duration": 10}))
+    mock_msg = mocker.Mock(body=json.dumps({
+        "duration": 10, "correlation_id": "abc"
+    }))
     mocker.patch.object(downloader, 'retrieve_message', mocker.Mock(
         return_value=mock_msg
     ))
@@ -563,7 +583,9 @@ def test_handler_duration_check(handler, mocker):
     downloader.Download.oc_series_found.reset_mock()
 
     # duration should be too short
-    mock_msg = mocker.Mock(body=json.dumps({"duration": 1}))
+    mock_msg = mocker.Mock(body=json.dumps({
+        "duration": 1, "correlation_id": "abc"
+    }))
     mocker.patch.object(downloader, 'retrieve_message', mocker.Mock(
         return_value=mock_msg
     ))
@@ -579,10 +601,14 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
     mocker.patch.object(downloader, 'sqs_resource', mocker.Mock())
     mocker.patch.object(downloader.Download, 'oc_series_found', mocker.Mock(
         return_value=False))
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        downloader, 'set_pipeline_status', mock_set_pipeline_status
+    )
 
     # duration too short
     mock_msg = mocker.Mock(body=json.dumps({
-        "on_demand_series_id": 1234, "duration": 0
+        "on_demand_series_id": 1234, "duration": 0, "correlation_id": "abc"
     }))
     mocker.patch.object(downloader, 'retrieve_message', mocker.Mock(
         return_value=mock_msg
@@ -593,7 +619,6 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
     # should pass because the ingest is an on demand ingest
     assert downloader.Download.oc_series_found.call_count == 1
     assert mock_msg.delete.call_count == 1
-
 
 
 @pytest.fixture
@@ -628,6 +653,7 @@ def test_recording_files(download):
     assert len(zoom_files) == 2
     assert all(x.segment_num == 0 for x in zoom_files)
 
+
 def test_recording_files_multi_set(download):
     test_data = [
         ("2020-03-31T12:00:00Z", "2020-03-31T13:30:00Z", "foo"),
@@ -651,6 +677,7 @@ def test_recording_files_multi_set(download):
 @pytest.fixture
 def zoomfile(mocker):
     return downloader.ZoomFile({"recording_type": "speaker"}, 0)
+
 
 def test_zoom_filename_ext(mocker, zoomfile):
     for filename, expected in [

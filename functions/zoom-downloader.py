@@ -3,7 +3,8 @@ import json
 import requests
 from os import getenv as env
 from pathlib import Path
-import common
+from common import setup_logging, set_pipeline_status, PipelineStatus, \
+    zoom_api_request, TIMESTAMP_FORMAT
 import subprocess
 from pytz import timezone
 from datetime import datetime
@@ -50,7 +51,7 @@ def sqs_resource():
     return boto3.resource("sqs")
 
 
-@common.setup_logging
+@setup_logging
 def handler(event, context):
     """
     This function receives an event on each new entry in the download urls
@@ -79,23 +80,23 @@ def handler(event, context):
         # for the duration potentially different sets of files
         if dl.duration >= MINIMUM_DURATION or "on_demand_series_id" in dl_data:
             if dl.oc_series_found(ignore_schedule, override_series_id):
-                common.set_pipeline_status(
+                set_pipeline_status(
                     dl_data["correlation_id"],
-                    common.PipelineStatus.OC_SERIES_FOUND
+                    PipelineStatus.OC_SERIES_FOUND
                 )
                 break
             else:
                 failure_msg = {"no_oc_series_found": dl_data}
-                common.set_pipeline_status(
+                set_pipeline_status(
                     dl_data["correlation_id"],
-                    common.PipelineStatus.IGNORED,
+                    PipelineStatus.IGNORED,
                     reason="No opencast series match"
                 )
         else:
             failure_msg = {"recording_too_short": dl_data}
-            common.set_pipeline_status(
+            set_pipeline_status(
                     dl_data["correlation_id"],
-                    common.PipelineStatus.IGNORED,
+                    PipelineStatus.IGNORED,
                     reason=f"Recording <{MINIMUM_DURATION} minutes"
                 )
 
@@ -116,23 +117,23 @@ def handler(event, context):
         dl.upload_to_s3()
     except PermanentDownloadError as e:
         # push message to deadletter queue, add error reason to message
-        common.set_pipeline_status(
+        set_pipeline_status(
             dl.data["correlation_id"],
-            common.PipelineStatus.DOWNLOADER_FAILED,
+            PipelineStatus.DOWNLOADER_FAILED,
             reason=f"permanent failure: {e}"
         )
         message = dl.send_to_deadletter_queue(e)
-        common.set_pipeline_status(
+        set_pipeline_status(
             dl.data["correlation_id"],
-            common.PipelineStatus.SENT_TO_UPLOADER
+            PipelineStatus.SENT_TO_UPLOADER
         )
         download_message.delete()
         logger.error({"Error": e, "Sent to deadletter": message})
         raise
     except RetryableDownloadError as e:
-        common.set_pipeline_status(
+        set_pipeline_status(
             dl.data["correlation_id"],
-            common.PipelineStatus.DOWNLOADER_FAILED,
+            PipelineStatus.DOWNLOADER_FAILED,
             reason=f"retryable failure: {e}"
         )
         raise
@@ -156,7 +157,7 @@ def retrieve_message(queue):
 
 def get_admin_token():
     # get admin level zak token from admin id
-    r = common.zoom_api_request("users/{}/token?type=zak".format(ZOOM_ADMIN_ID))
+    r = zoom_api_request("users/{}/token?type=zak".format(ZOOM_ADMIN_ID))
     return r.json()["token"]
 
 
@@ -174,7 +175,7 @@ class Download:
     @property
     def host_name(self):
         if not hasattr(self, "_host_name"):
-            resp = common.zoom_api_request(
+            resp = zoom_api_request(
                     "users/{}".format(self.data["host_id"])
                    ).json()
             logger.info({"Host details": resp})
@@ -235,7 +236,7 @@ class Download:
         UTC time object for recording start.
         """
         utc = datetime.strptime(
-            self.data["start_time"], common.TIMESTAMP_FORMAT) \
+            self.data["start_time"], TIMESTAMP_FORMAT) \
             .replace(tzinfo=timezone("UTC"))
         return utc
 
@@ -397,10 +398,10 @@ class Download:
                 "host_name": self.host_name,
                 "topic": self.data["topic"],
                 "created": datetime.strftime(
-                    self._created_utc, common.TIMESTAMP_FORMAT
+                    self._created_utc, TIMESTAMP_FORMAT
                 ),
                 "created_local": datetime.strftime(
-                    self._created_local, common.TIMESTAMP_FORMAT
+                    self._created_local, TIMESTAMP_FORMAT
                 ),
                 "webhook_received_time": self.data["received_time"],
                 "correlation_id": self.data["correlation_id"],
@@ -486,9 +487,9 @@ class SQSMessage():
         except Exception as e:
             msg = f"Error when sending SQS message to queue {self.queue.url}:{e}"
             logger.exception(msg)
-            common.set_pipeline_status(
+            set_pipeline_status(
                 self.message["correlation_id"],
-                common.PipelineStatus.DOWNLOADER_FAILED,
+                PipelineStatus.DOWNLOADER_FAILED,
                 reason=f"retryable failure: {msg}"
             )
             raise
