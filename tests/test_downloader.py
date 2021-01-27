@@ -123,7 +123,9 @@ class TestHandler(unittest.TestCase):
 
         mock_set_pipeline_status = self.mocker.Mock(return_value=None)
         self.mocker.patch.object(
-            downloader, 'set_pipeline_status', mock_set_pipeline_status
+            downloader,
+            "set_pipeline_status",
+            mock_set_pipeline_status
         )
 
         messages = [no_match_message] * downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
@@ -192,7 +194,9 @@ class TestHandler(unittest.TestCase):
         self.mocker.patch.object(downloader, "get_admin_token")
         mock_set_pipeline_status = self.mocker.Mock(return_value=None)
         self.mocker.patch.object(
-            downloader, 'set_pipeline_status', mock_set_pipeline_status
+            downloader,
+            "set_pipeline_status",
+            mock_set_pipeline_status
         )
 
         error_msg = "Error while uploading to S3"
@@ -565,7 +569,9 @@ def test_handler_duration_check(handler, mocker):
         return_value=False))
     mock_set_pipeline_status = mocker.Mock(return_value=None)
     mocker.patch.object(
-        downloader, 'set_pipeline_status', mock_set_pipeline_status
+        downloader,
+        "set_pipeline_status",
+        mock_set_pipeline_status
     )
 
     # duration should be good
@@ -605,7 +611,9 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
         return_value=False))
     mock_set_pipeline_status = mocker.Mock(return_value=None)
     mocker.patch.object(
-        downloader, 'set_pipeline_status', mock_set_pipeline_status
+        downloader,
+        "set_pipeline_status",
+        mock_set_pipeline_status
     )
 
     # duration too short

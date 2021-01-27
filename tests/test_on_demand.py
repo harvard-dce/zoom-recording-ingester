@@ -86,7 +86,9 @@ def test_on_demand_happy_trail(handler, mocker):
     mocker.patch.object(on_demand, 'WEBHOOK_ENDPOINT_URL', 'mock://foo.com')
     mock_set_pipeline_status = mocker.Mock(return_value=None)
     mocker.patch.object(
-        on_demand, 'set_pipeline_status', mock_set_pipeline_status
+        on_demand,
+        "set_pipeline_status",
+        mock_set_pipeline_status
     )
     with requests_mock.mock() as m:
         m.post('mock://foo.com', status_code=200)
