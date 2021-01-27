@@ -14,7 +14,7 @@ class ZipStatus(core.Construct):
             self, "table",
             table_name=f"{stack_name}-{names.PIPELINE_STATUS_TABLE}",
             partition_key=dynamodb.Attribute(
-                name="request_id",
+                name="correlation_id",
                 type=dynamodb.AttributeType.STRING
             ),
             read_capacity=1,

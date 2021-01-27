@@ -127,7 +127,7 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
 
 
 def set_pipeline_status(
-    request_id, state, meeting_id=None,
+    correlation_id, state, meeting_id=None,
     recording_id=None, reason=None, origin=None
 ):
     try:
@@ -153,11 +153,11 @@ def set_pipeline_status(
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(PIPELINE_STATUS_TABLE)
         table.update_item(
-            Key={"request_id": request_id},
+            Key={"correlation_id": correlation_id},
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values
         )
-        logger.info(f"Set pipeline status to {state.value} for id {request_id}")
+        logger.info(f"Set pipeline status to {state.value} for id {correlation_id}")
     except ClientError as e:
         error = e.response["Error"]
         logger.exception(f"{error['Code']}: {error['Message']}")

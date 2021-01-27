@@ -16,17 +16,14 @@ logger = logging.getLogger()
 WEBHOOK_ENDPOINT_URL = env("WEBHOOK_ENDPOINT_URL")
 
 
-def resp(status_code, msg="", request_id=None):
-    body = {"message": msg}
-    if request_id:
-        body["request_id"] = request_id
-    logger.info(f"returning {status_code} response: '{body}'")
+def resp(status_code, msg=""):
+    logger.info(f"returning {status_code} response: '{msg}'")
     return {
         "statusCode": status_code,
         "headers": {
             "Access-Control-Allow-Origin": "*"
         },
-        "body": json.dumps(body)
+        "body": json.dumps({"message": msg})
     }
 
 
@@ -146,4 +143,4 @@ def handler(event, context):
         recording_id=recording_uuid,
         origin="on_demand"
     )
-    return resp(200, "Ingest accepted", request_id)
+    return resp(200, "Ingest accepted")

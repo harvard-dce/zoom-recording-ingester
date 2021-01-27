@@ -132,13 +132,13 @@ def test_no_mp4s_response(handler, mocker, webhook_payload):
 
     payload["event"] = "recording.completed"
     payload["payload"]["object"]["recording_files"][0]["file_type"] = "foo"
-    event = { "body": json.dumps(payload) }
+    event = {"body": json.dumps(payload)}
 
     resp = handler(webhook, event)
     assert resp["statusCode"] == 204
 
     payload["event"] = "on.demand.ingest"
-    event = { "body": json.dumps(payload) }
+    event = {"body": json.dumps(payload)}
 
     resp = handler(webhook, event)
     assert resp["statusCode"] == 400
