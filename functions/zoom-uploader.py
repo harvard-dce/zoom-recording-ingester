@@ -149,10 +149,6 @@ class Upload:
         self.data = data
 
     @property
-    def creator(self):
-        return self.data["host_name"]
-
-    @property
     def created(self):
         return self.data["created"]
 
@@ -342,7 +338,6 @@ class Upload:
                     .format(self.workflow_definition_id))
 
         params = [
-            ("creator", (None, escape(self.creator))),
             ("identifier", (None, self.mediapackage_id)),
             ("title", (None, self.data["oc_title"])),
             ("type", (None, self.type_num)),
