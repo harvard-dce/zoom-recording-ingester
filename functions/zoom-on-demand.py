@@ -141,6 +141,8 @@ def handler(event, context):
         PipelineStatus.ON_DEMAND_RECEIVED,
         meeting_id=webhook_data["payload"]["object"]["id"],
         recording_id=recording_uuid,
+        recording_start_time=webhook_data["payload"]["object"]["start_time"],
+        topic=webhook_data["payload"]["object"]["topic"],
         origin="on_demand"
     )
     return resp(200, "Ingest accepted")
