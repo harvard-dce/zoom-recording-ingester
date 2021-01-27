@@ -92,7 +92,9 @@ class TestHandler(unittest.TestCase):
         )
         mock_set_pipeline_status = self.mocker.Mock(return_value=None)
         self.mocker.patch.object(
-            downloader, 'set_pipeline_status', mock_set_pipeline_status
+            downloader, 
+            "set_pipeline_status",
+            mock_set_pipeline_status
         )
 
         with self.assertLogs(level="INFO") as cm:
