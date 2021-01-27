@@ -164,7 +164,7 @@ def set_pipeline_status(
             expression_attribute_values[":t"] = topic
         if oc_series_id:
             update_expression += ", oc_series_id=:osi"
-            expression_attribute_values[":oci"] = oc_series_id
+            expression_attribute_values[":osi"] = oc_series_id
 
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(PIPELINE_STATUS_TABLE)
