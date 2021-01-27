@@ -127,7 +127,6 @@ class ZipApi(core.Construct):
             "GET",
             status_query_integration,
             request_parameters={
-                "method.request.querystring.request_id": False,
                 "method.request.querystring.meeting_id": False,
                 "method.request.querystring.recording_id": False
             },

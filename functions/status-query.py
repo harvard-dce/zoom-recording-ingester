@@ -31,9 +31,7 @@ def handler(event, context):
     logger.info(PIPELINE_STATUS_TABLE)
     table = dynamodb.Table(PIPELINE_STATUS_TABLE)
 
-    if "request_id" in query:
-        r = table.query(KeyConditionExpression=Key("request_id").eq(query["request_id"]))
-    elif "meeting_id" in query:
+    if "meeting_id" in query:
         r = table.scan(FilterExpression=Attr("meeting_id").eq(int(query["meeting_id"])))
     elif "recording_id" in query:
         value = unquote(query["recording_id"])
@@ -41,7 +39,7 @@ def handler(event, context):
     else:
         return resp_400(
             "Missing identifer in query params. "
-            "Must include one of 'request_id', 'meeting_id', or 'recording_id'"
+            "Must include one of 'meeting_id', or 'recording_id'"
         )
 
     logger.info(r)
