@@ -82,7 +82,8 @@ def handler(event, context):
             if dl.oc_series_found(ignore_schedule, override_series_id):
                 set_pipeline_status(
                     dl_data["correlation_id"],
-                    PipelineStatus.OC_SERIES_FOUND
+                    PipelineStatus.OC_SERIES_FOUND,
+                    oc_series_id=dl.opencast_series_id
                 )
                 break
             else:

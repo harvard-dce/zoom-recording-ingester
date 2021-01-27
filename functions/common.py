@@ -127,8 +127,15 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
 
 
 def set_pipeline_status(
-    correlation_id, state, meeting_id=None,
-    recording_id=None, reason=None, origin=None
+    correlation_id,
+    state,
+    origin=None,
+    reason=None,
+    meeting_id=None,
+    recording_id=None,
+    recording_start_time=None,
+    topic=None,
+    oc_series_id=None
 ):
     try:
         update_expression = "set last_update=:l, expiration=:e, pipeline_state=:s"
@@ -149,6 +156,15 @@ def set_pipeline_status(
         if origin:
             update_expression += ", origin=:o"
             expression_attribute_values[":o"] = origin
+        if recording_start_time:
+            update_expression += ", recording_start_time=:rst"
+            expression_attribute_values[":rst"] = recording_start_time
+        if topic:
+            update_expression += ", topic=:t"
+            expression_attribute_values[":t"] = topic
+        if oc_series_id:
+            update_expression += ", oc_series_id=:osi"
+            expression_attribute_values[":oci"] = oc_series_id
 
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(PIPELINE_STATUS_TABLE)
@@ -157,7 +173,9 @@ def set_pipeline_status(
             UpdateExpression=update_expression,
             ExpressionAttributeValues=expression_attribute_values
         )
-        logger.info(f"Set pipeline status to {state.value} for id {correlation_id}")
+        logger.info(
+            f"Set pipeline status to {state.value} for id {correlation_id}"
+        )
     except ClientError as e:
         error = e.response["Error"]
         logger.exception(f"{error['Code']}: {error['Message']}")

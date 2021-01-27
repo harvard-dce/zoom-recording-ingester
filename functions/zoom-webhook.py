@@ -96,6 +96,8 @@ def handler(event, context):
             common.PipelineStatus.WEBHOOK_RECEIVED,
             meeting_id=payload["object"]["id"],
             recording_id=payload["object"]["uuid"],
+            recording_start_time=payload["object"]["start_time"],
+            topic=payload["object"]["topic"],
             origin=origin
         )
     except BadWebhookData as e:
