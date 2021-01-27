@@ -95,10 +95,10 @@ def handler(event, context):
         else:
             failure_msg = {"recording_too_short": dl_data}
             set_pipeline_status(
-                    dl_data["correlation_id"],
-                    PipelineStatus.IGNORED,
-                    reason=f"Recording <{MINIMUM_DURATION} minutes"
-                )
+                dl_data["correlation_id"],
+                PipelineStatus.IGNORED,
+                reason=f"Recording <{MINIMUM_DURATION} minutes"
+            )
 
         # discard and keep checking messages for schedule match
         logger.info(failure_msg)

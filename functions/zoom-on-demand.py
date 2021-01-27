@@ -140,8 +140,10 @@ def handler(event, context):
         return resp(500, err_msg)
 
     set_pipeline_status(
-        request_id, PipelineStatus.ON_DEMAND_RECEIVED,
+        request_id,
+        PipelineStatus.ON_DEMAND_RECEIVED,
         meeting_id=webhook_data["payload"]["object"]["id"],
-        recording_id=recording_uuid, origin="on_demand"
+        recording_id=recording_uuid,
+        origin="on_demand"
     )
     return resp(200, "Ingest accepted", request_id)

@@ -92,21 +92,24 @@ def handler(event, context):
     try:
         validate_payload(payload)
         common.set_pipeline_status(
-            correlation_id, common.PipelineStatus.WEBHOOK_RECEIVED,
+            correlation_id,
+            common.PipelineStatus.WEBHOOK_RECEIVED,
             meeting_id=payload["object"]["id"],
             recording_id=payload["object"]["uuid"],
             origin=origin
         )
     except BadWebhookData as e:
         common.set_pipeline_status(
-            correlation_id, common.PipelineStatus.WEBHOOK_FAILED,
+            correlation_id,
+            common.PipelineStatus.WEBHOOK_FAILED,
             reason="bad webhook data",
             origin=origin
         )
         return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
         common.set_pipeline_status(
-            correlation_id, common.PipelineStatus.WEBHOOK_FAILED,
+            correlation_id,
+            common.PipelineStatus.WEBHOOK_FAILED,
             reason="no mp4 files",
             origin=origin
         )
@@ -122,7 +125,8 @@ def handler(event, context):
         delay = DEFAULT_MESSAGE_DELAY
     send_sqs_message(sqs_message, delay)
     common.set_pipeline_status(
-        correlation_id, common.PipelineStatus.SENT_TO_DOWNLOADER
+        correlation_id,
+        common.PipelineStatus.SENT_TO_DOWNLOADER
     )
 
     return {
