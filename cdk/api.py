@@ -34,7 +34,10 @@ class ZipApi(core.Construct):
                     effect=iam.Effect.DENY,
                     actions=["execute-api:Invoke"],
                     principals=[iam.AnyPrincipal()],
-                    resources=[core.Fn.join('', ['execute-api:/', '*/POST/ingest'])],
+                    resources=[
+                        core.Fn.join('', ['execute-api:/', '*/POST/ingest']),
+                        core.Fn.join('', ['execute-api:/', '*/GET/status'])
+                    ],
                     conditions={
                         "NotIpAddress": {
                             "aws:SourceIp": ingest_allowed_ips
