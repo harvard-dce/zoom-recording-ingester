@@ -423,7 +423,6 @@ def test_zoom_filename(mocker):
     html_content_header = {
         "Content-Type": "text/html;charset=utf-8"
     }
-    deleted_file_error_page_content = b'Cannot download the recording'
 
     cases = [
         # get zoom filename from header
@@ -432,17 +431,9 @@ def test_zoom_filename(mocker):
         ({"header": content_disposition_header}, mp4_file, None),
         ({}, downloader.PermanentDownloadError,
          "Zoom name not found in headers"),
-        # invalid content type returned
-        ({"header": html_content_header}, downloader.PermanentDownloadError,
-         "Zoom returned stream with content type text/html"),
         # returned html error page
-        ({"header": html_content_header, "content": b'Error'},
-         downloader.PermanentDownloadError, "Zoom returned an HTML error page"),
-        # returned html error page "Cannot download the recording"
-        # which indicates that the file has been deleted
-        ({"header": html_content_header,
-          "content": deleted_file_error_page_content},
-         downloader.ZoomFileAccessError, None)
+        ({"header": html_content_header},
+         downloader.ZoomDownloadLinkError, None)
     ]
 
     file_data = {
