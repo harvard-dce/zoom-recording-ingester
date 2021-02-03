@@ -411,7 +411,7 @@ Tests for class ZoomFile
 def test_zoom_filename(mocker):
     """
     Test whether the zoom's name for the recording file can be extracted from
-    the stream header and check for appropriate error messages.
+    the stream header and check for broken download link.
     """
     mp4_file = "zoom_file.mp4"
     location_header = {
@@ -431,7 +431,7 @@ def test_zoom_filename(mocker):
         ({"header": content_disposition_header}, mp4_file, None),
         ({}, downloader.PermanentDownloadError,
          "Zoom name not found in headers"),
-        # returned html error page
+        # broken download link (returns html error page instead of stream)
         ({"header": html_content_header},
          downloader.ZoomDownloadLinkError, None)
     ]
