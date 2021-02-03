@@ -402,6 +402,81 @@ class TestDownloader(unittest.TestCase):
                 log_message = cm.output[-1].split(":")[-1]
                 assert log_message == expected_msg
 
+    def test_upload_to_s3(self):
+
+        now = datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
+        data = {
+            "uuid": "abc",
+            "zoom_series_id": "02334",
+            "start_time": now,
+            "recording_files": [
+                {
+                    "recording_start": now,
+                    "recording_type": "view_type_1"
+                },
+                {
+                    "recording_start": now,
+                    "recording_type": "view_type_2"
+                },
+                {
+                    "recording_start": now,
+                    "recording_type": "view_type_3"
+                }
+            ]
+        }
+
+        cases = [
+            # all download links valid
+            (
+                ["working", "working", "working"],
+                3,
+                None,
+                None
+            ),
+            # 2 of 3 valid download links
+            (
+                ["working", "broken", "working"],
+                2,
+                None,
+                None
+            ),
+            # 1 of 3 valid download links
+            (
+                ["working", "broken", "broken"],
+                1,
+                None,
+                None
+            ),
+            # no valid download links
+            (
+                ["broken", "broken", "broken"],
+                0,
+                downloader.PermanentDownloadError,
+                "No files could be downloaded for this recording"
+            )
+        ]
+
+        for links, expected_count, expected_error, error_msg in cases:
+            def mock_stream_file_to_s3(*args):
+                link = links.pop(0)
+                if link == "broken":
+                    raise downloader.ZoomDownloadLinkError
+
+            self.mocker.patch.object(
+                downloader.ZoomFile,
+                "stream_file_to_s3",
+                side_effect=mock_stream_file_to_s3
+            )
+
+            dl = downloader.Download(None, data)
+            if expected_error:
+                with pytest.raises(expected_error) as exc_info:
+                    dl.upload_to_s3()
+                assert exc_info.match(error_msg)
+            else:
+                dl.upload_to_s3()
+                assert len(dl.downloaded_files) == expected_count
+
 
 """
 Tests for class ZoomFile
