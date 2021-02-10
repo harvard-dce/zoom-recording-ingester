@@ -4,685 +4,122 @@
 #
 #    pip-compile
 #
-appdirs==1.4.4
-    # via virtualenv
-attrs==19.3.0
-    # via
-    #   cattrs
-    #   jsii
-    #   pytest
-aws-cdk.assets==1.51.0
-    # via
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-s3-assets
-aws-cdk.aws-applicationautoscaling==1.51.0
-    # via
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ecs
-aws-cdk.aws-autoscaling-common==1.51.0
-    # via
-    #   aws-cdk.aws-applicationautoscaling
-    #   aws-cdk.aws-autoscaling
-aws-cdk.aws-autoscaling-hooktargets==1.51.0
-    # via aws-cdk.aws-ecs
-aws-cdk.aws-autoscaling==1.51.0
-    # via
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-ecs
-aws-cdk.aws-batch==1.51.0
-    # via aws-cdk.aws-events-targets
-aws-cdk.aws-certificatemanager==1.51.0
-    # via
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-elasticloadbalancingv2
-aws-cdk.aws-cloudformation==1.51.0
-    # via aws-cdk.custom-resources
-aws-cdk.aws-cloudfront==1.51.0
-    # via aws-cdk.aws-route53-targets
-aws-cdk.aws-cloudwatch-actions==1.51.0
-    # via -r requirements.in
-aws-cdk.aws-codecommit==1.51.0
-    # via aws-cdk.aws-codebuild
-aws-cdk.aws-codepipeline==1.51.0
-    # via aws-cdk.aws-events-targets
-aws-cdk.aws-cognito==1.51.0
-    # via aws-cdk.aws-route53-targets
-aws-cdk.aws-dynamodb==1.51.0
-    # via -r requirements.in
-aws-cdk.aws-ecr-assets==1.51.0
-    # via
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-ecs
-aws-cdk.aws-ecr==1.51.0
-    # via
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-aws-cdk.aws-ecs==1.51.0
-    # via
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-events-targets
-aws-cdk.aws-efs==1.51.0
-    # via aws-cdk.aws-lambda
-aws-cdk.aws-elasticloadbalancing==1.51.0
-    # via
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-route53-targets
-aws-cdk.aws-elasticloadbalancingv2==1.51.0
-    # via
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-servicediscovery
-aws-cdk.aws-events-targets==1.51.0
-    # via -r requirements.in
-aws-cdk.aws-events==1.51.0
-    # via
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codecommit
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-ecr
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-s3
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-stepfunctions
-aws-cdk.aws-kinesis==1.51.0
-    # via aws-cdk.aws-events-targets
-aws-cdk.aws-kms==1.51.0
-    # via
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-kinesis
-    #   aws-cdk.aws-s3
-    #   aws-cdk.aws-s3-assets
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sqs
-    #   aws-cdk.aws-ssm
-aws-cdk.aws-route53-targets==1.51.0
-    # via aws-cdk.aws-ecs
-aws-cdk.aws-route53==1.51.0
-    # via
-    #   aws-cdk.aws-certificatemanager
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-servicediscovery
-aws-cdk.aws-s3-assets==1.51.0
-    # via
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-lambda
-aws-cdk.aws-sam==1.51.0
-    # via aws-cdk.aws-secretsmanager
-aws-cdk.aws-secretsmanager==1.51.0
-    # via
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-ecs
-aws-cdk.aws-servicediscovery==1.51.0
-    # via aws-cdk.aws-ecs
-aws-cdk.aws-sns-subscriptions==1.51.0
-    # via
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-events-targets
-aws-cdk.aws-sqs==1.51.0
-    # via
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sns-subscriptions
-aws-cdk.aws-ssm==1.51.0
-    # via
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecs
-aws-cdk.aws-stepfunctions==1.51.0
-    # via aws-cdk.aws-events-targets
-aws-cdk.aws_apigateway==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-route53-targets
-aws-cdk.aws_cloudwatch==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-applicationautoscaling
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-logs
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sqs
-    #   aws-cdk.aws-stepfunctions
-aws-cdk.aws_codebuild==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-events-targets
-aws-cdk.aws_ec2==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-elasticloadbalancing
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-route53
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-servicediscovery
-aws-cdk.aws_iam==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-applicationautoscaling
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-autoscaling-common
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-certificatemanager
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-cloudwatch
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codecommit
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecr
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-events
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-kinesis
-    #   aws-cdk.aws-kms
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-logs
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-s3
-    #   aws-cdk.aws-s3-assets
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sns-subscriptions
-    #   aws-cdk.aws-sqs
-    #   aws-cdk.aws-ssm
-    #   aws-cdk.aws-stepfunctions
-    #   aws-cdk.custom-resources
-aws-cdk.aws_lambda==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-certificatemanager
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-sns-subscriptions
-    #   aws-cdk.custom-resources
-aws-cdk.aws_logs==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-kinesis
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-route53
-    #   aws-cdk.aws-stepfunctions
-    #   aws-cdk.custom-resources
-aws-cdk.aws_s3==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-s3-assets
-aws-cdk.aws_sns==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-sns-subscriptions
-    #   aws-cdk.custom-resources
-aws-cdk.cloud-assembly-schema==1.51.0
-    # via
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-route53
-    #   aws-cdk.aws-ssm
-    #   aws-cdk.core
-    #   aws-cdk.cx-api
-aws-cdk.core==1.51.0
-    # via
-    #   -r requirements.in
-    #   aws-cdk.assets
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-applicationautoscaling
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-autoscaling-common
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-certificatemanager
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-cloudwatch
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codecommit
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecr
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-elasticloadbalancing
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-events
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-iam
-    #   aws-cdk.aws-kinesis
-    #   aws-cdk.aws-kms
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-logs
-    #   aws-cdk.aws-route53
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-s3
-    #   aws-cdk.aws-s3-assets
-    #   aws-cdk.aws-sam
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-servicediscovery
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sns-subscriptions
-    #   aws-cdk.aws-sqs
-    #   aws-cdk.aws-ssm
-    #   aws-cdk.aws-stepfunctions
-    #   aws-cdk.custom-resources
-aws-cdk.custom-resources==1.51.0
-    # via
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ecr
-aws-cdk.cx-api==1.51.0
-    # via
-    #   aws-cdk.assets
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-s3-assets
-    #   aws-cdk.core
-aws-cdk.region-info==1.51.0
-    # via
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-iam
-    #   aws-cdk.aws-route53-targets
-aws-lambda-logging==0.1.1
-    # via -r function_requirements/common-requirements.in
-awscli==1.18.97
-    # via -r requirements.in
-awslogs==0.14.0
-    # via -r requirements.in
-boto3==1.14.20
-    # via
-    #   -r function_requirements/common-requirements.in
-    #   -r requirements.in
-    #   awslogs
-botocore==1.17.20
-    # via
-    #   awscli
-    #   boto3
-    #   s3transfer
-cachetools==4.1.1
-    # via google-auth
-cattrs==1.0.0
-    # via jsii
-certifi==2020.6.20
-    # via requests
-chardet==3.0.4
-    # via requests
-colorama==0.4.3
-    # via awscli
-constructs==3.0.4
-    # via
-    #   aws-cdk.assets
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-applicationautoscaling
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-autoscaling-common
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-certificatemanager
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-cloudwatch
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codecommit
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecr
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-elasticloadbalancing
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-events
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-iam
-    #   aws-cdk.aws-kinesis
-    #   aws-cdk.aws-kms
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-logs
-    #   aws-cdk.aws-route53
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-s3
-    #   aws-cdk.aws-s3-assets
-    #   aws-cdk.aws-sam
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-servicediscovery
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sns-subscriptions
-    #   aws-cdk.aws-sqs
-    #   aws-cdk.aws-ssm
-    #   aws-cdk.aws-stepfunctions
-    #   aws-cdk.core
-    #   aws-cdk.custom-resources
-coverage==5.2
-    # via pytest-cov
-distlib==0.3.1
-    # via virtualenv
-docutils==0.15.2
-    # via
-    #   awscli
-    #   botocore
-filelock==3.0.12
-    # via
-    #   tox
-    #   virtualenv
-freezegun==0.3.15
-    # via -r requirements.in
-google-api-core==1.22.0
-    # via google-api-python-client
-google-api-python-client==1.10.0
-    # via -r function_requirements/common-requirements.in
-google-auth-httplib2==0.0.4
-    # via google-api-python-client
-google-auth-oauthlib==0.4.1
-    # via -r function_requirements/common-requirements.in
-google-auth==1.20.1
-    # via
-    #   -r function_requirements/common-requirements.in
-    #   google-api-core
-    #   google-api-python-client
-    #   google-auth-httplib2
-    #   google-auth-oauthlib
-googleapis-common-protos==1.52.0
-    # via google-api-core
-httplib2==0.19.0
-    # via
-    #   google-api-python-client
-    #   google-auth-httplib2
-idna==2.10
-    # via requests
-invoke==1.4.1
-    # via -r requirements.in
-jmespath==0.10.0
-    # via
-    #   awslogs
-    #   boto3
-    #   botocore
-jsii==1.8.0
-    # via
-    #   aws-cdk.assets
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-applicationautoscaling
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-autoscaling-common
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-certificatemanager
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-cloudwatch
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codecommit
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecr
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-elasticloadbalancing
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-events
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-iam
-    #   aws-cdk.aws-kinesis
-    #   aws-cdk.aws-kms
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-logs
-    #   aws-cdk.aws-route53
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-s3
-    #   aws-cdk.aws-s3-assets
-    #   aws-cdk.aws-sam
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-servicediscovery
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sns-subscriptions
-    #   aws-cdk.aws-sqs
-    #   aws-cdk.aws-ssm
-    #   aws-cdk.aws-stepfunctions
-    #   aws-cdk.cloud-assembly-schema
-    #   aws-cdk.core
-    #   aws-cdk.custom-resources
-    #   aws-cdk.cx-api
-    #   aws-cdk.region-info
-    #   constructs
-mock==4.0.2
-    # via -r requirements.in
-more-itertools==8.4.0
-    # via pytest
-mysql-connector-python==8.0.21
-    # via -r function_requirements/opencast-op-counts.in
-oauthlib==3.1.0
-    # via requests-oauthlib
-packaging==20.4
-    # via
-    #   pytest
-    #   tox
-pluggy==0.13.1
-    # via
-    #   pytest
-    #   tox
-protobuf==3.12.2
-    # via
-    #   google-api-core
-    #   googleapis-common-protos
-    #   mysql-connector-python
-publication==0.0.3
-    # via
-    #   aws-cdk.assets
-    #   aws-cdk.aws-apigateway
-    #   aws-cdk.aws-applicationautoscaling
-    #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-autoscaling-common
-    #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-certificatemanager
-    #   aws-cdk.aws-cloudformation
-    #   aws-cdk.aws-cloudwatch
-    #   aws-cdk.aws-cloudwatch-actions
-    #   aws-cdk.aws-codebuild
-    #   aws-cdk.aws-codecommit
-    #   aws-cdk.aws-codepipeline
-    #   aws-cdk.aws-dynamodb
-    #   aws-cdk.aws-ec2
-    #   aws-cdk.aws-ecr
-    #   aws-cdk.aws-ecr-assets
-    #   aws-cdk.aws-ecs
-    #   aws-cdk.aws-efs
-    #   aws-cdk.aws-elasticloadbalancing
-    #   aws-cdk.aws-elasticloadbalancingv2
-    #   aws-cdk.aws-events
-    #   aws-cdk.aws-events-targets
-    #   aws-cdk.aws-iam
-    #   aws-cdk.aws-kinesis
-    #   aws-cdk.aws-kms
-    #   aws-cdk.aws-lambda
-    #   aws-cdk.aws-logs
-    #   aws-cdk.aws-route53
-    #   aws-cdk.aws-route53-targets
-    #   aws-cdk.aws-s3
-    #   aws-cdk.aws-s3-assets
-    #   aws-cdk.aws-sam
-    #   aws-cdk.aws-secretsmanager
-    #   aws-cdk.aws-servicediscovery
-    #   aws-cdk.aws-sns
-    #   aws-cdk.aws-sns-subscriptions
-    #   aws-cdk.aws-sqs
-    #   aws-cdk.aws-ssm
-    #   aws-cdk.aws-stepfunctions
-    #   aws-cdk.cloud-assembly-schema
-    #   aws-cdk.core
-    #   aws-cdk.custom-resources
-    #   aws-cdk.cx-api
-    #   aws-cdk.region-info
-    #   constructs
-py==1.9.0
-    # via
-    #   pytest
-    #   tox
-pyasn1-modules==0.2.8
-    # via google-auth
-pyasn1==0.4.8
-    # via
-    #   pyasn1-modules
-    #   rsa
-pyjwt==1.7.1
-    # via -r function_requirements/common-requirements.in
-pyparsing==2.4.7
-    # via
-    #   httplib2
-    #   packaging
-pytest-cov==2.10.0
-    # via -r requirements.in
-pytest-env==0.6.2
-    # via -r requirements.in
-pytest-mock==3.2.0
-    # via -r requirements.in
-pytest==5.4.3
-    # via
-    #   -r requirements.in
-    #   pytest-cov
-    #   pytest-env
-    #   pytest-mock
-python-dateutil==2.8.1
-    # via
-    #   awslogs
-    #   botocore
-    #   freezegun
-    #   jsii
-python-dotenv==0.14.0
-    # via
-    #   -r function_requirements/common-requirements.in
-    #   -r requirements.in
-pytz==2020.1
-    # via
-    #   -r function_requirements/common-requirements.in
-    #   google-api-core
-pyyaml==5.3.1
-    # via awscli
-requests-mock==1.8.0
-    # via -r requirements.in
-requests-oauthlib==1.3.0
-    # via google-auth-oauthlib
-requests==2.24.0
-    # via
-    #   -r function_requirements/common-requirements.in
-    #   -r requirements.in
-    #   google-api-core
-    #   requests-mock
-    #   requests-oauthlib
-rsa==4.5
-    # via
-    #   awscli
-    #   google-auth
-s3transfer==0.3.3
-    # via
-    #   awscli
-    #   boto3
-six==1.15.0
-    # via
-    #   freezegun
-    #   google-api-core
-    #   google-api-python-client
-    #   google-auth
-    #   google-auth-httplib2
-    #   packaging
-    #   protobuf
-    #   python-dateutil
-    #   requests-mock
-    #   tox
-    #   virtualenv
-tabulate==0.8.7
-    # via -r requirements.in
-termcolor==1.1.0
-    # via awslogs
-toml==0.10.1
-    # via tox
-tox==3.16.1
-    # via -r requirements.in
-typing-extensions==3.7.4.2
-    # via jsii
-uritemplate==3.0.1
-    # via google-api-python-client
-urllib3==1.25.9
-    # via
-    #   botocore
-    #   requests
-virtualenv==20.0.26
-    # via tox
-wcwidth==0.2.5
-    # via pytest
+appdirs==1.4.4            # via virtualenv
+attrs==20.3.0             # via cattrs, jsii, pytest
+aws-cdk.assets==1.89.0    # via aws-cdk.aws-ecr-assets, aws-cdk.aws-s3-assets
+aws-cdk.aws-apigateway==1.89.0  # via -r requirements.in, aws-cdk.aws-route53-targets
+aws-cdk.aws-apigatewayv2==1.89.0  # via aws-cdk.aws-route53-targets
+aws-cdk.aws-applicationautoscaling==1.89.0  # via aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-dynamodb, aws-cdk.aws-ecs, aws-cdk.aws-lambda
+aws-cdk.aws-autoscaling-common==1.89.0  # via aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling
+aws-cdk.aws-autoscaling-hooktargets==1.89.0  # via aws-cdk.aws-ecs
+aws-cdk.aws-autoscaling==1.89.0  # via aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-ecs
+aws-cdk.aws-batch==1.89.0  # via aws-cdk.aws-events-targets
+aws-cdk.aws-certificatemanager==1.89.0  # via aws-cdk.aws-apigateway, aws-cdk.aws-cognito, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancingv2
+aws-cdk.aws-cloudformation==1.89.0  # via aws-cdk.custom-resources
+aws-cdk.aws-cloudfront==1.89.0  # via aws-cdk.aws-route53-targets
+aws-cdk.aws-cloudwatch-actions==1.89.0  # via -r requirements.in
+aws-cdk.aws-cloudwatch==1.89.0  # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-codebuild, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-sns, aws-cdk.aws-sqs, aws-cdk.aws-stepfunctions
+aws-cdk.aws-codebuild==1.89.0  # via -r requirements.in, aws-cdk.aws-events-targets
+aws-cdk.aws-codecommit==1.89.0  # via aws-cdk.aws-codebuild
+aws-cdk.aws-codeguruprofiler==1.89.0  # via aws-cdk.aws-lambda
+aws-cdk.aws-codepipeline==1.89.0  # via aws-cdk.aws-events-targets
+aws-cdk.aws-cognito==1.89.0  # via aws-cdk.aws-apigateway, aws-cdk.aws-route53-targets
+aws-cdk.aws-dynamodb==1.89.0  # via -r requirements.in
+aws-cdk.aws-ec2==1.89.0   # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-autoscaling, aws-cdk.aws-batch, aws-cdk.aws-codebuild, aws-cdk.aws-ecs, aws-cdk.aws-efs, aws-cdk.aws-elasticloadbalancing, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events-targets, aws-cdk.aws-lambda, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-secretsmanager, aws-cdk.aws-servicediscovery, aws-cdk.custom-resources
+aws-cdk.aws-ecr-assets==1.89.0  # via aws-cdk.aws-codebuild, aws-cdk.aws-ecs, aws-cdk.aws-lambda
+aws-cdk.aws-ecr==1.89.0   # via aws-cdk.aws-batch, aws-cdk.aws-codebuild, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-lambda
+aws-cdk.aws-ecs==1.89.0   # via aws-cdk.aws-batch, aws-cdk.aws-events-targets
+aws-cdk.aws-efs==1.89.0   # via aws-cdk.aws-lambda
+aws-cdk.aws-elasticloadbalancing==1.89.0  # via aws-cdk.aws-autoscaling, aws-cdk.aws-ecs, aws-cdk.aws-route53-targets
+aws-cdk.aws-elasticloadbalancingv2==1.89.0  # via aws-cdk.aws-apigateway, aws-cdk.aws-autoscaling, aws-cdk.aws-ecs, aws-cdk.aws-route53-targets, aws-cdk.aws-servicediscovery
+aws-cdk.aws-events-targets==1.89.0  # via -r requirements.in
+aws-cdk.aws-events==1.89.0  # via aws-cdk.aws-codebuild, aws-cdk.aws-codecommit, aws-cdk.aws-codepipeline, aws-cdk.aws-ecr, aws-cdk.aws-events-targets, aws-cdk.aws-lambda, aws-cdk.aws-s3, aws-cdk.aws-sns, aws-cdk.aws-stepfunctions
+aws-cdk.aws-iam==1.89.0   # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling, aws-cdk.aws-autoscaling-common, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-batch, aws-cdk.aws-certificatemanager, aws-cdk.aws-cloudformation, aws-cdk.aws-cloudwatch, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-codebuild, aws-cdk.aws-codecommit, aws-cdk.aws-codeguruprofiler, aws-cdk.aws-codepipeline, aws-cdk.aws-cognito, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecr, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events, aws-cdk.aws-events-targets, aws-cdk.aws-kinesis, aws-cdk.aws-kms, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-s3, aws-cdk.aws-s3-assets, aws-cdk.aws-secretsmanager, aws-cdk.aws-sns, aws-cdk.aws-sns-subscriptions, aws-cdk.aws-sqs, aws-cdk.aws-ssm, aws-cdk.aws-stepfunctions, aws-cdk.custom-resources
+aws-cdk.aws-kinesis==1.89.0  # via aws-cdk.aws-events-targets
+aws-cdk.aws-kinesisfirehose==1.89.0  # via aws-cdk.aws-events-targets
+aws-cdk.aws-kms==1.89.0   # via aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-codebuild, aws-cdk.aws-codepipeline, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecs, aws-cdk.aws-efs, aws-cdk.aws-kinesis, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-s3, aws-cdk.aws-s3-assets, aws-cdk.aws-secretsmanager, aws-cdk.aws-sns, aws-cdk.aws-sqs, aws-cdk.aws-ssm
+aws-cdk.aws-lambda==1.89.0  # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-certificatemanager, aws-cdk.aws-cloudformation, aws-cdk.aws-cognito, aws-cdk.aws-dynamodb, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events-targets, aws-cdk.aws-secretsmanager, aws-cdk.aws-sns-subscriptions, aws-cdk.custom-resources
+aws-cdk.aws-logs==1.89.0  # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-codebuild, aws-cdk.aws-ec2, aws-cdk.aws-ecs, aws-cdk.aws-events-targets, aws-cdk.aws-kinesis, aws-cdk.aws-lambda, aws-cdk.aws-route53, aws-cdk.aws-stepfunctions, aws-cdk.custom-resources
+aws-cdk.aws-route53-targets==1.89.0  # via aws-cdk.aws-ecs
+aws-cdk.aws-route53==1.89.0  # via aws-cdk.aws-certificatemanager, aws-cdk.aws-ecs, aws-cdk.aws-route53-targets, aws-cdk.aws-servicediscovery
+aws-cdk.aws-s3-assets==1.89.0  # via aws-cdk.aws-apigateway, aws-cdk.aws-codebuild, aws-cdk.aws-ec2, aws-cdk.aws-ecs, aws-cdk.aws-lambda, aws-cdk.aws-logs
+aws-cdk.aws-s3==1.89.0    # via -r requirements.in, aws-cdk.aws-apigateway, aws-cdk.aws-cloudformation, aws-cdk.aws-codebuild, aws-cdk.aws-codepipeline, aws-cdk.aws-ec2, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-lambda, aws-cdk.aws-route53-targets, aws-cdk.aws-s3-assets
+aws-cdk.aws-sam==1.89.0   # via aws-cdk.aws-secretsmanager
+aws-cdk.aws-secretsmanager==1.89.0  # via aws-cdk.aws-batch, aws-cdk.aws-codebuild, aws-cdk.aws-ecs
+aws-cdk.aws-servicediscovery==1.89.0  # via aws-cdk.aws-ecs
+aws-cdk.aws-sns-subscriptions==1.89.0  # via aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-events-targets
+aws-cdk.aws-sns==1.89.0   # via -r requirements.in, aws-cdk.aws-autoscaling, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-cloudformation, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-ecs, aws-cdk.aws-events-targets, aws-cdk.aws-sns-subscriptions, aws-cdk.custom-resources
+aws-cdk.aws-sqs==1.89.0   # via aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-ecs, aws-cdk.aws-events-targets, aws-cdk.aws-lambda, aws-cdk.aws-sns, aws-cdk.aws-sns-subscriptions
+aws-cdk.aws-ssm==1.89.0   # via aws-cdk.aws-batch, aws-cdk.aws-ec2, aws-cdk.aws-ecs
+aws-cdk.aws-stepfunctions==1.89.0  # via aws-cdk.aws-events-targets
+aws-cdk.cloud-assembly-schema==1.89.0  # via aws-cdk.aws-ec2, aws-cdk.aws-efs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-route53, aws-cdk.aws-ssm, aws-cdk.core, aws-cdk.cx-api
+aws-cdk.core==1.89.0      # via -r requirements.in, aws-cdk.assets, aws-cdk.aws-apigateway, aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling, aws-cdk.aws-autoscaling-common, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-batch, aws-cdk.aws-certificatemanager, aws-cdk.aws-cloudformation, aws-cdk.aws-cloudwatch, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-codebuild, aws-cdk.aws-codecommit, aws-cdk.aws-codeguruprofiler, aws-cdk.aws-codepipeline, aws-cdk.aws-cognito, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecr, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-efs, aws-cdk.aws-elasticloadbalancing, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events, aws-cdk.aws-events-targets, aws-cdk.aws-iam, aws-cdk.aws-kinesis, aws-cdk.aws-kinesisfirehose, aws-cdk.aws-kms, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-s3, aws-cdk.aws-s3-assets, aws-cdk.aws-sam, aws-cdk.aws-secretsmanager, aws-cdk.aws-servicediscovery, aws-cdk.aws-sns, aws-cdk.aws-sns-subscriptions, aws-cdk.aws-sqs, aws-cdk.aws-ssm, aws-cdk.aws-stepfunctions, aws-cdk.custom-resources
+aws-cdk.custom-resources==1.89.0  # via aws-cdk.aws-cognito, aws-cdk.aws-dynamodb, aws-cdk.aws-events-targets, aws-cdk.aws-route53
+aws-cdk.cx-api==1.89.0    # via aws-cdk.assets, aws-cdk.aws-apigateway, aws-cdk.aws-cloudformation, aws-cdk.aws-ec2, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-efs, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-kms, aws-cdk.aws-lambda, aws-cdk.aws-s3, aws-cdk.aws-s3-assets, aws-cdk.aws-secretsmanager, aws-cdk.core
+aws-cdk.region-info==1.89.0  # via aws-cdk.aws-codebuild, aws-cdk.aws-ec2, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-iam, aws-cdk.aws-route53-targets, aws-cdk.core
+aws-lambda-logging==0.1.1  # via -r function_requirements/common-requirements.in
+awscli==1.18.97           # via -r requirements.in
+awslogs==0.14.0           # via -r requirements.in
+boto3==1.14.20            # via -r function_requirements/common-requirements.in, -r requirements.in, awslogs
+botocore==1.17.20         # via awscli, boto3, s3transfer
+cachetools==4.1.1         # via google-auth
+cattrs==1.1.2             # via jsii
+certifi==2020.6.20        # via requests
+chardet==3.0.4            # via requests
+colorama==0.4.3           # via awscli
+constructs==3.3.17        # via aws-cdk.assets, aws-cdk.aws-apigateway, aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling, aws-cdk.aws-autoscaling-common, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-batch, aws-cdk.aws-certificatemanager, aws-cdk.aws-cloudformation, aws-cdk.aws-cloudwatch, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-codebuild, aws-cdk.aws-codecommit, aws-cdk.aws-codeguruprofiler, aws-cdk.aws-codepipeline, aws-cdk.aws-cognito, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecr, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-efs, aws-cdk.aws-elasticloadbalancing, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events, aws-cdk.aws-events-targets, aws-cdk.aws-iam, aws-cdk.aws-kinesis, aws-cdk.aws-kinesisfirehose, aws-cdk.aws-kms, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-s3, aws-cdk.aws-s3-assets, aws-cdk.aws-sam, aws-cdk.aws-secretsmanager, aws-cdk.aws-servicediscovery, aws-cdk.aws-sns, aws-cdk.aws-sns-subscriptions, aws-cdk.aws-sqs, aws-cdk.aws-ssm, aws-cdk.aws-stepfunctions, aws-cdk.core, aws-cdk.custom-resources
+coverage==5.2             # via pytest-cov
+distlib==0.3.1            # via virtualenv
+docutils==0.15.2          # via awscli, botocore
+filelock==3.0.12          # via tox, virtualenv
+freezegun==0.3.15         # via -r requirements.in
+google-api-core==1.22.0   # via google-api-python-client
+google-api-python-client==1.10.0  # via -r function_requirements/common-requirements.in
+google-auth-httplib2==0.0.4  # via google-api-python-client
+google-auth-oauthlib==0.4.1  # via -r function_requirements/common-requirements.in
+google-auth==1.20.1       # via -r function_requirements/common-requirements.in, google-api-core, google-api-python-client, google-auth-httplib2, google-auth-oauthlib
+googleapis-common-protos==1.52.0  # via google-api-core
+httplib2==0.19.0          # via google-api-python-client, google-auth-httplib2
+idna==2.10                # via requests
+invoke==1.4.1             # via -r requirements.in
+jmespath==0.10.0          # via awslogs, boto3, botocore
+jsii==1.20.1              # via aws-cdk.assets, aws-cdk.aws-apigateway, aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling, aws-cdk.aws-autoscaling-common, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-batch, aws-cdk.aws-certificatemanager, aws-cdk.aws-cloudformation, aws-cdk.aws-cloudwatch, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-codebuild, aws-cdk.aws-codecommit, aws-cdk.aws-codeguruprofiler, aws-cdk.aws-codepipeline, aws-cdk.aws-cognito, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecr, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-efs, aws-cdk.aws-elasticloadbalancing, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events, aws-cdk.aws-events-targets, aws-cdk.aws-iam, aws-cdk.aws-kinesis, aws-cdk.aws-kinesisfirehose, aws-cdk.aws-kms, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-s3, aws-cdk.aws-s3-assets, aws-cdk.aws-sam, aws-cdk.aws-secretsmanager, aws-cdk.aws-servicediscovery, aws-cdk.aws-sns, aws-cdk.aws-sns-subscriptions, aws-cdk.aws-sqs, aws-cdk.aws-ssm, aws-cdk.aws-stepfunctions, aws-cdk.cloud-assembly-schema, aws-cdk.core, aws-cdk.custom-resources, aws-cdk.cx-api, aws-cdk.region-info, constructs
+mock==4.0.2               # via -r requirements.in
+more-itertools==8.4.0     # via pytest
+mysql-connector-python==8.0.21  # via -r function_requirements/opencast-op-counts.in
+oauthlib==3.1.0           # via requests-oauthlib
+packaging==20.4           # via pytest, tox
+pluggy==0.13.1            # via pytest, tox
+protobuf==3.12.2          # via google-api-core, googleapis-common-protos, mysql-connector-python
+publication==0.0.3        # via aws-cdk.assets, aws-cdk.aws-apigateway, aws-cdk.aws-applicationautoscaling, aws-cdk.aws-autoscaling, aws-cdk.aws-autoscaling-common, aws-cdk.aws-autoscaling-hooktargets, aws-cdk.aws-batch, aws-cdk.aws-certificatemanager, aws-cdk.aws-cloudformation, aws-cdk.aws-cloudwatch, aws-cdk.aws-cloudwatch-actions, aws-cdk.aws-codebuild, aws-cdk.aws-codecommit, aws-cdk.aws-codeguruprofiler, aws-cdk.aws-codepipeline, aws-cdk.aws-cognito, aws-cdk.aws-dynamodb, aws-cdk.aws-ec2, aws-cdk.aws-ecr, aws-cdk.aws-ecr-assets, aws-cdk.aws-ecs, aws-cdk.aws-efs, aws-cdk.aws-elasticloadbalancing, aws-cdk.aws-elasticloadbalancingv2, aws-cdk.aws-events, aws-cdk.aws-events-targets, aws-cdk.aws-iam, aws-cdk.aws-kinesis, aws-cdk.aws-kinesisfirehose, aws-cdk.aws-kms, aws-cdk.aws-lambda, aws-cdk.aws-logs, aws-cdk.aws-route53, aws-cdk.aws-route53-targets, aws-cdk.aws-s3, aws-cdk.aws-s3-assets, aws-cdk.aws-sam, aws-cdk.aws-secretsmanager, aws-cdk.aws-servicediscovery, aws-cdk.aws-sns, aws-cdk.aws-sns-subscriptions, aws-cdk.aws-sqs, aws-cdk.aws-ssm, aws-cdk.aws-stepfunctions, aws-cdk.cloud-assembly-schema, aws-cdk.core, aws-cdk.custom-resources, aws-cdk.cx-api, aws-cdk.region-info, constructs
+py==1.9.0                 # via pytest, tox
+pyasn1-modules==0.2.8     # via google-auth
+pyasn1==0.4.8             # via pyasn1-modules, rsa
+pyjwt==1.7.1              # via -r function_requirements/common-requirements.in
+pyparsing==2.4.7          # via httplib2, packaging
+pytest-cov==2.10.0        # via -r requirements.in
+pytest-env==0.6.2         # via -r requirements.in
+pytest-mock==3.2.0        # via -r requirements.in
+pytest==5.4.3             # via -r requirements.in, pytest-cov, pytest-env, pytest-mock
+python-dateutil==2.8.1    # via awslogs, botocore, freezegun, jsii
+python-dotenv==0.14.0     # via -r function_requirements/common-requirements.in, -r requirements.in
+pytz==2020.1              # via -r function_requirements/common-requirements.in, google-api-core
+pyyaml==5.3.1             # via awscli
+requests-mock==1.8.0      # via -r requirements.in
+requests-oauthlib==1.3.0  # via google-auth-oauthlib
+requests==2.24.0          # via -r function_requirements/common-requirements.in, -r requirements.in, google-api-core, requests-mock, requests-oauthlib
+rsa==4.5                  # via awscli, google-auth
+s3transfer==0.3.3         # via awscli, boto3
+six==1.15.0               # via freezegun, google-api-core, google-api-python-client, google-auth, google-auth-httplib2, packaging, protobuf, python-dateutil, requests-mock, tox, virtualenv
+tabulate==0.8.7           # via -r requirements.in
+termcolor==1.1.0          # via awslogs
+toml==0.10.1              # via tox
+tox==3.16.1               # via -r requirements.in
+typing-extensions==3.7.4.2  # via jsii
+uritemplate==3.0.1        # via google-api-python-client
+urllib3==1.25.9           # via botocore, requests
+virtualenv==20.0.26       # via tox
+wcwidth==0.2.5            # via pytest
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
