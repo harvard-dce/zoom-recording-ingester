@@ -10,6 +10,7 @@ from datetime import datetime
 from collections import OrderedDict
 import logging
 import concurrent.futures
+from copy import deepcopy
 
 logger = logging.getLogger()
 
@@ -36,7 +37,7 @@ class PermanentDownloadError(Exception):
     pass
 
 
-class ZoomFileAccessError(Exception):
+class ZoomDownloadLinkError(Exception):
     pass
 
 
@@ -129,11 +130,12 @@ class Download:
 
     def __init__(self, sqs, data):
         self.sqs = sqs
-        self.data = data
+        self.download_message = deepcopy(data)  # do not modify
+        self.data = data  # modify
         self.opencast_series_id = None
         self.title = "Lecture"  # default title
 
-        logger.info({"download_message": self.data})
+        logger.info({"download_message": self.download_message})
 
     @property
     def host_name(self):
@@ -320,7 +322,7 @@ class Download:
         if not hasattr(self, "self._upload_message"):
             s3_files = {}
             segment_durations = {}
-            for file in self.recording_files:
+            for file in self.downloaded_files:
                 segment = {
                     "filename": file.s3_filename,
                     "segment_num": file.segment_num,
@@ -384,28 +386,28 @@ class Download:
 
         logger.info("downloading {} files".format(len(self.recording_files)))
 
-        downloaded_files_count = 0
+        self.downloaded_files = []
         for file in self.recording_files:
             try:
                 file.stream_file_to_s3()
-                downloaded_files_count += 1
-            except ZoomFileAccessError:
+                self.downloaded_files.append(file)
+            except ZoomDownloadLinkError:
                 logger.warning(
                     {"Error accessing possibly deleted file": file.file_data}
                 )
                 continue
-        if not downloaded_files_count:
+        if not self.downloaded_files:
             raise PermanentDownloadError(
                 "No files could be downloaded for this recording"
             )
-        logger.info(f"successfully downloaded {downloaded_files_count} files")
+        logger.info(f"successfully downloaded {len(self.downloaded_files)} files")
 
     def send_to_deadletter_queue(self, error):
         deadletter_queue = self.sqs.get_queue_by_name(
                                         QueueName=DEADLETTER_QUEUE_NAME)
-        message = SQSMessage(deadletter_queue, self.data)
+        message = SQSMessage(deadletter_queue, self.download_message)
         message.send(error=error)
-        return self.data
+        return self.download_message
 
     def send_to_uploader_queue(self):
         upload_queue = self.sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
@@ -426,7 +428,7 @@ class SQSMessage():
             "sqs_message": self.message
         })
 
-        if error is None:
+        if not error:
             message_attributes = {}
         else:
             message_attributes = {
@@ -449,8 +451,9 @@ class SQSMessage():
                     MessageAttributes=message_attributes
                 )
         except Exception as e:
-            logger.exception("Error when sending SQS message to queue {}:{}"
-                             .format(self.queue.url, e))
+            logger.exception(
+                f"Error when sending SQS message to queue {self.queue.url}:{e}"
+            )
             raise
 
         logger.debug({"Queue": self.queue.url,
@@ -500,24 +503,8 @@ class ZoomFile:
 
             # If the file has been deleted or if the request is not authorized,
             # Zoom will return 200 and an HTML error page.
-            # This is bad, but we have no choice but to try to interpret the
-            # content that Zoom returns to us.
             if "Content-Type" in r.headers and "text/html" in r.headers["Content-Type"]:
-                # Most likely deleted file
-                if "Cannot download the recording" in str(r.content):
-                    raise ZoomFileAccessError()
-                # Most likely an access issue
-                error_message = "Request for download stream not authorized.\n"
-                if "Error" in str(r.content):
-                    raise PermanentDownloadError(
-                        "{} Zoom returned an HTML error page."
-                        .format(error_message)
-                    )
-                else:
-                    raise PermanentDownloadError(
-                        "{} Zoom returned stream with content type text/html."
-                        .format(error_message)
-                    )
+                raise ZoomDownloadLinkError()
 
             # Filename that zoom uses should be found in the response headers
             if "Location" in r.headers:

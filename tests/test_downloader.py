@@ -402,6 +402,81 @@ class TestDownloader(unittest.TestCase):
                 log_message = cm.output[-1].split(":")[-1]
                 assert log_message == expected_msg
 
+    def test_upload_to_s3(self):
+
+        now = datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
+        data = {
+            "uuid": "abc",
+            "zoom_series_id": "02334",
+            "start_time": now,
+            "recording_files": [
+                {
+                    "recording_start": now,
+                    "recording_type": "view_type_1"
+                },
+                {
+                    "recording_start": now,
+                    "recording_type": "view_type_2"
+                },
+                {
+                    "recording_start": now,
+                    "recording_type": "view_type_3"
+                }
+            ]
+        }
+
+        cases = [
+            # all download links valid
+            (
+                ["working", "working", "working"],
+                3,
+                None,
+                None
+            ),
+            # 2 of 3 valid download links
+            (
+                ["working", "broken", "working"],
+                2,
+                None,
+                None
+            ),
+            # 1 of 3 valid download links
+            (
+                ["working", "broken", "broken"],
+                1,
+                None,
+                None
+            ),
+            # no valid download links
+            (
+                ["broken", "broken", "broken"],
+                0,
+                downloader.PermanentDownloadError,
+                "No files could be downloaded for this recording"
+            )
+        ]
+
+        for links, expected_count, expected_error, error_msg in cases:
+            def mock_stream_file_to_s3(*args):
+                link = links.pop(0)
+                if link == "broken":
+                    raise downloader.ZoomDownloadLinkError
+
+            self.mocker.patch.object(
+                downloader.ZoomFile,
+                "stream_file_to_s3",
+                side_effect=mock_stream_file_to_s3
+            )
+
+            dl = downloader.Download(None, data)
+            if expected_error:
+                with pytest.raises(expected_error) as exc_info:
+                    dl.upload_to_s3()
+                assert exc_info.match(error_msg)
+            else:
+                dl.upload_to_s3()
+                assert len(dl.downloaded_files) == expected_count
+
 
 """
 Tests for class ZoomFile
@@ -411,7 +486,7 @@ Tests for class ZoomFile
 def test_zoom_filename(mocker):
     """
     Test whether the zoom's name for the recording file can be extracted from
-    the stream header and check for appropriate error messages.
+    the stream header and check for broken download link.
     """
     mp4_file = "zoom_file.mp4"
     location_header = {
@@ -423,7 +498,6 @@ def test_zoom_filename(mocker):
     html_content_header = {
         "Content-Type": "text/html;charset=utf-8"
     }
-    deleted_file_error_page_content = b'Cannot download the recording'
 
     cases = [
         # get zoom filename from header
@@ -432,17 +506,9 @@ def test_zoom_filename(mocker):
         ({"header": content_disposition_header}, mp4_file, None),
         ({}, downloader.PermanentDownloadError,
          "Zoom name not found in headers"),
-        # invalid content type returned
-        ({"header": html_content_header}, downloader.PermanentDownloadError,
-         "Zoom returned stream with content type text/html"),
-        # returned html error page
-        ({"header": html_content_header, "content": b'Error'},
-         downloader.PermanentDownloadError, "Zoom returned an HTML error page"),
-        # returned html error page "Cannot download the recording"
-        # which indicates that the file has been deleted
-        ({"header": html_content_header,
-          "content": deleted_file_error_page_content},
-         downloader.ZoomFileAccessError, None)
+        # broken download link (returns html error page instead of stream)
+        ({"header": html_content_header},
+         downloader.ZoomDownloadLinkError, None)
     ]
 
     file_data = {
