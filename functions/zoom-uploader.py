@@ -69,7 +69,7 @@ def handler(event, context):
 
     messages = upload_queue.receive_messages(
         MaxNumberOfMessages=1,
-        VisibilityTimeout=300
+        VisibilityTimeout=900
     )
     if len(messages) == 0:
         logger.warning("No upload queue messages available.")

@@ -162,7 +162,7 @@ class ZipStack(core.Stack):
         uploader = ZipUploaderFunction(self, 'UploaderFunction',
             name=names.UPLOAD_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
-            timeout=600,
+            timeout=900,
             vpc_id=oc_vpc_id,
             security_group_id=oc_security_group_id,
             environment = {
