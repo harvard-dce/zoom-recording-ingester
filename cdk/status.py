@@ -22,3 +22,17 @@ class ZipStatus(core.Construct):
             removal_policy=core.RemovalPolicy.DESTROY,
             time_to_live_attribute="expiration"
         )
+
+        self.table.add_global_secondary_index(
+            index_name="time_index",
+            partition_key=dynamodb.Attribute(
+                name="update_date",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="update_time",
+                type=dynamodb.AttributeType.NUMBER
+            ),
+            read_capacity=1,
+            write_capacity=1
+        )

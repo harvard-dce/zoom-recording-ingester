@@ -1,9 +1,10 @@
-from common import setup_logging
+from common import setup_logging, current_day_and_time
 import json
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 from os import getenv as env
 from urllib.parse import unquote
+from datetime import datetime, timedelta
 
 import logging
 logger = logging.getLogger()
@@ -36,6 +37,13 @@ def handler(event, context):
     elif "recording_id" in query:
         value = unquote(query["recording_id"])
         r = table.scan(FilterExpression=Attr("recording_id").eq(value))
+    elif "recently_updated" in query:
+        value = int(query["recently_updated"])
+        today, seconds = current_day_and_time()
+        r = table.query(
+            IndexName="time_index",
+            KeyConditionExpression=Key("update_date").eq(today) & Key("update_time").gte(int(seconds) - value),
+        )
     else:
         return resp_400(
             "Missing identifer in query params. "
@@ -47,6 +55,7 @@ def handler(event, context):
     items = r["Items"]
     for item in items:
         item["meeting_id"] = str(item["meeting_id"])
+        item["update_time"] = str(item["update_time"])
         item.pop("expiration")
 
     return {

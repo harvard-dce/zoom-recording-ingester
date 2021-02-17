@@ -126,6 +126,16 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
     return r
 
 
+def current_day_and_time():
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    t = now.time()
+    seconds = timedelta(
+        hours=t.hour, minutes=t.minute, seconds=t.second
+    ).total_seconds()
+    return today, seconds
+
+
 def set_pipeline_status(
     correlation_id,
     state,
@@ -137,10 +147,12 @@ def set_pipeline_status(
     topic=None,
     oc_series_id=None
 ):
+    today, seconds = current_day_and_time()
     try:
-        update_expression = "set last_update=:l, expiration=:e, pipeline_state=:s"
+        update_expression = "set update_date=:d, update_time=:ts, expiration=:e, pipeline_state=:s"
         expression_attribute_values = {
-            ":l": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT),
+            ":d": today,
+            ":ts": int(seconds),
             ":e": int((datetime.now() + timedelta(days=7)).timestamp()),
             ":s": state.value
         }
