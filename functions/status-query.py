@@ -37,8 +37,8 @@ def handler(event, context):
     elif "recording_id" in query:
         value = unquote(query["recording_id"])
         r = table.scan(FilterExpression=Attr("recording_id").eq(value))
-    elif "recently_updated" in query:
-        value = int(query["recently_updated"])
+    elif "seconds" in query:
+        value = int(query["seconds"])
         today, seconds = current_day_and_time()
         r = table.query(
             IndexName="time_index",
@@ -47,7 +47,7 @@ def handler(event, context):
     else:
         return resp_400(
             "Missing identifer in query params. "
-            "Must include one of 'meeting_id', or 'recording_id'"
+            "Must include one of 'meeting_id', 'recording_id', or 'seconds'"
         )
 
     logger.info(r)
