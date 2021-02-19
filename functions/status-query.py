@@ -48,6 +48,7 @@ def handler(event, context):
                 f"Invalid number of seconds. Seconds must be <= {SECONDS_PER_DAY}"
             )
         elif seconds < threshold:
+            # handle case in which request spans two dates
             items = request_recent_items(table, today, 0)
             remaining = threshold - seconds
             ts = today.strptime(DATE_FORMAT)
