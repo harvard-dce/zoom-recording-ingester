@@ -2,10 +2,13 @@ import site
 from os.path import dirname, join
 site.addsitedir(join(dirname(dirname(__file__)), 'functions'))
 from importlib import import_module
+from datetime import datetime
+import os
 
 import json
 import requests_mock
 
+TIMESTAMP_FORMAT = os.getenv('TIMESTAMP_FORMAT')
 on_demand = import_module('zoom-on-demand')
 
 def test_missing_body(handler):
@@ -76,6 +79,8 @@ def test_on_demand_happy_trail(handler, mocker):
     mock_zoom_resp = mocker.Mock()
     mock_zoom_resp.json.return_value = {
         "id": "012345678",
+        "topic": "test topic",
+        "start_time": datetime.now().strftime(TIMESTAMP_FORMAT),
         "recording_files": [
             {"status": "completed"},
             {"status": "completed"}
