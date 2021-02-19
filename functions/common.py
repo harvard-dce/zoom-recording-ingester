@@ -23,6 +23,7 @@ ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
 APIGEE_KEY = env("APIGEE_KEY")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+DATE_FORMAT = "%Y-%m-%d"
 PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
 
 
@@ -126,14 +127,13 @@ def zoom_api_request(endpoint, seconds_valid=60, ignore_failure=False, retries=3
     return r
 
 
-def current_day_and_time():
-    now = datetime.now()
-    today = now.strftime("%Y-%m-%d")
-    t = now.time()
-    seconds = timedelta(
+def ts_to_date_and_seconds(ts):
+    date = ts.strftime(DATE_FORMAT)
+    t = ts.time()
+    seconds = int(timedelta(
         hours=t.hour, minutes=t.minute, seconds=t.second
-    ).total_seconds()
-    return today, seconds
+    ).total_seconds())
+    return date, seconds
 
 
 def set_pipeline_status(
@@ -147,7 +147,7 @@ def set_pipeline_status(
     topic=None,
     oc_series_id=None
 ):
-    today, seconds = current_day_and_time()
+    today, seconds = ts_to_date_and_seconds(datetime.utcnow())
     try:
         update_expression = "set update_date=:d, update_time=:ts, expiration=:e, pipeline_state=:s"
         expression_attribute_values = {
