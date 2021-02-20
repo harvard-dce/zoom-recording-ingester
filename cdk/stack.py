@@ -55,6 +55,7 @@ class ZipStack(core.Stack):
             project_git_url,
             gsheets_doc_id,
             gsheets_sheet_name,
+            slack_signing_secret,
             **kwargs
             ) -> None:
         
@@ -99,7 +100,8 @@ class ZipStack(core.Stack):
             name=names.STATUS_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
-                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
+                "SLACK_SIGNING_SECRET": slack_signing_secret
             }
         )
 

@@ -49,14 +49,17 @@ class ZipApi(core.Construct):
 
         self.rest_api_name = f"{stack_name}-{names.REST_API}"
 
-        log_group = logs.LogGroup(self, "apilogs",
+        log_group = logs.LogGroup(
+            self,
+            "apilogs",
             log_group_name=f"/aws/apigateway/{self.rest_api_name}/access_logs",
             removal_policy=core.RemovalPolicy.DESTROY,
             retention=logs.RetentionDays.SIX_MONTHS
         )
 
         self.api = apigw.LambdaRestApi(
-            self, "api",
+            self,
+            "api",
             handler=webhook_function,  # default handler
             rest_api_name=self.rest_api_name,
             proxy=False,
@@ -126,7 +129,7 @@ class ZipApi(core.Construct):
 
         self.status_query_resource = self.api.root.add_resource("status")
         status_query_integration = apigw.LambdaIntegration(status_query_function)
-        self.status_query_method = self.status_query_resource.add_method(
+        self.status_query_resource.add_method(
             "GET",
             status_query_integration,
             request_parameters={
@@ -140,6 +143,17 @@ class ZipApi(core.Construct):
                 }
             )]
         )
+        self.status_query_resource.add_method(
+            "POST",
+            status_query_integration,
+            method_responses=[apigw.MethodResponse(
+                status_code="200",
+                response_models={
+                    "application/json": apigw.Model.EMPTY_MODEL
+                }
+            )]
+        )
+
 
         def endpoint_url(resource_name):
             return (f"https://{self.api.rest_api_id}.execute-api."

@@ -66,6 +66,7 @@ stack_props = {
     "project_git_url": "https://github.com/harvard-dce/zoom-recording-ingester.git",
     "gsheets_doc_id": getenv("GSHEETS_DOC_ID"),
     "gsheets_sheet_name": getenv("GSHEETS_SHEET_NAME"),
+    "slack_signing_secret": getenv("SLACK_SIGNING_SECRET")
 }
 
 app = core.App()
