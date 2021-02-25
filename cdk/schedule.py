@@ -18,6 +18,6 @@ class ZipSchedule(core.Construct):
                 type=dynamodb.AttributeType.STRING
             ),
             read_capacity=1,
-            write_capacity=1,
+            write_capacity=3,
             removal_policy=core.RemovalPolicy.DESTROY
         )
