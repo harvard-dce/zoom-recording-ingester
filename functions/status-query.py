@@ -1,13 +1,16 @@
-from common import setup_logging, ts_to_date_and_seconds, DATE_FORMAT, TIMESTAMP_FORMAT
+from common import setup_logging, ts_to_date_and_seconds, DATE_FORMAT, \
+    TIMESTAMP_FORMAT, PipelineStatus, retrieve_schedule, schedule_days
 import json
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Key
 from os import getenv as env
-from urllib.parse import quote, unquote, parse_qs
+from urllib.parse import quote, parse_qs
 from datetime import datetime, timedelta
 import time
 import hmac
 import hashlib
+import requests
+from pytz import timezone
 
 import logging
 
@@ -16,18 +19,26 @@ logger = logging.getLogger()
 PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
 SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
 SECONDS_PER_DAY = 86400
-PRETTY_TIMESTAMP_FORMAT = "%A, %B %d, %Y at %I:%M%p"
+PRETTY_TIMESTAMP_FORMAT = "%A, %B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
+LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
 
 def resp_400(msg):
-    logger.error("http 400 response: {}".format(msg))
+    logger.error(f"http 400 response: {msg}")
     return {"statusCode": 400, "headers": {}, "body": msg}
 
 
-def resp_401(msg):
-    logger.error("http 400 response: {}".format(msg))
-    return {"statusCode": 401, "headers": {}, "body": msg}
+def slack_error_response(msg):
+    logger.error(f"Slack error response: {msg}")
+    return {
+        "statusCode": 200,
+        "headers": {},
+        "body": json.dumps({
+            "response_type": "ephemeral",
+            "text": msg
+        })
+    }
 
 
 @setup_logging
@@ -36,15 +47,20 @@ def handler(event, context):
     logger.info(event)
 
     meeting_id = None
-    recording_id = None
     request_seconds = None
-    slack_integration = False
-    if event["httpMethod"] == "GET":
+    slackbot = False
+    if slack_event(event):
+        if not valid_slack_request(event):
+            return slack_error_response("Slack request verification failed.")
+        slackbot = True
+        query = parse_qs(event["body"])
+        logger.info(query)
+        meeting_id = int(query["text"][0])
+        response_url = query["response_url"][0]
+    else:
         query = event["queryStringParameters"]
         if "meeting_id" in query:
             meeting_id = int(query["meeting_id"])
-        elif "recording_id" in query:
-            recording_id = unquote(query["recording_id"])
         elif "seconds" in query:
             request_seconds = int(query["seconds"])
         else:
@@ -52,23 +68,16 @@ def handler(event, context):
                 "Missing identifer in query params. "
                 "Must include one of 'meeting_id', 'recording_id', or 'seconds'"
             )
-    else:
-        if not valid_slack_request(event):
-            resp_401("Slack request verification failed")
-        slack_integration = True
-        query = parse_qs(event["body"])
-        logger.info(query)
-        meeting_id = int(query["text"][0])
 
     dynamodb = boto3.resource("dynamodb")
     logger.info(PIPELINE_STATUS_TABLE)
-    table = dynamodb.Table(PIPELINE_STATUS_TABLE)
+    status_table = dynamodb.Table(PIPELINE_STATUS_TABLE)
 
     if meeting_id:
-        r = table.scan(FilterExpression=Attr("meeting_id").eq(meeting_id))
-        items = r["Items"]
-    elif recording_id:
-        r = table.scan(FilterExpression=Attr("recording_id").eq(recording_id))
+        r = status_table.query(
+            IndexName="mid_index",
+            KeyConditionExpression=(Key("meeting_id").eq(meeting_id))
+        )
         items = r["Items"]
     elif request_seconds:
         now = datetime.utcnow()
@@ -81,26 +90,30 @@ def handler(event, context):
             )
         elif time_in_seconds < request_seconds:
             # handle case in which request spans two dates
-            items = request_recent_items(table, today, 0)
+            items = request_recent_items(status_table, today, 0)
             remaining = time_in_seconds - request_seconds
             ts = today.strptime(DATE_FORMAT)
             yesterday = (ts - timedelta(days=1)).strftime(DATE_FORMAT)
-            items += request_recent_items(table, yesterday, SECONDS_PER_DAY - remaining)
+            items += request_recent_items(
+                status_table,
+                yesterday,
+                SECONDS_PER_DAY - remaining
+            )
         else:
-            items = request_recent_items(table, today, time_in_seconds - request_seconds)
+            items = request_recent_items(
+                status_table,
+                today,
+                time_in_seconds - request_seconds
+            )
 
     logger.info(items)
 
     records = []
     for item in items:
         logger.info(item)
-        if "last_update" in item:
-            last_updated = item["last_update"]
-            last_updated = datetime.strptime(last_updated, TIMESTAMP_FORMAT).strftime(PRETTY_TIMESTAMP_FORMAT)
-        else:
-            date = datetime.strptime(item["update_date"], DATE_FORMAT)
-            ts = date + timedelta(seconds=int(item["update_time"]))
-            last_updated = ts.strftime(PRETTY_TIMESTAMP_FORMAT)
+        date = datetime.strptime(item["update_date"], DATE_FORMAT)
+        ts = date + timedelta(seconds=int(item["update_time"]))
+        last_updated = ts.strftime(TIMESTAMP_FORMAT)
 
         record = {
             "last_updated": last_updated,
@@ -110,68 +123,26 @@ def handler(event, context):
                 "meeting_id": int(item["meeting_id"]),
                 "recording_id": item["recording_id"],
                 "topic": item["topic"],
-                "recording_start_time": item["recording_start_time"]
+                "start_time": item["recording_start_time"]
             }
         }
         if "reason" in item:
-            record["status_reason"] = item["reason"]
+            record["reason"] = item["reason"]
 
         records.append(record)
 
-    if slack_integration:
-
-        s = f"*Data from {STACK_NAME}*\n"
-        s += f"*Zoom MID:* {items[0]['meeting_id']}\n"
-        s += f"*Topic:* {items[0]['topic']}\n\n"
-
-        blocks = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": s
-                }
-            }
-        ]
-
-        for item in items:
-            mgmt_url = f"https://zoom.us/recording/management/detail?meeting_id={quote(item['recording_id'])}"
-            heading = f"*Recording from {datetime.strptime(item['recording_start_time'], TIMESTAMP_FORMAT).strftime(PRETTY_TIMESTAMP_FORMAT)}*\n"
-
-            on_demand = "Yes" if item["origin"] == "on_demand" else "No"
-            body = f"*Zoom+ ingest request?* {on_demand}\n"
-
-            status = item["pipeline_state"]
-            status_msg = ""
-            if status == "IGNORED":
-                status_msg = f"*Status*: This message was ignored by ZIP on {last_updated}"
-                if "reason" in item and item["reason"] == "No opencast series match":
-                    status_msg += " because there was no match in the schedule."
-            else:
-                status_msg = f"Status: {item['pipeline_state']} (updated {last_updated})\n"
-                if "reason" in item:
-                    status_msg += f"Reason: {item['reason']}"
-
-            body += status_msg + "\n"
-            body += f"*Recordings page:* <{mgmt_url}>\n"
-
-            blocks.extend([
-                {
-                    "type": "divider"
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"{heading}{body}"
-                    }
-                }
-            ])
-
-        response = {
-            "response_type": "in_channel",
-            "blocks": blocks
-        }
+    if slackbot:
+        try:
+            if not records:
+                slack_error_response(
+                    f"No recordings found for Zoom MID {meeting_id}"
+                )
+            response = slack_response(records)
+            r = requests.post(response_url, data="This is a test")
+            logger.info(f"Response URL response: {r.status_code}")
+        except Exception as e:
+            logger.error(f"Error generating slack response: {str(e.with_traceback)}")
+            return slack_error_response("Ruh roh! Something went wrong.")
     else:
         response = {"records": records}
 
@@ -188,9 +159,19 @@ def request_recent_items(table, date, seconds):
         IndexName="time_index",
         KeyConditionExpression=(
             Key("update_date").eq(date) & Key("update_time").gte(seconds)
-        ),
+        )
     )
     return r["Items"]
+
+
+def slack_event(event):
+    return "Slackbot" in event["headers"]["User-Agent"]
+
+
+def pretty_local_time(ts):
+    tz = timezone(LOCAL_TIME_ZONE)
+    utc = datetime.strptime(ts, TIMESTAMP_FORMAT).replace(tzinfo=timezone("UTC"))
+    return utc.astimezone(tz).strftime(PRETTY_TIMESTAMP_FORMAT)
 
 
 def valid_slack_request(event):
@@ -212,3 +193,157 @@ def valid_slack_request(event):
     )
 
     return hmac.compare_digest(f"{version}={str(h.hexdigest())}", signature)
+
+
+def slack_response(records):
+    mid = records[0]["recording"]["meeting_id"]
+    topic = records[0]["recording"]["topic"]
+    schedule = retrieve_schedule(mid)
+    logger.info(schedule)
+
+    scheduled_events = []
+    for event in schedule["events"]:
+        event_time = datetime.strptime(event["time"], "%H:%M").strftime("%-I:%M%p")
+        scheduled_events.append(
+            f"{event['title']} on {schedule_days[event['day']]} at {event_time}"
+        )
+
+    mtg_details = f"Zoom MID: {mid}\n"
+    mtg_details += f"Opencast series ID: {schedule['opencast_series_id']}\n"
+    mtg_details += f"Course code: {schedule['course_code']}\n"
+    mtg_details += f":calendar: ZIP Schedule: {', '.join(scheduled_events)}"
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"{topic}"
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "plain_text",
+                    "text": f"Source: {STACK_NAME}",
+                }
+            ]
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": mtg_details
+            }
+        }
+    ]
+
+    for record in records:
+        start_time = pretty_local_time(record["recording"]["start_time"])
+        last_updated = pretty_local_time(record["last_updated"])
+        status = record["status"]
+        rec_id = quote(record['recording']['recording_id'])
+        mgmt_url = f"https://zoom.us/recording/management/detail?meeting_id={rec_id}"
+        on_demand = "Yes" if record["origin"] == "on_demand" else "No"
+
+        record_detail_fields = [
+            {
+                "type": "mrkdwn",
+                "text": f"*Last Updated:*\n{last_updated}"
+            },
+            {
+                "type": "mrkdwn",
+                "text": f"*Status*: {status_description(status)}\n"
+            },
+            {
+                "type": "mrkdwn",
+                "text": f"*Zoom+ ingest request?* {on_demand}"
+            }
+        ]
+
+        if "reason" in record:
+            reason = record["reason"]
+            record_detail_fields.append({
+                "type": "mrkdwn",
+                "text": f"*Reason:* {reason}"
+            })
+
+        record_data = [
+            {
+                "type": "divider"
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":movie_camera: *Recording on {start_time}*\n"
+                }
+            },
+            {
+                "type": "section",
+                "fields": record_detail_fields
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "Recording management (admins and hosts only)"
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "View recordings on Zoom"
+                    },
+                    "action_id": "action_id_0",
+                    "url": mgmt_url
+                }
+            }
+        ]
+
+        blocks.extend(record_data)
+
+    slack_response = {
+        "response_type": "in_channel",
+        "blocks": blocks
+    }
+    logger.info({"slack_response": slack_response})
+    return slack_response
+
+
+def status_description(status):
+
+    # Processing
+    if status == PipelineStatus.ON_DEMAND_RECEIVED.name:
+        return "Received Zoom+ request."
+    if status == PipelineStatus.WEBHOOK_RECEIVED.name:
+        return "Received by ZIP."
+    if status == PipelineStatus.SENT_TO_DOWNLOADER.name:
+        return "Received by ZIP."
+    if status == PipelineStatus.OC_SERIES_FOUND.name:
+        return "Found match in schedule. Downloading files."
+
+    # Ingesting
+    if status == PipelineStatus.SENT_TO_UPLOADER.name:
+        return "Ready to ingest to Opencast"
+    if status == PipelineStatus.UPLOADER_RECEIVED.name:
+        return "Ingesting to Opencast."
+
+    # Success
+    if status == PipelineStatus.SENT_TO_OPENCAST.name:
+        return ":white_check_mark: Complete. Ingested to Opencast."
+
+    # Ignored
+    if status == PipelineStatus.IGNORED.name:
+        return "Ignored by ZIP."
+
+    # Failures
+    if status == PipelineStatus.WEBHOOK_FAILED.name:
+        return ":x: Failed at receiving stage."
+    if status == PipelineStatus.DOWNLOADER_FAILED.name:
+        return ":x: Failed at file download stage."
+    if status == PipelineStatus.UPLOADER_FAILED.name:
+        return ":x: Failed at ingest to Opencast stage"
+
+    return status

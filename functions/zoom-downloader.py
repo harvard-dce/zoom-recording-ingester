@@ -4,11 +4,10 @@ import requests
 from os import getenv as env
 from pathlib import Path
 from common import setup_logging, set_pipeline_status, PipelineStatus, \
-    zoom_api_request, TIMESTAMP_FORMAT
+    zoom_api_request, TIMESTAMP_FORMAT, retrieve_schedule, schedule_days
 import subprocess
 from pytz import timezone
 from datetime import datetime
-from collections import OrderedDict
 import logging
 import concurrent.futures
 from copy import deepcopy
@@ -250,51 +249,21 @@ class Download:
         return self._created_utc.astimezone(tz)
 
     @property
-    def _class_schedule(self):
-        """
-        Retrieve the course schedule from DynamoDB.
-        """
-        dynamodb = boto3.resource("dynamodb")
-        table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
-
-        r = table.get_item(
-            Key={"zoom_series_id": str(self.data["zoom_series_id"])}
-        )
-
-        if "Item" not in r:
-            return None
-
-        schedule = r["Item"]
-        # DynamoDB sometimes returns type decimal.Decimal
-        schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
-        return schedule
-
-    @property
     def _series_id_from_schedule(self):
         """
         Check that the recording's start_time matches the schedule and
         extract the opencast series id.
         """
 
-        schedule = self._class_schedule
+        schedule = retrieve_schedule(self.data["zoom_series_id"])
 
         if not schedule:
             return None
 
-        days = OrderedDict([
-            ("M", "Mondays"),
-            ("T", "Tuesdays"),
-            ("W", "Wednesdays"),
-            ("R", "Thursdays"),
-            ("F", "Fridays"),
-            ("S", "Saturday"),
-            ("U", "Sunday")
-        ])
-
         zoom_time = self._created_local
         logger.info({"meeting creation time": zoom_time,
                      "course schedule": schedule})
-        zoom_day_code = list(days.keys())[zoom_time.weekday()]
+        zoom_day_code = list(schedule_days.keys())[zoom_time.weekday()]
 
         # events is a list of {title, day, time} dictionaries
         for event in schedule["events"]:

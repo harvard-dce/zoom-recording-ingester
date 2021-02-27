@@ -7,10 +7,11 @@ from functools import wraps
 from os import getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname
-from enum import Enum
+from enum import Enum, auto
 import boto3
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
+from collections import OrderedDict
 
 logger = logging.getLogger()
 
@@ -25,20 +26,32 @@ APIGEE_KEY = env("APIGEE_KEY")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 DATE_FORMAT = "%Y-%m-%d"
 PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
+CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 
 
 class PipelineStatus(Enum):
-    ON_DEMAND_RECEIVED = "ON_DEMAND_RECEIVED"
-    WEBHOOK_RECEIVED = "WEBHOOK_RECEIVED"
-    WEBHOOK_FAILED = "WEBHOOK_FAILED"
-    SENT_TO_DOWNLOADER = "SENT_TO_DOWNLOADER"
-    OC_SERIES_FOUND = "OC_SERIES_FOUND"
-    IGNORED = "IGNORED"
-    DOWNLOADER_FAILED = "DOWNLOADER_FAILED"
-    SENT_TO_UPLOADER = "SENT_TO_UPLOADER"
-    UPLOADER_RECEIVED = "UPLOADER_RECEIVED"
-    SENT_TO_OPENCAST = "SENT_TO_OPENCAST"
-    UPLOADER_FAILED = "UPLOADER_FAILED"
+    ON_DEMAND_RECEIVED = auto()
+    WEBHOOK_RECEIVED = auto()
+    WEBHOOK_FAILED = auto()
+    SENT_TO_DOWNLOADER = auto()
+    OC_SERIES_FOUND = auto()
+    IGNORED = auto()
+    DOWNLOADER_FAILED = auto()
+    SENT_TO_UPLOADER = auto()
+    UPLOADER_RECEIVED = auto()
+    SENT_TO_OPENCAST = auto()
+    UPLOADER_FAILED = auto()
+
+
+schedule_days = OrderedDict([
+            ("M", "Mondays"),
+            ("T", "Tuesdays"),
+            ("W", "Wednesdays"),
+            ("R", "Thursdays"),
+            ("F", "Fridays"),
+            ("S", "Saturday"),
+            ("U", "Sunday")
+        ])
 
 
 class ZoomApiRequestError(Exception):
@@ -154,7 +167,7 @@ def set_pipeline_status(
             ":d": today,
             ":ts": int(seconds),
             ":e": int((datetime.now() + timedelta(days=7)).timestamp()),
-            ":s": state.value
+            ":s": state.name
         }
         if meeting_id:
             update_expression += ", meeting_id=:m"
@@ -193,3 +206,20 @@ def set_pipeline_status(
         logger.exception(f"{error['Code']}: {error['Message']}")
     except Exception as e:
         logger.exception(f"Something went wrong updating pipeline status: {e}")
+
+
+def retrieve_schedule(zoom_mid):
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
+
+    r = table.get_item(
+        Key={"zoom_series_id": str(zoom_mid)}
+    )
+
+    if "Item" not in r:
+        return None
+
+    schedule = r["Item"]
+    schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
+
+    return schedule

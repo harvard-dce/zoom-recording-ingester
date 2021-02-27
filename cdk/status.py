@@ -24,6 +24,16 @@ class ZipStatus(core.Construct):
         )
 
         self.table.add_global_secondary_index(
+            index_name="mid_index",
+            partition_key=dynamodb.Attribute(
+                name="meeting_id",
+                type=dynamodb.AttributeType.NUMBER,
+            ),
+            read_capacity=1,
+            write_capacity=1
+        )
+
+        self.table.add_global_secondary_index(
             index_name="time_index",
             partition_key=dynamodb.Attribute(
                 name="update_date",

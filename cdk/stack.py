@@ -100,13 +100,17 @@ class ZipStack(core.Stack):
             name=names.STATUS_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
+                "STACK_NAME": self.stack_name,
                 "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
-                "SLACK_SIGNING_SECRET": slack_signing_secret
+                "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
+                "SLACK_SIGNING_SECRET": slack_signing_secret,
+                "LOCAL_TIME_ZONE": local_time_zone
             }
         )
 
         # grant status query function permissions
         pipeline_status.table.grant_read_write_data(status_query.function)
+        schedule.table.grant_read_write_data(status_query.function)
 
         on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
