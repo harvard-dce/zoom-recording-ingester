@@ -315,4 +315,3 @@ class ZipStack(core.Stack):
         log_notify.add_monitoring(monitoring)
         api.add_monitoring(monitoring)
         queues.add_monitoring(monitoring)
-

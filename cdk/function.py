@@ -71,6 +71,7 @@ class ZipFunction(core.Construct):
 class ZipOnDemandFunction(ZipFunction):
     pass
 
+
 class ZipWebhookFunction(ZipFunction):
 
     def add_monitoring(self, monitoring):

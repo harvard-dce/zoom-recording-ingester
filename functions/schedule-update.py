@@ -1,7 +1,7 @@
 from os import getenv as env
 import logging
-from common import setup_logging
-from gsheets import GSheet
+from common.common import setup_logging
+from common.gsheets import GSheet
 
 # If modifying scopes or the spreadsheet id,
 # a new token.pickle file must be generated

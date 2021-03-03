@@ -1,6 +1,7 @@
 import json
 from os import getenv as env
-import common
+from common.common import setup_logging, TIMESTAMP_FORMAT
+from common.status import PipelineStatus, set_pipeline_status
 from datetime import datetime, timedelta
 from pytz import timezone
 import boto3
@@ -51,7 +52,7 @@ INGEST_EVENT_TYPES = {
 }
 
 
-@common.setup_logging
+@setup_logging
 def handler(event, context):
     """
     This function accepts the incoming POST relay from the API Gateway endpoint
@@ -91,9 +92,9 @@ def handler(event, context):
 
     try:
         validate_payload(payload)
-        common.set_pipeline_status(
+        set_pipeline_status(
             correlation_id,
-            common.PipelineStatus.WEBHOOK_RECEIVED,
+            PipelineStatus.WEBHOOK_RECEIVED,
             meeting_id=payload["object"]["id"],
             recording_id=payload["object"]["uuid"],
             recording_start_time=payload["object"]["start_time"],
@@ -101,17 +102,17 @@ def handler(event, context):
             origin=origin
         )
     except BadWebhookData as e:
-        common.set_pipeline_status(
+        set_pipeline_status(
             correlation_id,
-            common.PipelineStatus.WEBHOOK_FAILED,
+            PipelineStatus.WEBHOOK_FAILED,
             reason="bad webhook data",
             origin=origin
         )
         return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
-        common.set_pipeline_status(
+        set_pipeline_status(
             correlation_id,
-            common.PipelineStatus.WEBHOOK_FAILED,
+            PipelineStatus.WEBHOOK_FAILED,
             reason="no mp4 files",
             origin=origin
         )
@@ -126,9 +127,9 @@ def handler(event, context):
     else:
         delay = DEFAULT_MESSAGE_DELAY
     send_sqs_message(sqs_message, delay)
-    common.set_pipeline_status(
+    set_pipeline_status(
         correlation_id,
-        common.PipelineStatus.SENT_TO_DOWNLOADER
+        PipelineStatus.SENT_TO_DOWNLOADER
     )
 
     return {
@@ -256,7 +257,7 @@ def construct_sqs_message(payload, correlation_id, zoom_event):
 
 
 def estimated_processing_mins(start_ts, duration_in_minutes):
-    rec_start = datetime.strptime(start_ts, common.TIMESTAMP_FORMAT)
+    rec_start = datetime.strptime(start_ts, TIMESTAMP_FORMAT)
     rec_end = rec_start + timedelta(minutes=duration_in_minutes)
     processing_time = datetime.utcnow() - rec_end
     return processing_time.total_seconds() // 60

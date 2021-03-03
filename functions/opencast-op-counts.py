@@ -3,7 +3,7 @@ from os import getenv as env
 import urllib.parse as urlparse
 
 import logging
-from common import setup_logging
+from common.common import setup_logging
 logger = logging.getLogger()
 
 OPENCAST_DB_URL = env("OPENCAST_DB_URL");
