@@ -7,6 +7,7 @@ from aws_cdk import (
 )
 from . import names
 
+
 class ZipFunction(core.Construct):
 
     def __init__(self, scope: core.Construct, id: str,
@@ -157,7 +158,8 @@ class ZipUploaderFunction(ZipFunction):
     def add_monitoring(self, monitoring):
         super().add_monitoring(monitoring)
 
-        minutes_in_pipeline = logs.MetricFilter(self,
+        logs.MetricFilter(
+            self,
             "MinutesInPipelineLogMetric",
             log_group=self.function.log_group,
             metric_name="MinutesInPipeline",
@@ -170,7 +172,8 @@ class ZipUploaderFunction(ZipFunction):
             )
         )
 
-        workflow_initiated = logs.MetricFilter(self,
+        logs.MetricFilter(
+            self,
             "WorkflowInitiatedLogMetric",
             log_group=self.function.log_group,
             metric_name="WorkflowInitiated",
@@ -193,4 +196,8 @@ class ZipScheduleUpdateFunction(ZipFunction):
 
 
 class ZipStatusQueryFunction(ZipFunction):
+    pass
+
+
+class ZipSlackQueryFunction(ZipFunction):
     pass

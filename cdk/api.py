@@ -8,14 +8,20 @@ from aws_cdk import (
 
 from . import names
 
+
 class ZipApi(core.Construct):
 
-    def __init__(self, scope: core.Construct, id: str,
-            webhook_function,
-            on_demand_function,
-            schedule_update_function,
-            status_query_function,
-            ingest_allowed_ips):
+    def __init__(
+        self,
+        scope: core.Construct,
+        id: str,
+        webhook_function,
+        on_demand_function,
+        schedule_update_function,
+        status_query_function,
+        slack_function,
+        ingest_allowed_ips
+    ):
         super().__init__(scope, id)
 
         stack_name = core.Stack.of(self).stack_name
@@ -26,8 +32,9 @@ class ZipApi(core.Construct):
                     effect=iam.Effect.ALLOW,
                     actions= ["execute-api:Invoke"],
                     principals=[iam.AnyPrincipal()],
-                    # note that the policy is a prop of the api which cannot reference itself
-                    # see the Cloudformation documentation for api gateway policy attribute
+                    # note that the policy is a prop of the api which cannot
+                    # reference itself, see the Cloudformation documentation
+                    # for api gateway policy attribute
                     resources=[core.Fn.join('', ['execute-api:/', '*'])]
                 ),
                 iam.PolicyStatement(
@@ -77,83 +84,41 @@ class ZipApi(core.Construct):
 
         self.api.add_api_key("ZoomIngesterApiKey")
 
-        self.new_recording_resource = self.api.root.add_resource("new_recording")
-        self.new_recording_method = self.new_recording_resource.add_method(
-            "POST",
-            method_responses=[
-                apigw.MethodResponse(
-                    status_code="200",
-                    response_models={
-                        "application/json": apigw.Model.EMPTY_MODEL
-                    }
-                )
-            ]
+        self.new_recording_resource = self.resource(
+            "new_recording",
+            webhook_function,
+            "POST"
         )
 
-        self.ingest_resource = self.api.root.add_resource("ingest",
-            default_cors_preflight_options=apigw.CorsOptions(
+        self.ingest_resource = self.resource(
+            "ingest",
+            on_demand_function,
+            "POST",
+            cors_options=apigw.CorsOptions(
                 allow_origins=apigw.Cors.ALL_ORIGINS,
                 allow_methods=["POST", "OPTIONS"],
-                allow_headers=apigw.Cors.DEFAULT_HEADERS \
-                              + ["Accept-Language","X-Requested-With"]
+                allow_headers=apigw.Cors.DEFAULT_HEADERS
+                              + ["Accept-Language", "X-Requested-With"]
             )
         )
-        on_demand_integration = apigw.LambdaIntegration(on_demand_function)
-        self.ingest_method = self.ingest_resource.add_method(
-            "POST",
-            on_demand_integration,
-            method_responses=[
-                apigw.MethodResponse(
-                    status_code="200",
-                    response_models={
-                        "application/json": apigw.Model.EMPTY_MODEL
-                    }
-                )
-            ]
+
+        self.schedule_update_resource = self.resource(
+            "schedule_update",
+            schedule_update_function,
+            "POST"
         )
 
-        self.schedule_update_resource = self.api.root.add_resource("schedule_update")
-        schedule_update_integration = apigw.LambdaIntegration(schedule_update_function)
-        self.schedule_update_method = self.schedule_update_resource.add_method(
-            "POST",
-            schedule_update_integration,
-            method_responses=[
-                apigw.MethodResponse(
-                    status_code="200",
-                    response_models={
-                        "application/json": apigw.Model.EMPTY_MODEL
-                    }
-                )
-            ]
+        self.status_query_resource = self.resource(
+            "status",
+            status_query_function,
+            "GET"
         )
 
-        self.status_query_resource = self.api.root.add_resource("status")
-        status_query_integration = apigw.LambdaIntegration(status_query_function)
-        self.status_query_resource.add_method(
-            "GET",
-            status_query_integration,
-            request_parameters={
-                "method.request.querystring.meeting_id": False,
-                "method.request.querystring.recording_id": False
-            },
-            method_responses=[apigw.MethodResponse(
-                status_code="200",
-                response_models={
-                    "application/json": apigw.Model.EMPTY_MODEL
-                }
-            )]
+        self.slack_resource = self.resource(
+            "slack",
+            slack_function,
+            "POST"
         )
-        self.status_query_resource.add_method(
-            "POST",
-            status_query_integration,
-            method_responses=[apigw.MethodResponse(
-                status_code="200",
-                response_models={
-                    "application/json": apigw.Model.EMPTY_MODEL
-                }
-            )]
-        )
-
 
         def endpoint_url(resource_name):
             return (f"https://{self.api.rest_api_id}.execute-api."
@@ -165,51 +130,99 @@ class ZipApi(core.Construct):
             endpoint_url("new_recording")
         )
 
-        core.CfnOutput(self, "WebhookEndpoint",
+        core.CfnOutput(
+            self,
+            "WebhookEndpoint",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-url",
             value=endpoint_url("new_recording")
         )
 
-        core.CfnOutput(self, "OnDemandEndpoint",
+        core.CfnOutput(
+            self,
+            "OnDemandEndpoint",
             export_name=f"{stack_name}-{names.ON_DEMAND_ENDPOINT}-url",
             value=endpoint_url("ingest")
         )
 
-        core.CfnOutput(self, "ScheduleUpdateEndpoint",
+        core.CfnOutput(
+            self,
+            "ScheduleUpdateEndpoint",
             export_name=f"{stack_name}-{names.SCHEDULE_UPDATE_ENDPOINT}-url",
             value=endpoint_url("schedule_update")
         )
 
-        core.CfnOutput(self, "StatusQueryEndpoint",
+        core.CfnOutput(
+            self, 
+            "StatusQueryEndpoint",
             export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-url",
             value=endpoint_url("status")
         )
 
-        core.CfnOutput(self, "WebhookResourceId",
+        core.CfnOutput(
+            self,
+            "WebhookResourceId",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-resource-id",
             value=self.new_recording_resource.resource_id
         )
 
-        core.CfnOutput(self, "OnDemandResourceId",
+        core.CfnOutput(
+            self,
+            "OnDemandResourceId",
             export_name=f"{stack_name}-{names.ON_DEMAND_ENDPOINT}-resource-id",
             value=self.ingest_resource.resource_id
         )
 
-        core.CfnOutput(self, "ScheduleUpdateResourceId",
+        core.CfnOutput(
+            self,
+            "ScheduleUpdateResourceId",
             export_name=f"{stack_name}-{names.SCHEDULE_UPDATE_ENDPOINT}-resource-id",
             value=self.schedule_update_resource.resource_id
         )
 
-        core.CfnOutput(self, "StatusQueryResourceId",
+        core.CfnOutput(
+            self,
+            "StatusQueryResourceId",
             export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-resource-id",
             value=self.status_query_resource.resource_id
         )
 
-        core.CfnOutput(self, "RestApiId",
+        core.CfnOutput(
+            self,
+            "SlackResourceId",
+            export_name=f"{stack_name}-{names.SLACK_ENDPOINT}-resource-id",
+            value=self.slack_resource.resource_id
+        )
+
+        core.CfnOutput(
+            self,
+            "RestApiId",
             export_name=f"{stack_name}-{names.REST_API}-id",
             value=self.api.rest_api_id
         )
 
+    def resource(
+        self,
+        resource_name,
+        lambda_function,
+        http_method,
+        cors_options=None
+    ):
+        resource = self.api.root.add_resource(
+            resource_name,
+            default_cors_preflight_options=cors_options
+        )
+        resource.add_method(
+            http_method,
+            apigw.LambdaIntegration(lambda_function),
+            method_responses=[apigw.MethodResponse(
+                status_code="200",
+                response_models={
+                    "application/json": apigw.Model.EMPTY_MODEL
+                }
+            )]
+        )
+        return resource
+ 
     def add_monitoring(self, monitoring):
 
         resource_metrics = [
@@ -219,7 +232,9 @@ class ZipApi(core.Construct):
         ]
         for resource, metric_name in resource_metrics:
             construct_id = f"{metric_name}-{resource.path.replace('/', '_')}-alarm"
-            alarm = cloudwatch.Alarm(self, construct_id,
+            alarm = cloudwatch.Alarm(
+                self,
+                construct_id,
                 metric=cloudwatch.Metric(
                     metric_name=metric_name,
                     namespace="AWS/ApiGateway",
@@ -238,7 +253,9 @@ class ZipApi(core.Construct):
             )
             monitoring.add_alarm_action(alarm)
 
-        webhook_latency_alarm = cloudwatch.Alarm(self, "WebhookLatencyAlarm",
+        webhook_latency_alarm = cloudwatch.Alarm(
+            self,
+            "WebhookLatencyAlarm",
             metric=cloudwatch.Metric(
                 metric_name="Latency",
                 namespace="AWS/ApiGateway",

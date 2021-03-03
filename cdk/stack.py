@@ -10,7 +10,7 @@ from .schedule import ZipSchedule
 from .status import ZipStatus
 from .function import (
     ZipDownloaderFunction,
-    ZipOnDemandFunction,
+    ZipOnDemandFunction, ZipSlackQueryFunction,
     ZipUploaderFunction,
     ZipOpCountsFunction,
     ZipWebhookFunction,
@@ -24,44 +24,50 @@ from .codebuild import ZipCodebuildProject
 from .monitoring import ZipMonitoring
 from . import names
 
+
 class ZipStack(core.Stack):
 
-    def __init__(self, scope: core.Construct, id: str,
-            lambda_code_bucket,
-            notification_email,
-            zoom_api_base_url,
-            zoom_api_key,
-            zoom_api_secret,
-            apigee_key,
-            local_time_zone,
-            default_series_id,
-            download_message_per_invocation,
-            opencast_api_user,
-            opencast_api_password,
-            default_publisher,
-            override_publisher,
-            override_contributor,
-            oc_workflow,
-            oc_flavor,
-            oc_track_upload_max,
-            oc_base_url,
-            oc_db_url,
-            ingest_allowed_ips,
-            zoom_admin_id,
-            oc_vpc_id,
-            oc_security_group_id,
-            downloader_event_rate,
-            uploader_event_rate,
-            project_git_url,
-            gsheets_doc_id,
-            gsheets_sheet_name,
-            slack_signing_secret,
-            **kwargs
-            ) -> None:
-        
+    def __init__(
+        self,
+        scope: core.Construct, 
+        id: str,
+        lambda_code_bucket,
+        notification_email,
+        zoom_api_base_url,
+        zoom_api_key,
+        zoom_api_secret,
+        apigee_key,
+        local_time_zone,
+        default_series_id,
+        download_message_per_invocation,
+        opencast_api_user,
+        opencast_api_password,
+        default_publisher,
+        override_publisher,
+        override_contributor,
+        oc_workflow,
+        oc_flavor,
+        oc_track_upload_max,
+        oc_base_url,
+        oc_db_url,
+        ingest_allowed_ips,
+        zoom_admin_id,
+        oc_vpc_id,
+        oc_security_group_id,
+        downloader_event_rate,
+        uploader_event_rate,
+        project_git_url,
+        gsheets_doc_id,
+        gsheets_sheet_name,
+        slack_signing_secret,
+        **kwargs
+    ) -> None:
+
         super().__init__(scope, id, **kwargs)
 
-        monitoring = ZipMonitoring(self, 'ZipMonitoring',
+        monitoring = ZipMonitoring(
+            self,
+            "ZipMonitoring",
             notification_email=notification_email,
         )
 
@@ -78,7 +84,9 @@ class ZipStack(core.Stack):
 
         pipeline_status = ZipStatus(self, "Status")
 
-        schedule_update = ZipScheduleUpdateFunction(self, "ScheduleUpdateFunction",
+        schedule_update = ZipScheduleUpdateFunction(
+            self,
+            "ScheduleUpdateFunction",
             name=names.SCHEDULE_UPDATE_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
@@ -96,8 +104,23 @@ class ZipStack(core.Stack):
         # grant schedule update function access to dynamo
         schedule.table.grant_read_write_data(schedule_update.function)
 
-        status_query = ZipStatusQueryFunction(self, "StatusFunction",
+        status_query = ZipStatusQueryFunction(
+            self,
+            "StatusFunction",
             name=names.STATUS_FUNCTION,
+            lambda_code_bucket=lambda_code_bucket,
+            environment={
+                "STACK_NAME": self.stack_name,
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
+            }
+        )
+        # grant status query function permissions
+        pipeline_status.table.grant_read_write_data(status_query.function)
+
+        slack = ZipSlackQueryFunction(
+            self,
+            "SlackFunction",
+            name=names.SLACK_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
                 "STACK_NAME": self.stack_name,
@@ -107,12 +130,13 @@ class ZipStack(core.Stack):
                 "LOCAL_TIME_ZONE": local_time_zone
             }
         )
+        # grant slack function permissions
+        pipeline_status.table.grant_read_write_data(slack.function)
+        schedule.table.grant_read_write_data(slack.function)
 
-        # grant status query function permissions
-        pipeline_status.table.grant_read_write_data(status_query.function)
-        schedule.table.grant_read_write_data(status_query.function)
-
-        on_demand = ZipOnDemandFunction(self, "OnDemandFunction",
+        on_demand = ZipOnDemandFunction(
+            self,
+            "OnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
@@ -127,7 +151,9 @@ class ZipStack(core.Stack):
         # grant on demand function permissions
         pipeline_status.table.grant_read_write_data(on_demand.function)
 
-        webhook = ZipWebhookFunction(self, "WebhookFunction",
+        webhook = ZipWebhookFunction(
+            self,
+            "WebhookFunction",
             name=names.WEBHOOK_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
@@ -144,9 +170,11 @@ class ZipStack(core.Stack):
 
         # downloader lambda checks for matches with the course schedule
         # and uploads matching recordings to S3
-        downloader = ZipDownloaderFunction(self, "DownloadFunction",
+        downloader = ZipDownloaderFunction(
+            self,
+            "DownloadFunction",
             name=names.DOWNLOAD_FUNCTION,
-            lambda_code_bucket = lambda_code_bucket,
+            lambda_code_bucket=lambda_code_bucket,
             timeout=900,
             memory_size=500,
             environment={
@@ -177,9 +205,11 @@ class ZipStack(core.Stack):
         pipeline_status.table.grant_read_write_data(downloader.function)
         recordings_bucket.bucket.grant_write(downloader.function)
 
-        op_counts = ZipOpCountsFunction(self, 'OpCountsFunction',
+        op_counts = ZipOpCountsFunction(
+            self,
+            "OpCountsFunction",
             name=names.OP_COUNTS_FUNCTION,
-            lambda_code_bucket = lambda_code_bucket,
+            lambda_code_bucket=lambda_code_bucket,
             vpc_id=oc_vpc_id,
             security_group_id=oc_security_group_id,
             environment={
@@ -188,13 +218,15 @@ class ZipStack(core.Stack):
         )
 
         # uploader lambda uploads recordings to opencast
-        uploader = ZipUploaderFunction(self, 'UploaderFunction',
+        uploader = ZipUploaderFunction(
+            self, 
+            "UploaderFunction",
             name=names.UPLOAD_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             timeout=900,
             vpc_id=oc_vpc_id,
             security_group_id=oc_security_group_id,
-            environment = {
+            environment={
                 "OPENCAST_API_USER": opencast_api_user,
                 "OPENCAST_API_PASSWORD": opencast_api_password,
                 "DEFAULT_PUBLISHER": default_publisher,
@@ -225,13 +257,17 @@ class ZipStack(core.Stack):
         recordings_bucket.bucket.grant_read(downloader.function)
         recordings_bucket.bucket.grant_read(uploader.function)
 
-        log_notify = ZipLogNotificationsFunction(self, 'LogNotificationFunction',
+        log_notify = ZipLogNotificationsFunction(
+            self,
+            "LogNotificationFunction",
             name=names.LOG_NOTIFICATION_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={}
         )
 
-        api = ZipApi(self, "RestApi",
+        api = ZipApi(
+            self,
+            "RestApi",
             on_demand_function=on_demand.function,
             webhook_function=webhook.function,
             schedule_update_function=schedule_update.function,
@@ -239,17 +275,23 @@ class ZipStack(core.Stack):
             ingest_allowed_ips=ingest_allowed_ips
         )
 
-        download_event = ZipEvent(self, "DownloadEvent",
+        ZipEvent(
+            self,
+            "DownloadEvent",
             function=downloader.function,
             event_rate=downloader_event_rate
         )
 
-        uploader_event = ZipEvent(self, "UploadEvent",
+        ZipEvent(
+            self,
+            "UploadEvent",
             function=uploader.function,
             event_rate=uploader_event_rate
         )
 
-        codebuild_project = ZipCodebuildProject(self, "CodebuildProject",
+        ZipCodebuildProject(
+            self,
+            "CodebuildProject",
             lambda_code_bucket=lambda_code_bucket,
             project_git_url=project_git_url,
             policy_resources=[
