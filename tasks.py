@@ -8,13 +8,13 @@ import shutil
 from datetime import datetime, timedelta, date as datetime_date
 from invoke import task, Collection
 from invoke.exceptions import Exit
-from os import symlink, getenv as env
+from os import symlink, mkdir, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import zoom_api_request
-from functions.gsheets import GSheetsAuth, \
+from functions.common.common import zoom_api_request
+from functions.common.gsheets import GSheetsAuth, \
     schedule_json_to_dynamo, schedule_csv_to_dynamo
 from multiprocessing import Process
 from urllib.parse import urlparse, quote
@@ -845,9 +845,17 @@ def __build_function(ctx, func, upload_to_s3=False):
     if exists(req_file):
         ctx.run("pip install -U -r {} -t {}".format(req_file, build_path), hide=1)
 
-    for module in [func, 'common', 'gsheets']:
-        module_path = join(dirname(__file__), 'functions/{}.py'.format(module))
-        module_dist_path = join(build_path, '{}.py'.format(module))
+    module_path = join(dirname(__file__), f"functions/{func}.py")
+    module_dist_path = join(build_path, f"{func}.py")
+    try:
+        symlink(module_path, module_dist_path)
+    except FileExistsError:
+        pass
+
+    mkdir(join(build_path, "common"))
+    for module in ["common", "status", "gsheets"]:
+        module_path = join(dirname(__file__), f"functions/common/{module}.py")
+        module_dist_path = join(build_path, f"common/{module}.py")
         try:
             symlink(module_path, module_dist_path)
         except FileExistsError:

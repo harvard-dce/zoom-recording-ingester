@@ -272,6 +272,7 @@ class ZipStack(core.Stack):
             webhook_function=webhook.function,
             schedule_update_function=schedule_update.function,
             status_query_function=status_query.function,
+            slack_function=slack.function,
             ingest_allowed_ips=ingest_allowed_ips
         )
 

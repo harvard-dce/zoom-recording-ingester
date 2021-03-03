@@ -160,6 +160,13 @@ class ZipApi(core.Construct):
 
         core.CfnOutput(
             self,
+            "SlackEndpoint",
+            export_name=f"{stack_name}-{names.SLACK_ENDPOINT}-url",
+            value=endpoint_url("slack")
+        )
+
+        core.CfnOutput(
+            self,
             "WebhookResourceId",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-resource-id",
             value=self.new_recording_resource.resource_id
