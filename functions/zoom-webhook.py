@@ -1,6 +1,6 @@
 import json
 from os import getenv as env
-from common.common import setup_logging, TIMESTAMP_FORMAT
+from common import setup_logging, TIMESTAMP_FORMAT
 from common.status import PipelineStatus, set_pipeline_status
 from datetime import datetime, timedelta
 from pytz import timezone
@@ -206,8 +206,9 @@ def validate_payload(payload):
 
 def construct_sqs_message(payload, correlation_id, zoom_event):
     now = datetime.strftime(
-                timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
-                common.TIMESTAMP_FORMAT)
+        timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
+        TIMESTAMP_FORMAT
+    )
 
     if "allow_multiple_ingests" in payload:
         allow_multiple_ingests = payload["allow_multiple_ingests"]

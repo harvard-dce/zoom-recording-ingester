@@ -8,7 +8,7 @@ import shutil
 from datetime import datetime, timedelta, date as datetime_date
 from invoke import task, Collection
 from invoke.exceptions import Exit
-from os import symlink, mkdir, getenv as env
+from os import symlink, mkdir, listdir, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
@@ -845,17 +845,14 @@ def __build_function(ctx, func, upload_to_s3=False):
     if exists(req_file):
         ctx.run("pip install -U -r {} -t {}".format(req_file, build_path), hide=1)
 
-    module_path = join(dirname(__file__), f"functions/{func}.py")
-    module_dist_path = join(build_path, f"{func}.py")
-    try:
-        symlink(module_path, module_dist_path)
-    except FileExistsError:
-        pass
-
     mkdir(join(build_path, "common"))
-    for module in ["common", "status", "gsheets"]:
-        module_path = join(dirname(__file__), f"functions/common/{module}.py")
-        module_dist_path = join(build_path, f"common/{module}.py")
+    modules = [
+        "common/" + f.split(".")[0] for f in listdir("functions/common")
+    ]
+    modules.append(func)
+    for module in modules:
+        module_path = join(dirname(__file__), f"functions/{module}.py")
+        module_dist_path = join(build_path, f"{module}.py")
         try:
             symlink(module_path, module_dist_path)
         except FileExistsError:
