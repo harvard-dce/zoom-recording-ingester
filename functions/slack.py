@@ -21,11 +21,6 @@ STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 
 
-def resp_400(msg):
-    logger.error(f"http 400 response: {msg}")
-    return {"statusCode": 400, "headers": {}, "body": msg}
-
-
 def slack_error_response(msg):
     logger.error(f"Slack error response: {msg}")
     return {
@@ -34,6 +29,33 @@ def slack_error_response(msg):
         "body": json.dumps({
             "response_type": "ephemeral",
             "text": msg
+        })
+    }
+
+
+def slack_help_response():
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": "These are the available ZIP commands:"
+            }
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": ">`/zip [zoom-mid]` See the status of the latest ZIP ingests with the specified Zoom MID."
+            }
+        }
+    ]
+    return {
+        "statusCode": 200,
+        "headers": {},
+        "body": json.dumps({
+            "response_type": "ephemeral",
+            "blocks": blocks
         })
     }
 
@@ -52,14 +74,23 @@ def handler(event, context):
     query = parse_qs(event["body"])
     logger.info(query)
 
-    meeting_id = int(query["text"][0])
+    text = query["text"][0]
+    if text == "help":
+        return slack_help_response()
+
+    try:
+        meeting_id = int(text)
+    except ValueError:
+        return slack_error_response(
+            f"'{text}'' is not a valid command."
+        )
     response_url = query["response_url"][0]
 
     records = status_by_mid(meeting_id)
 
     try:
         if not records:
-            slack_error_response(
+            return slack_error_response(
                 f"No recordings found for Zoom MID {meeting_id}"
             )
         response = slack_response(records)

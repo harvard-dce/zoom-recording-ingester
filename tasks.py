@@ -208,6 +208,11 @@ def deploy_status(ctx, do_release=False):
 
 
 @task(pre=[production_failsafe])
+def deploy_slack(ctx, do_release=False):
+    deploy(ctx, names.SLACK_FUNCTION, do_release)
+
+
+@task(pre=[production_failsafe])
 def deploy_on_demand(ctx, do_release=False):
     deploy(ctx, names.ON_DEMAND_FUNCTION, do_release)
 
@@ -706,6 +711,7 @@ deploy_ns.add_task(deploy_uploader, 'uploader')
 deploy_ns.add_task(deploy_opencast_op_counts, 'opencast-op-counts')
 deploy_ns.add_task(deploy_on_demand, 'on-demand')
 deploy_ns.add_task(deploy_status, 'status-query')
+deploy_ns.add_task(deploy_slack, 'slack')
 ns.add_collection(deploy_ns)
 
 exec_ns = Collection('exec')
