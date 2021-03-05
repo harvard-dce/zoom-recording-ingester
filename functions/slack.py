@@ -19,11 +19,12 @@ SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
 PRETTY_TIMESTAMP_FORMAT = "%B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
-RESULTS_BUTTON_TEXT = "Next 2 Results"
+RESULTS_PER_REQUEST = 2
+RESULTS_BUTTON_TEXT = f"Next {RESULTS_PER_REQUEST} Results"
 
 
 def resp_204(msg):
-    logger.info("http 204 response: {}".format(msg))
+    logger.info(f"http 204 response: {msg}")
     return {
         "statusCode": 204,
         "headers": {},
@@ -79,7 +80,6 @@ def slack_help_response():
 def handler(event, context):
 
     logger.info(event)
-
     try:
         if not valid_slack_request(event):
             return slack_error_response("Slack request verification failed.")
@@ -123,33 +123,25 @@ def handler(event, context):
 
     try:
         if slash_command:
-            blocks = slack_response(records)
+            blocks = slack_response_blocks(records)
             if not blocks:
                 return slack_error_response(
                     f"No recordings found for Zoom MID {meeting_id}"
                 )
-            response = {
-                "response_type": "in_channel",
-                "blocks": blocks
-            }
             return {
                 "statusCode": 200,
                 "headers": {},
-                "body": json.dumps(response)
+                "body": json.dumps({
+                    "response_type": "in_channel",
+                    "blocks": blocks
+                })
             }
         else:
-            blocks = slack_response(records, max_results=records_sent + 2)
-            logger.info(f"Send interaction response to response_url: {response_url}")
-            r = requests.post(
+            send_updated_response(
                 response_url,
-                json={
-                    "response_type": "in_channel",
-                    "replace_original": True,
-                    "blocks": blocks
-                }
+                records,
+                max_results=records_sent + RESULTS_PER_REQUEST
             )
-            logger.info(f"Response url returned status {r.status_code}")
-            r.raise_for_status()
             return resp_204("Interaction response successful.")
     except Exception as e:
         logger.error(f"Error generating slack response: {str(e)}")
@@ -191,7 +183,22 @@ def valid_slack_request(event):
     return hmac.compare_digest(f"{version}={str(h.hexdigest())}", signature)
 
 
-def slack_response(records, max_results=2):
+def send_updated_response(response_url, records, max_results):
+    blocks = slack_response_blocks(records, max_results=max_results)
+    logger.info(f"Send interaction response to response_url: {response_url}")
+    r = requests.post(
+        response_url,
+        json={
+            "response_type": "in_channel",
+            "replace_original": True,
+            "blocks": blocks
+        }
+    )
+    logger.info(f"Response url returned status {r.status_code}")
+    r.raise_for_status()
+
+
+def slack_response_blocks(records, max_results=RESULTS_PER_REQUEST):
     if not records:
         return None
     # sort by recording start time
@@ -200,7 +207,7 @@ def slack_response(records, max_results=2):
         key=lambda r: r["recording"]["start_time"],
         reverse=True
     )
-    # limit to 2 most recent results
+    # limit amount of results
     more_results = len(records) > max_results
     records = records[:max_results]
 
@@ -336,7 +343,7 @@ def slack_response(records, max_results=2):
                     "type": "section",
                     "text": {
                         "type": "plain_text",
-                        "text": "No more results."
+                        "text": "End of results."
                     }
                 },
             ]
