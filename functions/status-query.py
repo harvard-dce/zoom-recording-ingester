@@ -39,6 +39,9 @@ def handler(event, context):
     except InvalidStatusQuery as e:
         return resp_400(e)
 
+    # sort by last updated
+    records = sorted(records, key=lambda r: r["last_updated"], reverse=True)
+
     return {
         "statusCode": 200,
         "headers": {},

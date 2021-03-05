@@ -183,4 +183,5 @@ def format_status_records(items):
             record["reason"] = item["reason"]
 
         records.append(record)
+
     return records

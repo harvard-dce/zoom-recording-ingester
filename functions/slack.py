@@ -19,6 +19,21 @@ SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
 PRETTY_TIMESTAMP_FORMAT = "%B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+RESULTS_BUTTON_TEXT = "Next 2 Results"
+
+
+def resp_204(msg):
+    logger.info("http 204 response: {}".format(msg))
+    return {
+        "statusCode": 204,
+        "headers": {},
+        "body": ""  # 204 = no content
+    }
+
+
+def resp_400(msg):
+    logger.error(f"http 400 response: {msg}")
+    return {"statusCode": 400, "headers": {}, "body": msg}
 
 
 def slack_error_response(msg):
@@ -74,39 +89,76 @@ def handler(event, context):
     query = parse_qs(event["body"])
     logger.info(query)
 
-    text = query["text"][0]
-    if text == "help":
-        return slack_help_response()
-
-    try:
-        meeting_id = int(text)
-    except ValueError:
-        return slack_error_response(
-            f"'{text}'' is not a valid command."
+    if "command" in query:
+        slash_command = True
+        cmd = query["command"][0]
+        text = query["text"][0]
+        if text == "help":
+            return slack_help_response()
+        try:
+            meeting_id = int(text)
+        except ValueError:
+            return slack_error_response(
+                f"Sorry, `{cmd} {text}` is not a valid command. Try `{cmd} help`?"
+            )
+        response_url = query["response_url"][0]
+    else:
+        slash_command = False
+        payload = json.loads(query["payload"][0])
+        logger.info({"interaction_payload": payload})
+        logger.info(
+            f"Interaction from user {payload['user']['username']}"
         )
-    response_url = query["response_url"][0]
+        response_url = payload["response_url"]
+
+        action_text = payload["actions"][0]["text"]["text"]
+        if action_text != RESULTS_BUTTON_TEXT:
+            return resp_204(f"Ignore action: {action_text}")
+        action_value = json.loads(payload["actions"][0]["value"])
+        meeting_id = action_value["mid"]
+        records_sent = action_value["count"]
+        logger.info(f"Interaction value: {action_value}")
 
     records = status_by_mid(meeting_id)
 
     try:
-        if not records:
-            return slack_error_response(
-                f"No recordings found for Zoom MID {meeting_id}"
+        if slash_command:
+            blocks = slack_response(records)
+            if not blocks:
+                return slack_error_response(
+                    f"No recordings found for Zoom MID {meeting_id}"
+                )
+            response = {
+                "response_type": "in_channel",
+                "blocks": blocks
+            }
+            return {
+                "statusCode": 200,
+                "headers": {},
+                "body": json.dumps(response)
+            }
+        else:
+            blocks = slack_response(records, max_results=records_sent + 2)
+            logger.info(f"Send interaction response to response_url: {response_url}")
+            r = requests.post(
+                response_url,
+                json={
+                    "response_type": "in_channel",
+                    "replace_original": True,
+                    "blocks": blocks
+                }
             )
-        response = slack_response(records)
-        r = requests.post(response_url, data="This is a test")
-        logger.info(f"Response URL response: {r.status_code}")
+            logger.info(f"Response url returned status {r.status_code}")
+            r.raise_for_status()
+            return resp_204("Interaction response successful.")
     except Exception as e:
         logger.error(f"Error generating slack response: {str(e)}")
-        return slack_error_response(
-            "We're sorry! There was an error when handling your request."
-        )
-
-    return {
-        "statusCode": 200,
-        "headers": {},
-        "body": json.dumps(response)
-    }
+        if slash_command:
+            return slack_error_response(
+                f"We're sorry! There was an error when handling your request: `{cmd} {text}`"
+            )
+        else:
+            return resp_400("Error handling interaction.")
 
 
 def pretty_local_time(ts):
@@ -139,20 +191,39 @@ def valid_slack_request(event):
     return hmac.compare_digest(f"{version}={str(h.hexdigest())}", signature)
 
 
-def slack_response(records):
+def slack_response(records, max_results=2):
+    if not records:
+        return None
+    # sort by recording start time
+    records = sorted(
+        records,
+        key=lambda r: r["recording"]["start_time"],
+        reverse=True
+    )
+    # limit to 2 most recent results
+    more_results = len(records) > max_results
+    records = records[:max_results]
+
     mid = records[0]["recording"]["meeting_id"]
     topic = records[0]["recording"]["topic"]
     schedule = retrieve_schedule(mid)
-    logger.info(schedule)
+    if schedule:
+        logger.info({"schedule": schedule})
+        events = ""
+        for i, event in enumerate(schedule["events"]):
+            event_time = datetime.strptime(
+                event["time"], "%H:%M"
+            ).strftime("%-I:%M%p")
+            events += f":calendar: {schedule['course_code']} {event['title']} "
+            events += f"on {schedule_days[event['day']]} at {event_time}"
 
-    events = ""
-    for i, event in enumerate(schedule["events"]):
-        event_time = datetime.strptime(event["time"], "%H:%M").strftime("%-I:%M%p")
-        events += f":calendar: {schedule['course_code']} {event['title']} "
-        events += f"on {schedule_days[event['day']]} at {event_time}"
-
-        if i + 1 < len(schedule["events"]):
-            events += "\n"
+            if i + 1 < len(schedule["events"]):
+                events += "\n"
+        opencast_mapping = f":arrow_right: *Opencast Series:* {schedule['opencast_series_id']}"
+    else:
+        logger.info(f"No matching schedule for mid {mid}")
+        events = ":calendar: No ZIP ingests scheduled."
+        opencast_mapping = ""
 
     blocks = [
         {
@@ -175,7 +246,7 @@ def slack_response(records):
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Zoom Meeting:* {mid} :arrow_right: *Opencast Series:* {schedule['opencast_series_id']}"
+                "text": f"*Zoom Meeting:* {mid} {opencast_mapping}"
             }
         },
         {
@@ -195,6 +266,14 @@ def slack_response(records):
         on_demand = "Yes" if record["origin"] == "on_demand" else "No"
 
         record_detail_fields = [
+            {
+                "type": "mrkdwn",
+                "text": f"*Zoom+ ingest request?* {on_demand}"
+            },
+            {
+                "type": "mrkdwn",
+                "text": f"*View in Zoom:* <{mgmt_url}|Recording Management>"
+            },
             {
                 "type": "mrkdwn",
                 "text": f"*Last Updated:*\n{last_updated}"
@@ -218,41 +297,52 @@ def slack_response(records):
             },
             {
                 "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Zoom+ ingest request?* {on_demand}"
-                }
-            },
-            {
-                "type": "section",
                 "fields": record_detail_fields
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "Recording management (admins and hosts only)"
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "View in Zoom"
-                    },
-                    "action_id": "action_id_0",
-                    "url": mgmt_url
-                }
             }
         ]
 
         blocks.extend(record_data)
 
-    slack_response = {
-        "response_type": "in_channel",
-        "blocks": blocks
-    }
-    logger.info({"slack_response": slack_response})
-    return slack_response
+    if more_results:
+        more_results_button = [
+            {
+                "type": "divider"
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "emoji": True,
+                            "text": RESULTS_BUTTON_TEXT
+                        },
+                        "value": json.dumps({
+                            "mid": mid,
+                            "count": len(records)
+                        })
+                    }
+                ]
+            }
+        ]
+        blocks.extend(more_results_button)
+    else:
+        blocks.extend([
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "No more results."
+                    }
+                },
+            ]
+        )
+
+    return blocks
 
 
 def status_description(record):
