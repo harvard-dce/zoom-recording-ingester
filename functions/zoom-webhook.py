@@ -110,9 +110,15 @@ def handler(event, context):
         )
         return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
+        # required object fields check happens before mp4 file check
+        # so we can include some metadata here
         set_pipeline_status(
             correlation_id,
             PipelineStatus.WEBHOOK_FAILED,
+            meeting_id=payload["object"]["id"],
+            recording_id=payload["object"]["uuid"],
+            recording_start_time=payload["object"]["start_time"],
+            topic=payload["object"]["topic"],
             reason="no mp4 files",
             origin=origin
         )
