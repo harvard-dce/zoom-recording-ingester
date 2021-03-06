@@ -60,7 +60,7 @@ def set_pipeline_status(
     recording_id=None,
     recording_start_time=None,
     topic=None,
-    oc_series_id=None
+    oc_series_id=None,
 ):
     today, seconds = ts_to_date_and_seconds(datetime.utcnow())
     try:
@@ -93,11 +93,29 @@ def set_pipeline_status(
             update_expression += ", oc_series_id=:osi"
             expression_attribute_values[":osi"] = oc_series_id
 
-        status_table.update_item(
-            Key={"correlation_id": correlation_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_attribute_values
-        )
+        # When a recording enters the ZIP pipeline, for simplicity,
+        # only the first status tracking update includes additional metadata
+        # such as the meeting_id or origin. Subsequent status updates report
+        # status using a unique correlation id.
+        # Prevent adding records to dynamo status table for recordings
+        # that haven't been tracked since the beginning of the pipeline and
+        # therefore don't contain enough useful metadata. (This happens when
+        # you start status tracking for the first time or make modifications
+        # to the table that require it to be recreated.)
+        if not meeting_id or not origin:
+            status_table.update_item(
+                Key={"correlation_id": correlation_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_attribute_values,
+                ConditionExpression="attribute_exists(meeting_id) AND attribute_exists(origin)"
+            )
+        else:
+            status_table.update_item(
+                Key={"correlation_id": correlation_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_attribute_values,
+            )
+
         logger.info(
             f"Set pipeline status to {state.value} for id {correlation_id}"
         )
