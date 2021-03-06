@@ -184,7 +184,11 @@ def valid_slack_request(event):
 
 
 def send_updated_response(response_url, records, max_results):
-    blocks = slack_response_blocks(records, max_results=max_results)
+    blocks = slack_response_blocks(
+        records,
+        max_results=max_results,
+        interaction=True
+    )
     logger.info(f"Send interaction response to response_url: {response_url}")
     r = requests.post(
         response_url,
@@ -198,7 +202,11 @@ def send_updated_response(response_url, records, max_results):
     r.raise_for_status()
 
 
-def slack_response_blocks(records, max_results=RESULTS_PER_REQUEST):
+def slack_response_blocks(
+    records,
+    max_results=RESULTS_PER_REQUEST,
+    interaction=False
+):
     if not records:
         return None
     # sort by recording start time
@@ -334,7 +342,7 @@ def slack_response_blocks(records, max_results=RESULTS_PER_REQUEST):
             }
         ]
         blocks.extend(more_results_button)
-    else:
+    elif interaction:
         blocks.extend([
                 {
                     "type": "divider"
