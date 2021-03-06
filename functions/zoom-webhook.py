@@ -92,6 +92,7 @@ def handler(event, context):
 
     try:
         validate_payload(payload)
+        # after payload validation, can be sure required object fields exist
         set_pipeline_status(
             correlation_id,
             PipelineStatus.WEBHOOK_RECEIVED,
@@ -101,25 +102,20 @@ def handler(event, context):
             topic=payload["object"]["topic"],
             origin=origin
         )
+        validate_recording_files(payload["object"]["recording_files"])
     except BadWebhookData as e:
         set_pipeline_status(
             correlation_id,
             PipelineStatus.WEBHOOK_FAILED,
-            reason="bad webhook data",
+            reason="Bad webhook data",
             origin=origin
         )
         return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
-        # required object fields check happens before mp4 file check
-        # so we can include some metadata here
         set_pipeline_status(
             correlation_id,
             PipelineStatus.WEBHOOK_FAILED,
-            meeting_id=payload["object"]["id"],
-            recording_id=payload["object"]["uuid"],
-            recording_start_time=payload["object"]["start_time"],
-            topic=payload["object"]["topic"],
-            reason="no mp4 files",
+            reason="No mp4 files",
             origin=origin
         )
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
@@ -158,6 +154,25 @@ def validate_payload(payload):
         "duration",  # duration in minutes
         "recording_files"
     ]
+
+    try:
+        for field in required_payload_fields:
+                if field not in payload.keys():
+                    raise BadWebhookData(
+                        "Missing required payload field '{}'. Keys found: {}"
+                        .format(field, payload.keys()))
+
+        obj = payload["object"]
+        for field in required_object_fields:
+            if field not in obj.keys():
+                raise BadWebhookData(
+                    "Missing required object field '{}'. Keys found: {}"
+                    .format(field, obj.keys()))
+    except Exception as e:
+        raise BadWebhookData("Unrecognized payload format. {}".format(e))
+
+
+def validate_recording_files(files):
     required_file_fields = [
         "id",  # unique id for the file
         "recording_start",
@@ -168,21 +183,6 @@ def validate_payload(payload):
     ]
 
     try:
-        for field in required_payload_fields:
-            if field not in payload.keys():
-                raise BadWebhookData(
-                    "Missing required payload field '{}'. Keys found: {}"
-                    .format(field, payload.keys()))
-
-        obj = payload["object"]
-        for field in required_object_fields:
-            if field not in obj.keys():
-                raise BadWebhookData(
-                    "Missing required object field '{}'. Keys found: {}"
-                    .format(field, obj.keys()))
-
-        files = obj["recording_files"]
-
         # make sure there's some mp4 files in here somewhere
         mp4_files = any(x["file_type"].lower() == "mp4" for x in files)
         if not mp4_files:
