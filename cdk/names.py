@@ -5,7 +5,7 @@ NOTIFICATIONS_TOPIC="notifications"
 METRIC_NAMESPACE="log-metrics"
 
 SCHEDULE_TABLE="schedule"
-PIPELINE_STATUS_TABLE="status-table"
+PIPELINE_STATUS_TABLE="status"
 
 DOWNLOAD_QUEUE="download"
 DOWNLOAD_DLQ="download-dlq"

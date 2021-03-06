@@ -6,8 +6,8 @@ from aws_cdk import (
 
 from .bucket import ZipRecordingsBucket
 from .queues import ZipQueues
-from .schedule import ZipSchedule
-from .status import ZipStatus
+from .schedule_table import ZipSchedule
+from .status_table import ZipStatus
 from .function import (
     ZipDownloaderFunction,
     ZipOnDemandFunction, ZipSlackQueryFunction,

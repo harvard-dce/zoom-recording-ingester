@@ -117,7 +117,7 @@ def set_pipeline_status(
             )
 
         logger.info(
-            f"Set pipeline status to {state.value} for id {correlation_id}"
+            f"Set pipeline status to {state.name} for id {correlation_id}"
         )
     except ClientError as e:
         error = e.response["Error"]
