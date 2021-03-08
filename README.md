@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/harvard-dce/zoom-recording-ingester.svg?branch=master)](https://travis-ci.org/harvard-dce/zoom-recording-ingester)
+[![Build Status](https://github.com/harvard-dce/zoom-recording-ingester/actions/workflows/checks.yml/badge.svg)](https://github.com/harvard-dce/zoom-recording-ingester/actions/workflows/checks.yml)
 
 # Zoom Video Ingester
 
