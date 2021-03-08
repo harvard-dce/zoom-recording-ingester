@@ -1,0 +1,23 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+      - name: Install Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Install libraries
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: pytest ./tests
+        env:
+          AWS_DEFAULT_REGION: us-east-1
