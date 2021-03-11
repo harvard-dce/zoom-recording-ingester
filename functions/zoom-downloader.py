@@ -4,7 +4,7 @@ import requests
 from os import getenv as env
 from pathlib import Path
 from common.common import setup_logging, zoom_api_request, TIMESTAMP_FORMAT,\
-    retrieve_schedule, schedule_days
+    retrieve_schedule, schedule_match
 from common.status import PipelineStatus, set_pipeline_status
 import subprocess
 from pytz import timezone
@@ -27,9 +27,6 @@ DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DOWNLOAD_MESSAGES_PER_INVOCATION = env("DOWNLOAD_MESSAGES_PER_INVOCATION")
-# Recordings that happen within BUFFER_MINUTES a courses schedule
-# start time will be captured
-BUFFER_MINUTES = int(env("BUFFER_MINUTES", 30))
 # Ignore recordings that are less than MIN_DURATION (in minutes)
 MINIMUM_DURATION = int(env("MINIMUM_DURATION", 2))
 
@@ -257,38 +254,15 @@ class Download:
         """
 
         schedule = retrieve_schedule(self.data["zoom_series_id"])
-
         if not schedule:
             return None
 
-        zoom_time = self._created_local
-        logger.info({"meeting creation time": zoom_time,
-                     "course schedule": schedule})
-        zoom_day_code = list(schedule_days.keys())[zoom_time.weekday()]
+        event = schedule_match(schedule, self._created_local)
+        if event:
+            self.title = event["title"]
+            return schedule["opencast_series_id"]
 
-        # events is a list of {title, day, time} dictionaries
-        for event in schedule["events"]:
-            # match day
-            if zoom_day_code != event["day"]:
-                continue
-
-            # match time
-            scheduled_time = datetime.strptime(event["time"], "%H:%M")
-            timedelta = abs(zoom_time -
-                            zoom_time.replace(hour=scheduled_time.hour,
-                                              minute=scheduled_time.minute)
-                            ).total_seconds()
-            if timedelta < (BUFFER_MINUTES * 60):
-                # Found schedule match
-                self.title = event["title"]
-                return schedule["opencast_series_id"]
-            else:
-                logger.info(
-                    f"Match for day {event['day']} but not within"
-                    f" {BUFFER_MINUTES} minutes of time {event['time']}"
-                )
-
-        logger.info("No opencast series match found")
+        logger.info("No opecast series match found")
         return None
 
     def oc_series_found(self, ignore_schedule=False, override_series_id=None):
