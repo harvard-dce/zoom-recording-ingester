@@ -19,6 +19,10 @@ SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
 PRETTY_TIMESTAMP_FORMAT = "%B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+# Slack places an upper limit of 50 UI blocks per message
+# so we must limit the number of records per message
+# Should be a multiple of RESULTS_PER_REQUEST
+MAX_RECORDS_PER_MSG = 6
 RESULTS_PER_REQUEST = 2
 RESULTS_BUTTON_TEXT = f"Next {RESULTS_PER_REQUEST} Results"
 
@@ -92,11 +96,14 @@ def handler(event, context):
     if "command" in query:
         slash_command = True
         cmd = query["command"][0]
+        if "text" not in query:
+            return slack_help_response()
         text = query["text"][0]
         if text == "help":
             return slack_help_response()
         try:
-            meeting_id = int(text)
+            # Accept mid that includes spaces or dashes
+            meeting_id = int(text.replace("-", "").replace(" ", ""))
         except ValueError:
             return slack_error_response(
                 f"Sorry, `{cmd} {text}` is not a valid command. Try `{cmd} help`?"
@@ -110,13 +117,18 @@ def handler(event, context):
             f"Interaction from user {payload['user']['username']}"
         )
         response_url = payload["response_url"]
-
         action_text = payload["actions"][0]["text"]["text"]
         if action_text != RESULTS_BUTTON_TEXT:
             return resp_204(f"Ignore action: {action_text}")
+
         action_value = json.loads(payload["actions"][0]["value"])
         meeting_id = action_value["mid"]
-        records_sent = action_value["count"]
+        prev_msg = {
+            "newest_start_time": action_value["newest_start_time"],
+            "start_index": action_value["start_index"],
+            "rec_count": action_value["count"],
+            "blocks": payload["message"]["blocks"]
+        }
         logger.info(f"Interaction value: {action_value}")
 
     records = status_by_mid(meeting_id)
@@ -126,23 +138,56 @@ def handler(event, context):
             blocks = slack_response_blocks(records)
             if not blocks:
                 return slack_error_response(
-                    f"No recordings found for Zoom MID {meeting_id}"
+                    f"No recent recordings found for Zoom MID {meeting_id}"
                 )
+            response = {
+                "response_type": "in_channel",
+                "blocks": blocks
+            }
+            logger.info({"send_response": response})
             return {
                 "statusCode": 200,
                 "headers": {},
-                "body": json.dumps({
-                    "response_type": "in_channel",
-                    "blocks": blocks
-                })
-            }
+                "body": json.dumps(response)
+                }
         else:
-            send_updated_response(
-                response_url,
-                records,
-                max_results=records_sent + RESULTS_PER_REQUEST
-            )
-            return resp_204("Interaction response successful.")
+            add_new_message = prev_msg["rec_count"] % MAX_RECORDS_PER_MSG == 0
+            if add_new_message:
+                # Remove button and divider from previous message
+                send_interaction_response(
+                    response_url,
+                    prev_msg["blocks"][:-2],
+                    replace_original=True
+                )
+                # Put new results in new message
+                blocks = slack_response_blocks(
+                    records,
+                    search_identifier=prev_msg["newest_start_time"],
+                    start_index=prev_msg["start_index"] + prev_msg["rec_count"],
+                    max_results=RESULTS_PER_REQUEST,
+                    interaction=True
+                )
+                send_interaction_response(
+                    response_url,
+                    blocks,
+                    replace_original=False
+                )
+            else:
+                # Replace original message with more results
+                blocks = slack_response_blocks(
+                    records,
+                    search_identifier=prev_msg["newest_start_time"],
+                    start_index=prev_msg["start_index"],
+                    max_results=prev_msg["rec_count"] + RESULTS_PER_REQUEST,
+                    interaction=True
+                )
+                send_interaction_response(
+                    response_url,
+                    blocks,
+                    replace_original=True
+                )
+            return resp_204("Interaction response successful")
+
     except Exception as e:
         logger.error(f"Error generating slack response: {str(e)}")
         if slash_command:
@@ -176,52 +221,67 @@ def valid_slack_request(event):
 
     h = hmac.new(
         bytes(SLACK_SIGNING_SECRET, "UTF-8"),
-        bytes(basestring, "UTF-8"), 
+        bytes(basestring, "UTF-8"),
         hashlib.sha256
     )
 
     return hmac.compare_digest(f"{version}={str(h.hexdigest())}", signature)
 
 
-def send_updated_response(response_url, records, max_results):
-    blocks = slack_response_blocks(
-        records,
-        max_results=max_results,
-        interaction=True
-    )
-    logger.info(f"Send interaction response to response_url: {response_url}")
-    r = requests.post(
-        response_url,
-        json={
-            "response_type": "in_channel",
-            "replace_original": True,
-            "blocks": blocks
+def send_interaction_response(response_url, blocks, replace_original=True):
+    response = {
+        "response_type": "in_channel",
+        "replace_original": replace_original,
+        "blocks": blocks
+    }
+    logger.info({
+        f"Send interaction response": {
+            "response_url": response_url,
+            "response": response
         }
+    })
+    r = requests.post(response_url, json=response)
+    logger.info(
+        f"Response url returned status: {r.status_code} content: {str(r.content)}"
     )
-    logger.info(f"Response url returned status {r.status_code}")
     r.raise_for_status()
 
 
 def slack_response_blocks(
     records,
+    search_identifier=None,
+    start_index=0,
     max_results=RESULTS_PER_REQUEST,
     interaction=False
 ):
     if not records:
         return None
+
+    # filter out newer recordings
+    # this is just to keep the search consistent as the user requests
+    # more results
+    if search_identifier:
+        records = list(filter(
+            lambda r: r["recording"]["start_time"] <= search_identifier,
+            records
+        ))
+
     # sort by recording start time
     records = sorted(
         records,
         key=lambda r: r["recording"]["start_time"],
         reverse=True
     )
-    # limit amount of results
-    more_results = len(records) > max_results
-    records = records[:max_results]
+
+    # limit amount and range of results
+    more_results = len(records) > start_index + max_results
+    records = records[start_index:start_index + max_results]
+    search_identifier = records[0]["recording"]["start_time"]
 
     mid = records[0]["recording"]["meeting_id"]
     topic = records[0]["recording"]["topic"]
     schedule = retrieve_schedule(mid)
+
     if schedule:
         logger.info({"schedule": schedule})
         events = ""
@@ -229,7 +289,7 @@ def slack_response_blocks(
             event_time = datetime.strptime(
                 event["time"], "%H:%M"
             ).strftime("%-I:%M%p")
-            events += f":calendar: {schedule['course_code']} {event['title']} "
+            events += f":clock3: {schedule['course_code']} {event['title']} "
             events += f"on {schedule_days[event['day']]} at {event_time}"
 
             if i + 1 < len(schedule["events"]):
@@ -237,41 +297,44 @@ def slack_response_blocks(
         opencast_mapping = f":arrow_right: *Opencast Series:* {schedule['opencast_series_id']}"
     else:
         logger.info(f"No matching schedule for mid {mid}")
-        events = ":calendar: No ZIP ingests scheduled."
+        events = "This Zoom meeting is not configured for ZIP ingests."
         opencast_mapping = ""
 
-    blocks = [
-        {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": f"{topic}"
-            },
-        },
-        {
-            "type": "context",
-            "elements": [
-                {
+    blocks = []
+    # Beginning of a search, include meeting metadata header
+    if start_index == 0:
+        blocks = [
+            {
+                "type": "header",
+                "text": {
                     "type": "plain_text",
-                    "text": f"Source: {STACK_NAME}",
+                    "text": f"{topic}"
+                },
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "plain_text",
+                        "text": f"Source: {STACK_NAME}",
+                    }
+                ]
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Zoom Meeting:* {mid} {opencast_mapping}"
                 }
-            ]
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Zoom Meeting:* {mid} {opencast_mapping}"
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": events
+                }
             }
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": events
-            }
-        }
-    ]
+        ]
 
     for record in records:
         start_time = pretty_local_time(record["recording"]["start_time"])
@@ -335,7 +398,9 @@ def slack_response_blocks(
                         },
                         "value": json.dumps({
                             "mid": mid,
-                            "count": len(records)
+                            "newest_start_time": search_identifier,
+                            "count": len(records),
+                            "start_index": start_index
                         })
                     }
                 ]

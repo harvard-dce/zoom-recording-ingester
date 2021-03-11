@@ -181,7 +181,6 @@ def request_recent_items(table, date, seconds):
 def format_status_records(items):
     records = []
     for item in items:
-        logger.info(item)
         date = datetime.strptime(item["update_date"], DATE_FORMAT)
         ts = date + timedelta(seconds=int(item["update_time"]))
         last_updated = ts.strftime(TIMESTAMP_FORMAT)
