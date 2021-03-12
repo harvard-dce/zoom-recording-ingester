@@ -60,6 +60,7 @@ class ZipStack(core.Stack):
         gsheets_doc_id,
         gsheets_sheet_name,
         slack_signing_secret,
+        zip_slack_channel,
         **kwargs
     ) -> None:
 
@@ -127,7 +128,8 @@ class ZipStack(core.Stack):
                 "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
                 "SLACK_SIGNING_SECRET": slack_signing_secret,
-                "LOCAL_TIME_ZONE": local_time_zone
+                "LOCAL_TIME_ZONE": local_time_zone,
+                "ZIP_SLACK_CHANNEL": zip_slack_channel
             }
         )
         # grant slack function permissions

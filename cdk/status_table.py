@@ -1,6 +1,7 @@
 from aws_cdk import core, aws_dynamodb as dynamodb
 from . import  names
 
+
 class ZipStatus(core.Construct):
 
     def __init__(self, scope: core.Construct, id: str):
@@ -17,8 +18,7 @@ class ZipStatus(core.Construct):
                 name="correlation_id",
                 type=dynamodb.AttributeType.STRING
             ),
-            read_capacity=1,
-            write_capacity=1,
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=core.RemovalPolicy.DESTROY,
             time_to_live_attribute="expiration"
         )
@@ -28,9 +28,7 @@ class ZipStatus(core.Construct):
             partition_key=dynamodb.Attribute(
                 name="meeting_id",
                 type=dynamodb.AttributeType.NUMBER,
-            ),
-            read_capacity=1,
-            write_capacity=1
+            )
         )
 
         self.table.add_global_secondary_index(
@@ -42,7 +40,5 @@ class ZipStatus(core.Construct):
             sort_key=dynamodb.Attribute(
                 name="update_time",
                 type=dynamodb.AttributeType.NUMBER
-            ),
-            read_capacity=1,
-            write_capacity=1
+            )
         )

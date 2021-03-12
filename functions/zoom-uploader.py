@@ -52,13 +52,17 @@ UPLOAD_OP_TYPES = [
 ]
 
 
+class OpencastConnectionError(Exception):
+    pass
+
+
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
     logger.info({"url": url, "kwargs": kwargs})
     try:
         resp = session.request(method, url, **kwargs)
     except requests.RequestException:
-        raise
+        raise OpencastConnectionError
     resp.raise_for_status()
     return resp
 
@@ -116,7 +120,15 @@ def handler(event, context):
             )
         else:
             logger.info("No workflow initiated.")
-
+    except OpencastConnectionError as e:
+        logger.exception(e)
+        if upload_data and "correlation_id" in upload_data:
+            set_pipeline_status(
+                upload_data["correlation_id"],
+                PipelineStatus.UPLOADER_FAILED,
+                reason="Unable to reach Opencast."
+            )
+        raise
     except Exception as e:
         logger.exception(e)
         if upload_data and "correlation_id" in upload_data:

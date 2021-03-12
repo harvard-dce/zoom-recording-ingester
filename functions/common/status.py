@@ -133,7 +133,6 @@ def status_by_mid(mid):
     )
     items = r["Items"]
 
-    logger.info(items)
     return format_status_records(items)
 
 

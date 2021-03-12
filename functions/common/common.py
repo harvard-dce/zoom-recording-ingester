@@ -13,7 +13,7 @@ from datetime import datetime
 
 logger = logging.getLogger()
 
-load_dotenv(join(dirname(__file__), '../.env'))
+load_dotenv(join(dirname(__file__), '../../.env'))
 
 LOG_LEVEL = env('DEBUG') and 'DEBUG' or 'INFO'
 BOTO_LOG_LEVEL = env('BOTO_DEBUG') and 'DEBUG' or 'INFO'

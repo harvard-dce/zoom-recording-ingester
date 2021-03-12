@@ -15,6 +15,7 @@ import hmac
 import hashlib
 import requests
 from pytz import timezone
+import traceback
 
 import logging
 
@@ -24,6 +25,7 @@ SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
 PRETTY_TIMESTAMP_FORMAT = "%B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+ZIP_SLACK_CHANNEL = env("ZIP_SLACK_CHANNEL")
 # Slack places an upper limit of 50 UI blocks per message
 # so we must limit the number of records per message
 # Should be a multiple of RESULTS_PER_REQUEST
@@ -98,18 +100,20 @@ def handler(event, context):
             return slack_help_response()
         try:
             # Accept mid that includes spaces or dashes
-            meeting_id = int(text.replace("-", "").replace(" ", ""))
+            meeting_id = int(text.replace("-", "").replace(" ", "").replace("*", ""))
         except ValueError:
             return slack_error_response(
                 f"Sorry, `{cmd} {text}` is not a valid command. Try `{cmd} help`?"
             )
         response_url = query["response_url"][0]
+        channel_name = query["channel_name"][0]
     else:
         slash_command = False
         payload = json.loads(query["payload"][0])
         logger.info({"interaction_payload": payload})
         logger.info(f"Interaction from user {payload['user']['username']}")
         response_url = payload["response_url"]
+        channel_name = payload["channel"]["name"]
         action_text = payload["actions"][0]["text"]["text"]
         if action_text != RESULTS_BUTTON_TEXT:
             return resp_204(f"Ignore action: {action_text}")
@@ -126,49 +130,72 @@ def handler(event, context):
 
     records = status_by_mid(meeting_id)
 
+    if channel_name == "directmessage" or channel_name == ZIP_SLACK_CHANNEL:
+        response_type = "in_channel"
+    else:
+        response_type = "ephemeral"
+
+    logger.info(
+        f"Setting response type {response_type} for channel {channel_name}"
+    )
+
     try:
         if slash_command:
-            blocks = slack_response_blocks(records)
-            if not blocks:
-                return slack_error_response(
-                    f"No recent recordings found for Zoom MID {meeting_id}"
-                )
-            response = {"response_type": "in_channel", "blocks": blocks}
+            blocks = slack_response_blocks(meeting_id, records)
+            response = {"response_type": response_type, "blocks": blocks}
             logger.info({"send_response": response})
-            return {"statusCode": 200, "headers": {}, "body": json.dumps(response)}
+            return {
+                "statusCode": 200,
+                "headers": {},
+                "body": json.dumps(response)
+            }
         else:
             add_new_message = prev_msg["rec_count"] % MAX_RECORDS_PER_MSG == 0
             if add_new_message:
                 # Remove button and divider from previous message
                 send_interaction_response(
-                    response_url, prev_msg["blocks"][:-2], replace_original=True
+                    response_url,
+                    prev_msg["blocks"][:-2],
+                    replace_original=True
                 )
                 # Put new results in new message
                 blocks = slack_response_blocks(
+                    meeting_id,
                     records,
                     search_identifier=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"] + prev_msg["rec_count"],
                     max_results=RESULTS_PER_REQUEST,
                     interaction=True,
                 )
-                send_interaction_response(response_url, blocks, replace_original=False)
+                send_interaction_response(
+                    response_url,
+                    blocks,
+                    response_type,
+                    replace_original=False
+                )
             else:
                 # Replace original message with more results
                 blocks = slack_response_blocks(
+                    meeting_id,
                     records,
                     search_identifier=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"],
                     max_results=prev_msg["rec_count"] + RESULTS_PER_REQUEST,
                     interaction=True,
                 )
-                send_interaction_response(response_url, blocks, replace_original=True)
+                send_interaction_response(
+                    response_url,
+                    blocks,
+                    response_type,
+                    replace_original=True
+                )
             return resp_204("Interaction response successful")
-
     except Exception as e:
-        logger.error(f"Error generating slack response: {str(e)}")
+        track = traceback.format_exc()
+        logger.error(f"Error generating slack response. {str(e)} {track}")
         if slash_command:
             return slack_error_response(
-                f"We're sorry! There was an error when handling your request: `{cmd} {text}`"
+                f"We're sorry! There was an error when handling your request: {cmd} {text}"
             )
         else:
             return resp_400("Error handling interaction.")
@@ -206,9 +233,14 @@ def valid_slack_request(event):
     return hmac.compare_digest(f"{version}={str(h.hexdigest())}", signature)
 
 
-def send_interaction_response(response_url, blocks, replace_original=True):
+def send_interaction_response(
+    response_url,
+    blocks,
+    response_type,
+    replace_original=True
+):
     response = {
-        "response_type": "in_channel",
+        "response_type": response_type,
         "replace_original": replace_original,
         "blocks": blocks,
     }
@@ -228,14 +260,13 @@ def send_interaction_response(response_url, blocks, replace_original=True):
 
 
 def slack_response_blocks(
+    mid,
     records,
     search_identifier=None,
     start_index=0,
     max_results=RESULTS_PER_REQUEST,
     interaction=False,
 ):
-    if not records:
-        return None
 
     # filter out newer recordings
     # this is just to keep the search consistent as the user requests
@@ -250,13 +281,9 @@ def slack_response_blocks(
 
     # limit amount and range of results
     more_results = len(records) > start_index + max_results
-    records = records[start_index : start_index + max_results]
-    search_identifier = records[0]["recording"]["start_time"]
+    records = records[start_index: start_index + max_results]
 
-    mid = records[0]["recording"]["meeting_id"]
-    topic = records[0]["recording"]["topic"]
     schedule = retrieve_schedule(mid)
-
     if schedule:
         logger.info({"schedule": schedule})
         events = ""
@@ -278,6 +305,13 @@ def slack_response_blocks(
     blocks = []
     # Beginning of a search, include meeting metadata header
     if start_index == 0:
+        if records:
+            topic = records[0]["recording"]["topic"]
+        elif schedule:
+            topic = f"{schedule['course_code']} Zoom Meeting"
+        else:
+            topic = f"Zoom Meeting {format_mid(mid)}"
+
         blocks = [
             {
                 "type": "header",
@@ -291,16 +325,33 @@ def slack_response_blocks(
                         "text": f"Source: {STACK_NAME}",
                     }
                 ],
-            },
+            }
+        ]
+
+        if records or schedule:
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Zoom Meeting ID:* {format_mid(mid)} {opencast_mapping}",
+                    }
+                }
+            )
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": events}})
+
+    if not records:
+        blocks.extend([
+            {"type": "divider"},
             {
                 "type": "section",
                 "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Zoom Meeting:* {mid} {opencast_mapping}",
-                },
-            },
-            {"type": "section", "text": {"type": "mrkdwn", "text": events}},
-        ]
+                    "type": "plain_text",
+                    "text": "No recent recordings found."
+                }
+            }
+        ])
+        return blocks
 
     for record in records:
         pretty_start_time = pretty_local_time(record["recording"]["start_time"])
@@ -331,7 +382,7 @@ def slack_response_blocks(
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f":movie_camera: *Recording on {pretty_local_time(start_time)}*\n",
+                    "text": f":movie_camera: *Recording on {pretty_start_time}*\n",
                 },
             },
             {"type": "section", "fields": record_detail_fields},
@@ -340,6 +391,7 @@ def slack_response_blocks(
         blocks.extend(record_data)
 
     if more_results:
+        search_identifier = records[0]["recording"]["start_time"]
         more_results_button = [
             {"type": "divider"},
             {
@@ -379,6 +431,14 @@ def slack_response_blocks(
     return blocks
 
 
+def format_mid(mid):
+    s = str(mid)
+    if len(s) < 11:
+        return f"{s[:3]} {s[3:6]} {s[6:]}"
+    else:
+        return f"{s[:3]} {s[3:7]} {s[7:]}"
+
+
 def status_description(record, on_demand, match):
 
     status = record["status"]
@@ -386,20 +446,15 @@ def status_description(record, on_demand, match):
     # Processing
     if status == PipelineStatus.ON_DEMAND_RECEIVED.name:
         status_msg = "Received Zoom+ request."
-
-    if (
-        status == PipelineStatus.WEBHOOK_RECEIVED.name
-        or status == PipelineStatus.SENT_TO_DOWNLOADER
-    ):
+    elif status == PipelineStatus.WEBHOOK_RECEIVED.name or status == PipelineStatus.SENT_TO_DOWNLOADER.name:
         if on_demand:
             status_msg = "ZIP received Zoom+ request."
         elif match:
             status_msg = "ZIP received scheduled ingest."
         else:
             status_msg = "Ignored by ZIP."
-
     # Schedule match
-    if status == PipelineStatus.OC_SERIES_FOUND.name:
+    elif status == PipelineStatus.OC_SERIES_FOUND.name:
         status_msg = "Found match in schedule. Downloading files."
     # Ingesting
     elif status == PipelineStatus.SENT_TO_UPLOADER.name:
@@ -414,11 +469,11 @@ def status_description(record, on_demand, match):
         status_msg = "Ignored by ZIP."
     # Failures
     elif status == PipelineStatus.WEBHOOK_FAILED.name:
-        status_msg = ":x: Failed at receiving stage."
+        status_msg = ":exclamation: Error while receiving ZIP request."
     elif status == PipelineStatus.DOWNLOADER_FAILED.name:
-        status_msg = ":x: Failed at file download stage."
+        status_msg = ":exclamation: Failed to download files."
     elif status == PipelineStatus.UPLOADER_FAILED.name:
-        status_msg = ":x: Failed at ingest to Opencast stage"
+        status_msg = ":exclamation: Failed to ingest to Opencast."
     else:
         status_msg = status
 

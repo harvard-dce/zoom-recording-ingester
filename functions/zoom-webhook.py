@@ -114,7 +114,7 @@ def handler(event, context):
     except NoMp4Files as e:
         set_pipeline_status(
             correlation_id,
-            PipelineStatus.WEBHOOK_FAILED,
+            PipelineStatus.IGNORED,
             reason="No mp4 files",
             origin=origin
         )
