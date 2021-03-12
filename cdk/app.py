@@ -52,6 +52,7 @@ stack_props = {
     "default_publisher": default_publisher,
     "override_publisher": getenv("OVERRIDE_PUBLISHER", required=False),
     "override_contributor": getenv("OVERRIDE_CONTRIBUTOR", required=False),
+    "oc_cluster_name": getenv("OC_CLUSTER_NAME"),
     "oc_workflow": getenv("OC_WORKFLOW"),
     "oc_flavor": getenv("OC_FLAVOR"),
     "oc_track_upload_max": getenv("OC_TRACK_UPLOAD_MAX"),

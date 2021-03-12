@@ -45,6 +45,7 @@ class ZipStack(core.Stack):
         default_publisher,
         override_publisher,
         override_contributor,
+        oc_cluster_name,
         oc_workflow,
         oc_flavor,
         oc_track_upload_max,
@@ -129,7 +130,8 @@ class ZipStack(core.Stack):
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
                 "SLACK_SIGNING_SECRET": slack_signing_secret,
                 "LOCAL_TIME_ZONE": local_time_zone,
-                "ZIP_SLACK_CHANNEL": zip_slack_channel
+                "ZIP_SLACK_CHANNEL": zip_slack_channel,
+                "OC_CLUSTER_NAME": oc_cluster_name
             }
         )
         # grant slack function permissions

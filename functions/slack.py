@@ -26,6 +26,7 @@ PRETTY_TIMESTAMP_FORMAT = "%B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 ZIP_SLACK_CHANNEL = env("ZIP_SLACK_CHANNEL")
+OC_CLUSTER_NAME = env("OC_CLUSTER_NAME")
 # Slack places an upper limit of 50 UI blocks per message
 # so we must limit the number of records per message
 # Should be a multiple of RESULTS_PER_REQUEST
@@ -473,7 +474,7 @@ def status_description(record, on_demand, match):
     elif status == PipelineStatus.DOWNLOADER_FAILED.name:
         status_msg = ":exclamation: Failed to download files."
     elif status == PipelineStatus.UPLOADER_FAILED.name:
-        status_msg = ":exclamation: Failed to ingest to Opencast."
+        status_msg = f":exclamation: Failed to ingest to Opencast cluster {OC_CLUSTER_NAME}."
     else:
         status_msg = status
 
