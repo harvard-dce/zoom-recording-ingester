@@ -33,6 +33,7 @@ OC_CLUSTER_NAME = env("OC_CLUSTER_NAME")
 MAX_RECORDS_PER_MSG = 6
 RESULTS_PER_REQUEST = 2
 RESULTS_BUTTON_TEXT = f"Next {RESULTS_PER_REQUEST} Results"
+ZOOM_MID_LENGTHS = [10, 11]
 
 
 def resp_204(msg):
@@ -54,7 +55,7 @@ def slack_error_response(msg):
     }
 
 
-def slack_help_response():
+def slack_help_response(cmd):
     blocks = [
         {
             "type": "section",
@@ -67,7 +68,7 @@ def slack_help_response():
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": ">`/zip [zoom-mid]` See the status of the latest ZIP ingests with the specified Zoom MID.",
+                "text": f">`{cmd} mid [Zoom meeting ID]` See the status of the latest ZIP ingests with the specified Zoom MID.",
             },
         },
     ]
@@ -86,33 +87,47 @@ def handler(event, context):
         if not valid_slack_request(event):
             return slack_error_response("Slack request verification failed.")
     except Exception:
-        return slack_error_response("Error when validating Slack request.")
+        return slack_error_response("Error while validating Slack request.")
 
     query = parse_qs(event["body"])
     logger.info(query)
 
     if "command" in query:
-        slash_command = True
-        cmd = query["command"][0]
+        slash_command = query["command"][0]
         if "text" not in query:
-            return slack_help_response()
+            return slack_help_response(slash_command)
         text = query["text"][0]
         if text == "help":
-            return slack_help_response()
-        try:
-            # Accept mid that includes spaces or dashes
-            meeting_id = int(text.replace("-", "").replace(" ", "").replace("*", ""))
-        except ValueError:
+            return slack_help_response(slash_command)
+
+        sub_command = text.split()[0].lower()
+        if sub_command != "mid":
             return slack_error_response(
-                f"Sorry, `{cmd} {text}` is not a valid command. Try `{cmd} help`?"
+                f"Sorry, `{slash_command} {text}` is not a valid command."
+                f" Try `{slash_command}` help?"
             )
+
+        arg = ''.join(text.split()[1:])
+        # Accept mid that includes spaces, dashes or is bold
+        # and has a valid number of digits
+        mid_txt = arg.replace("-", "").replace(" ", "").replace("*", "")
+        if not mid_txt:
+            return slack_error_response(
+                "Please specify a valid Zoom meeting id."
+            )
+        if not mid_txt.isnumeric() or len(mid_txt) not in ZOOM_MID_LENGTHS:
+            return slack_error_response(
+                f"Sorry, `{mid_txt}` is not a valid Zoom meeting id."
+            )
+
+        meeting_id = int(mid_txt)
         response_url = query["response_url"][0]
         channel_name = query["channel_name"][0]
     else:
-        slash_command = False
+        slash_command = None
         payload = json.loads(query["payload"][0])
         logger.info({"interaction_payload": payload})
-        logger.info(f"Interaction from user {payload['user']['username']}")
+
         response_url = payload["response_url"]
         channel_name = payload["channel"]["name"]
         action_text = payload["actions"][0]["text"]["text"]
@@ -131,7 +146,7 @@ def handler(event, context):
 
     records = status_by_mid(meeting_id)
 
-    if channel_name == "directmessage" or channel_name == ZIP_SLACK_CHANNEL:
+    if channel_name == ZIP_SLACK_CHANNEL:
         response_type = "in_channel"
     else:
         response_type = "ephemeral"
@@ -196,7 +211,7 @@ def handler(event, context):
         logger.error(f"Error generating slack response. {str(e)} {track}")
         if slash_command:
             return slack_error_response(
-                f"We're sorry! There was an error when handling your request: {cmd} {text}"
+                f"We're sorry! There was an error when handling your request: {slash_command} {text}"
             )
         else:
             return resp_400("Error handling interaction.")
@@ -300,7 +315,7 @@ def slack_response_blocks(
         )
     else:
         logger.info(f"No matching schedule for mid {mid}")
-        events = "This Zoom meeting is not configured for ZIP ingests."
+        events = "This Zoom meeting does not exist or is not configured for ZIP ingests."
         opencast_mapping = ""
 
     blocks = []
