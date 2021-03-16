@@ -133,7 +133,11 @@ def status_by_mid(mid):
     )
     items = r["Items"]
 
-    return format_status_records(items)
+    r = format_status_records(items)
+    if len(r["meetings"]) == 0:
+        return None
+    else:
+        return r["meetings"][0]
 
 
 def status_by_seconds(request_seconds):
@@ -178,26 +182,40 @@ def request_recent_items(table, date, seconds):
 
 
 def format_status_records(items):
-    records = []
+    meetings = {}
     for item in items:
         date = datetime.strptime(item["update_date"], DATE_FORMAT)
         ts = date + timedelta(seconds=int(item["update_time"]))
         last_updated = ts.strftime(TIMESTAMP_FORMAT)
 
-        record = {
+        mid = int(item["meeting_id"])
+        if mid not in meetings:
+            meetings[mid] = {
+                "meeting_id": mid,
+                "topic": item["topic"],
+                "recordings": {}
+            }
+
+        rec_id = item["recording_id"]
+        if rec_id not in meetings[mid]["recordings"]:
+            meetings[mid]["recordings"][rec_id] = {
+                "recording_id": rec_id,
+                "start_time": item["recording_start_time"],
+                "zip_ingests": []
+            }
+
+        zip_ingest = {
             "last_updated": last_updated,
             "status": item["pipeline_state"],
-            "origin": item["origin"],
-            "recording": {
-                "meeting_id": int(item["meeting_id"]),
-                "recording_id": item["recording_id"],
-                "topic": item["topic"],
-                "start_time": item["recording_start_time"]
-            }
+            "origin": item["origin"]
         }
         if "reason" in item:
-            record["reason"] = item["reason"]
+            zip_ingest["reason"] = item["reason"]
 
-        records.append(record)
+        meetings[mid]["recordings"][rec_id]["zip_ingests"].append(zip_ingest)
 
-    return records
+    results = {"meetings": list(meetings.values())}
+    for mtg in results["meetings"]:
+        mtg["recordings"] = list(mtg["recordings"].values())
+
+    return results

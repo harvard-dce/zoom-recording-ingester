@@ -68,7 +68,7 @@ def slack_help_response(cmd):
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f">`{cmd} mid [Zoom meeting ID]` See the status of the latest ZIP ingests with the specified Zoom MID.",
+                "text": f">`{cmd} [Zoom meeting ID]` See the status of the latest ZIP ingests with the specified Zoom MID.",
             },
         },
     ]
@@ -100,24 +100,12 @@ def handler(event, context):
         if text == "help":
             return slack_help_response(slash_command)
 
-        sub_command = text.split()[0].lower()
-        if sub_command != "mid":
-            return slack_error_response(
-                f"Sorry, `{slash_command} {text}` is not a valid command."
-                f" Try `{slash_command}` help?"
-            )
-
-        arg = ''.join(text.split()[1:])
         # Accept mid that includes spaces, dashes or is bold
         # and has a valid number of digits
-        mid_txt = arg.replace("-", "").replace(" ", "").replace("*", "")
-        if not mid_txt:
+        mid_txt = text.replace("-", "").replace(" ", "").replace("*", "")
+        if not mid_txt or not mid_txt.isnumeric() or len(mid_txt) not in ZOOM_MID_LENGTHS:
             return slack_error_response(
                 "Please specify a valid Zoom meeting id."
-            )
-        if not mid_txt.isnumeric() or len(mid_txt) not in ZOOM_MID_LENGTHS:
-            return slack_error_response(
-                f"Sorry, `{mid_txt}` is not a valid Zoom meeting id."
             )
 
         meeting_id = int(mid_txt)
@@ -144,21 +132,20 @@ def handler(event, context):
         }
         logger.info(f"Interaction value: {action_value}")
 
-    records = status_by_mid(meeting_id)
+    meeting_status = status_by_mid(meeting_id)
+    logger.info({"meeting_data": meeting_status})
 
-    if channel_name == ZIP_SLACK_CHANNEL:
-        response_type = "in_channel"
-    else:
-        response_type = "ephemeral"
-
-    logger.info(
-        f"Setting response type {response_type} for channel {channel_name}"
-    )
+    if channel_name != "directmessage" and channel_name != ZIP_SLACK_CHANNEL:
+        return slack_error_response(
+            f"The command {slash_command} can only be used in DM or in the #{ZIP_SLACK_CHANNEL} channel"
+        )
 
     try:
         if slash_command:
-            blocks = slack_response_blocks(meeting_id, records)
-            response = {"response_type": response_type, "blocks": blocks}
+            blocks = slack_response_blocks(meeting_id, meeting_status)
+            # Response type must be "in_channel" for the "more results"
+            # button to work. (Ephermeral messages cannot be updated.)
+            response = {"response_type": "in_channel", "blocks": blocks}
             logger.info({"send_response": response})
             return {
                 "statusCode": 200,
@@ -177,7 +164,7 @@ def handler(event, context):
                 # Put new results in new message
                 blocks = slack_response_blocks(
                     meeting_id,
-                    records,
+                    meeting_status,
                     search_identifier=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"] + prev_msg["rec_count"],
                     max_results=RESULTS_PER_REQUEST,
@@ -186,14 +173,13 @@ def handler(event, context):
                 send_interaction_response(
                     response_url,
                     blocks,
-                    response_type,
                     replace_original=False
                 )
             else:
                 # Replace original message with more results
                 blocks = slack_response_blocks(
                     meeting_id,
-                    records,
+                    meeting_status,
                     search_identifier=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"],
                     max_results=prev_msg["rec_count"] + RESULTS_PER_REQUEST,
@@ -202,7 +188,6 @@ def handler(event, context):
                 send_interaction_response(
                     response_url,
                     blocks,
-                    response_type,
                     replace_original=True
                 )
             return resp_204("Interaction response successful")
@@ -252,11 +237,10 @@ def valid_slack_request(event):
 def send_interaction_response(
     response_url,
     blocks,
-    response_type,
     replace_original=True
 ):
     response = {
-        "response_type": response_type,
+        "response_type": "in_channel",
         "replace_original": replace_original,
         "blocks": blocks,
     }
@@ -277,34 +261,22 @@ def send_interaction_response(
 
 def slack_response_blocks(
     mid,
-    records,
+    meeting_status,
     search_identifier=None,
     start_index=0,
     max_results=RESULTS_PER_REQUEST,
     interaction=False,
 ):
-
-    # filter out newer recordings
-    # this is just to keep the search consistent as the user requests
-    # more results
-    if search_identifier:
-        records = list(
-            filter(lambda r: r["recording"]["start_time"] <= search_identifier, records)
-        )
-
-    # sort by recording start time
-    records = sorted(records, key=lambda r: r["recording"]["start_time"], reverse=True)
-
-    # limit amount and range of results
-    more_results = len(records) > start_index + max_results
-    records = records[start_index: start_index + max_results]
-
+    
+    # Meeting metadata
     schedule = retrieve_schedule(mid)
     if schedule:
         logger.info({"schedule": schedule})
         events = ""
         for i, event in enumerate(schedule["events"]):
-            event_time = datetime.strptime(event["time"], "%H:%M").strftime("%-I:%M%p")
+            event_time = datetime.strptime(
+                event["time"], "%H:%M"
+            ).strftime("%-I:%M%p")
             events += f":clock3: {schedule['course_code']} {event['title']} "
             events += f"on {schedule_days[event['day']]} at {event_time}"
 
@@ -315,14 +287,14 @@ def slack_response_blocks(
         )
     else:
         logger.info(f"No matching schedule for mid {mid}")
-        events = "This Zoom meeting does not exist or is not configured for ZIP ingests."
+        events = "This Zoom meeting is not configured for ZIP ingests."
         opencast_mapping = ""
 
     blocks = []
     # Beginning of a search, include meeting metadata header
     if start_index == 0:
-        if records:
-            topic = records[0]["recording"]["topic"]
+        if meeting_status:
+            topic = meeting_status["topic"]
         elif schedule:
             topic = f"{schedule['course_code']} Zoom Meeting"
         else:
@@ -344,7 +316,7 @@ def slack_response_blocks(
             }
         ]
 
-        if records or schedule:
+        if meeting_status or schedule:
             blocks.append(
                 {
                     "type": "section",
@@ -356,7 +328,7 @@ def slack_response_blocks(
             )
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": events}})
 
-    if not records:
+    if not meeting_status:
         blocks.extend([
             {"type": "divider"},
             {
@@ -369,45 +341,82 @@ def slack_response_blocks(
         ])
         return blocks
 
-    for record in records:
-        pretty_start_time = pretty_local_time(record["recording"]["start_time"])
-        last_updated = pretty_local_time(record["last_updated"])
-        rec_id = quote(record["recording"]["recording_id"])
+    recordings = meeting_status["recordings"]
+    # filter out newer recordings
+    # this is just to keep the search consistent as the user requests
+    # more results
+    if search_identifier:
+        recordings = list(
+            filter(
+                lambda r: r["start_time"] <= search_identifier,
+                recordings
+            )
+        )
+
+    # sort by recording start time
+    recordings = sorted(
+        recordings,
+        key=lambda r: r["start_time"],
+        reverse=True
+    )
+
+    # limit amount and range of results
+    more_results = len(recordings) > start_index + max_results
+    recordings = recordings[start_index: start_index + max_results]
+
+    for rec in recordings:
+        pretty_start_time = pretty_local_time(rec["start_time"])
+        rec_id = quote(rec["recording_id"])
         mgmt_url = f"https://zoom.us/recording/management/detail?meeting_id={rec_id}"
-        on_demand = record["origin"] == "on_demand"
-        on_demand_text = "Yes" if on_demand else "No"
+        match = schedule_match(schedule, local_time(rec["start_time"]))
 
-        match = schedule_match(schedule, local_time(record["recording"]["start_time"]))
+        ingest_details_text = ""
+        # Sort ingests from most to least recent
+        ingests = sorted(
+            rec["zip_ingests"],
+            key=lambda r: r["last_updated"],
+            reverse=True
+        )
+        for ingest in ingests:
+            update_time = pretty_local_time(ingest["last_updated"])
+            on_demand = ingest["origin"] == "on_demand"
+            on_demand_text = "Yes" if on_demand else "No"
 
-        record_detail_fields = [
-            {"type": "mrkdwn", "text": f"*Zoom+ ingest request?* {on_demand_text}"},
+            ingest_details_text += (
+                f"*Status:* {status_description(ingest, on_demand, match)}\n"
+                f"*Updated:* {update_time}\n"
+                f"*Zoom+ ingest?* {on_demand_text}\n\n"
+            )
+
+        blocks.extend([
             {
-                "type": "mrkdwn",
-                "text": f"*View in Zoom:* <{mgmt_url}|Recording Management>",
+                "type": "divider"
             },
-            {"type": "mrkdwn", "text": f"*Last Updated:*\n{last_updated}"},
-            {
-                "type": "mrkdwn",
-                "text": f"*Status*: {status_description(record, on_demand, match)}\n",
-            },
-        ]
-
-        record_data = [
-            {"type": "divider"},
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": f":movie_camera: *Recording on {pretty_start_time}*\n",
-                },
+                }
             },
-            {"type": "section", "fields": record_detail_fields},
-        ]
-
-        blocks.extend(record_data)
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ingest_details_text
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"<{mgmt_url}|*View in Zoom*>"
+                }
+            }
+        ])
 
     if more_results:
-        search_identifier = records[0]["recording"]["start_time"]
+        search_identifier = recordings[0]["start_time"]
         more_results_button = [
             {"type": "divider"},
             {
@@ -422,9 +431,10 @@ def slack_response_blocks(
                         },
                         "value": json.dumps(
                             {
+                                "version": 1,
                                 "mid": mid,
                                 "newest_start_time": search_identifier,
-                                "count": len(records),
+                                "count": len(recordings),
                                 "start_index": start_index,
                             }
                         ),
@@ -455,9 +465,9 @@ def format_mid(mid):
         return f"{s[:3]} {s[3:7]} {s[7:]}"
 
 
-def status_description(record, on_demand, match):
+def status_description(ingest_details, on_demand, match):
 
-    status = record["status"]
+    status = ingest_details["status"]
 
     # Processing
     if status == PipelineStatus.ON_DEMAND_RECEIVED.name:
@@ -493,7 +503,7 @@ def status_description(record, on_demand, match):
     else:
         status_msg = status
 
-    if "reason" in record:
-        status_msg += f"\n{record['reason']}."
+    if "reason" in ingest_details:
+        status_msg += f" {ingest_details['reason']}."
 
     return status_msg
