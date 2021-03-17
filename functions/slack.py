@@ -27,6 +27,8 @@ STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 ZIP_SLACK_CHANNEL = env("ZIP_SLACK_CHANNEL")
 OC_CLUSTER_NAME = env("OC_CLUSTER_NAME")
+SLACK_API_TOKEN = env("SLACK_API_TOKEN")
+SLACK_ALLOWED_GROUPS = env("SLACK_ALLOWED_GROUPS").split(",")
 # Slack places an upper limit of 50 UI blocks per message
 # so we must limit the number of records per message
 # Should be a multiple of RESULTS_PER_REQUEST
@@ -34,6 +36,10 @@ MAX_RECORDS_PER_MSG = 6
 RESULTS_PER_REQUEST = 2
 RESULTS_BUTTON_TEXT = f"Next {RESULTS_PER_REQUEST} Results"
 ZOOM_MID_LENGTHS = [10, 11]
+
+
+class SlackApiRequestError(Exception):
+    pass
 
 
 def resp_204(msg):
@@ -94,23 +100,11 @@ def handler(event, context):
 
     if "command" in query:
         slash_command = query["command"][0]
-        if "text" not in query:
-            return slack_help_response(slash_command)
-        text = query["text"][0]
-        if text == "help":
-            return slack_help_response(slash_command)
-
-        # Accept mid that includes spaces, dashes or is bold
-        # and has a valid number of digits
-        mid_txt = text.replace("-", "").replace(" ", "").replace("*", "")
-        if not mid_txt or not mid_txt.isnumeric() or len(mid_txt) not in ZOOM_MID_LENGTHS:
-            return slack_error_response(
-                "Please specify a valid Zoom meeting id."
-            )
-
-        meeting_id = int(mid_txt)
+        slash_command_arg = query["text"][0] if "text" in query else None
         response_url = query["response_url"][0]
         channel_name = query["channel_name"][0]
+        user_id = query["user_id"][0]
+        username = query["user_name"][0]
     else:
         slash_command = None
         payload = json.loads(query["payload"][0])
@@ -118,6 +112,8 @@ def handler(event, context):
 
         response_url = payload["response_url"]
         channel_name = payload["channel"]["name"]
+        user_id = payload["user"]["id"]
+        username = payload["user"]["name"]
         action_text = payload["actions"][0]["text"]["text"]
         if action_text != RESULTS_BUTTON_TEXT:
             return resp_204(f"Ignore action: {action_text}")
@@ -132,13 +128,45 @@ def handler(event, context):
         }
         logger.info(f"Interaction value: {action_value}")
 
+    # User group validation
+    if not allowed_user(user_id):
+        logger.warning(f"User {username}, id: {user_id}, not in authorized slack groups.")
+        return slack_error_response(
+            f"You are not authorized to use command {slash_command}."
+        )
+
+    # Channel validation
+    if channel_name != "directmessage" and channel_name != ZIP_SLACK_CHANNEL:
+        logger.warning(
+            f"Channel name {channel_name} not in authorized slack channels."
+        )
+        if slash_command:
+            return slack_error_response(
+                f"The command {slash_command} can only be used in DM"
+                f" or in the #{ZIP_SLACK_CHANNEL} channel"
+            )
+        else:
+            return slack_error_response(
+                f"Requests from channel {channel_name} not authorized."
+            )
+
+    if slash_command:
+        if not slash_command_arg:
+            return slack_help_response(slash_command)
+        if slash_command_arg == "help":
+            return slack_help_response(slash_command)
+
+        # Accept mid that includes spaces, dashes or is bold
+        # and has a valid number of digits
+        mid_txt = slash_command_arg.replace("-", "").replace(" ", "").replace("*", "")
+        if not mid_txt or not mid_txt.isnumeric() or len(mid_txt) not in ZOOM_MID_LENGTHS:
+            return slack_error_response(
+                "Please specify a valid Zoom meeting ID."
+            )
+        meeting_id = int(mid_txt)
+
     meeting_status = status_by_mid(meeting_id)
     logger.info({"meeting_data": meeting_status})
-
-    if channel_name != "directmessage" and channel_name != ZIP_SLACK_CHANNEL:
-        return slack_error_response(
-            f"The command {slash_command} can only be used in DM or in the #{ZIP_SLACK_CHANNEL} channel"
-        )
 
     try:
         if slash_command:
@@ -228,10 +256,50 @@ def valid_slack_request(event):
         return False
 
     h = hmac.new(
-        bytes(SLACK_SIGNING_SECRET, "UTF-8"), bytes(basestring, "UTF-8"), hashlib.sha256
+        bytes(SLACK_SIGNING_SECRET, "UTF-8"),
+        bytes(basestring, "UTF-8"),
+        hashlib.sha256
     )
 
     return hmac.compare_digest(f"{version}={str(h.hexdigest())}", signature)
+
+
+def slack_api_request(endpoint):
+    r = requests.get(
+        f"https://slack.com/api/{endpoint}",
+        headers={"Authorization": f"Bearer {SLACK_API_TOKEN}"}
+    )
+    r.raise_for_status
+
+    data = r.json()
+    if "error" in data:
+        raise SlackApiRequestError(
+            f"Slack API request error: {r.content['error']}"
+        )
+
+    return data
+
+
+def allowed_user(user_id):
+
+    data = slack_api_request("usergroups.list")
+    logger.info(data)
+
+    allowed_group_ids = []
+    if "usergroups" in data:
+        for group in data["usergroups"]:
+            if group["handle"] in SLACK_ALLOWED_GROUPS:
+                allowed_group_ids.append(group["id"])
+
+    if not allowed_group_ids:
+        raise Exception("No slack allowed groups found")
+
+    for group_id in allowed_group_ids:
+        data = slack_api_request(f"usergroups.users.list?usergroup={group_id}")
+        if user_id in data["users"]:
+            return True
+
+    return False
 
 
 def send_interaction_response(
@@ -267,7 +335,7 @@ def slack_response_blocks(
     max_results=RESULTS_PER_REQUEST,
     interaction=False,
 ):
-    
+
     # Meeting metadata
     schedule = retrieve_schedule(mid)
     if schedule:
@@ -481,7 +549,7 @@ def status_description(ingest_details, on_demand, match):
             status_msg = "Ignored by ZIP."
     # Schedule match
     elif status == PipelineStatus.OC_SERIES_FOUND.name:
-        status_msg = "Found match in schedule. Downloading files."
+        status_msg = "Downloading files."
     # Ingesting
     elif status == PipelineStatus.SENT_TO_UPLOADER.name:
         status_msg = "Ready to ingest to Opencast"

@@ -62,6 +62,8 @@ class ZipStack(core.Stack):
         gsheets_sheet_name,
         slack_signing_secret,
         zip_slack_channel,
+        slack_allowed_groups,
+        slack_api_token,
         **kwargs
     ) -> None:
 
@@ -131,6 +133,8 @@ class ZipStack(core.Stack):
                 "SLACK_SIGNING_SECRET": slack_signing_secret,
                 "LOCAL_TIME_ZONE": local_time_zone,
                 "ZIP_SLACK_CHANNEL": zip_slack_channel,
+                "SLACK_ALLOWED_GROUPS": slack_allowed_groups,
+                "SLACK_API_TOKEN": slack_api_token,
                 "OC_CLUSTER_NAME": oc_cluster_name
             }
         )
