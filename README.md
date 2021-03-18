@@ -46,7 +46,7 @@ Info on Zoom's API and webhook functionality can be found at:
 ##### Python stuff
 * python 3.8+
 * the python `virtualenv` package
-* AWS CLI installed and configured [https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html]()
+* AWS CLI installed and configured [https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html)
 
 ##### node/cdk stuff
 
@@ -54,7 +54,7 @@ Info on Zoom's API and webhook functionality can be found at:
 * the `aws-cdk` node.js toolkit installed 
     * this is usually just `npm install -g aws-cdk`
     * it's best if the version matches the version of the `aws-cdk.core` package in `requirements.txt`
-    * see [https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html]() for more info
+    * see [https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html](https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html) for more info
     
 ##### other stuff
 
