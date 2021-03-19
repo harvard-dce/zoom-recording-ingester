@@ -21,3 +21,14 @@ jobs:
         run: pytest ./tests
         env:
           AWS_DEFAULT_REGION: us-east-1
+  lint-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - run: pip install black
+      - run: black --check
+      - run: pip install flake8
+      - run: flake8
