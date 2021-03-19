@@ -25,7 +25,7 @@ SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
 PRETTY_TIMESTAMP_FORMAT = "%B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
-ZIP_SLACK_CHANNEL = env("ZIP_SLACK_CHANNEL")
+SLACK_ZIP_CHANNEL = env("SLACK_ZIP_CHANNEL")
 OC_CLUSTER_NAME = env("OC_CLUSTER_NAME")
 SLACK_API_TOKEN = env("SLACK_API_TOKEN")
 SLACK_ALLOWED_GROUPS = env("SLACK_ALLOWED_GROUPS").split(",")
@@ -136,14 +136,14 @@ def handler(event, context):
         )
 
     # Channel validation
-    if channel_name != "directmessage" and channel_name != ZIP_SLACK_CHANNEL:
+    if channel_name != "directmessage" and channel_name != SLACK_ZIP_CHANNEL:
         logger.warning(
             f"Channel name {channel_name} not in authorized slack channels."
         )
         if slash_command:
             return slack_error_response(
                 f"The command {slash_command} can only be used in DM"
-                f" or in the #{ZIP_SLACK_CHANNEL} channel"
+                f" or in the #{SLACK_ZIP_CHANNEL} channel"
             )
         else:
             return slack_error_response(

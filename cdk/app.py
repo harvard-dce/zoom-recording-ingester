@@ -68,7 +68,7 @@ stack_props = {
     "gsheets_doc_id": getenv("GSHEETS_DOC_ID"),
     "gsheets_sheet_name": getenv("GSHEETS_SHEET_NAME"),
     "slack_signing_secret": getenv("SLACK_SIGNING_SECRET"),
-    "zip_slack_channel": getenv("ZIP_SLACK_CHANNEL"),
+    "slack_zip_channel": getenv("SLACK_ZIP_CHANNEL"),
     "slack_api_token": getenv("SLACK_API_TOKEN"),
     "slack_allowed_groups": getenv("SLACK_ALLOWED_GROUPS")
 }

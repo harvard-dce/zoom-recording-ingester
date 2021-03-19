@@ -138,6 +138,8 @@ function updateZoomIngester() {
 
 ```
 
+### Slack integration setup
+
 
 ### Setup Zoom webhook notifications (Optional)
 
