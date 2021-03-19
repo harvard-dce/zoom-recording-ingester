@@ -80,6 +80,7 @@ Info on Zoom's API and webhook functionality can be found at:
    you'll need to remember to set in your shell session prior to any `invoke` commands.
 1. Run `invoke test` to confirm the installation.
 1. (Optional) run `invoke -l` to see a list of all available tasks + descriptions.
+1. (Optional) If you plan to make contributions. Install the pre-commit checks with `pip install pre-commit && pre-commit install`.
 
 #### deployment
 
