@@ -45,5 +45,5 @@ def handler(event, context):
     return {
         "statusCode": 200,
         "headers": {},
-        "body": json.dumps({"records": records})
+        "body": json.dumps({"records": records}),
     }
