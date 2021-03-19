@@ -1,11 +1,20 @@
 import site
 from os.path import dirname, join
+
+site.addsitedir(join(dirname(dirname(__file__)), "functions"))
+from importlib import import_module
+
+from datetime import datetime
+import os
 import json
 import requests_mock
-from importlib import import_module
+
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
+on_demand = import_module("zoom-on-demand")
+
+TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 on_demand = import_module("zoom-on-demand")
 
 
@@ -81,11 +90,18 @@ def test_recordings_not_completed(handler, mocker):
 def test_on_demand_happy_trail(handler, mocker):
     mock_zoom_resp = mocker.Mock()
     mock_zoom_resp.json.return_value = {
-        "recording_files": [{"status": "completed"}, {"status": "completed"}]
+        "id": "012345678",
+        "topic": "test topic",
+        "start_time": datetime.now().strftime(TIMESTAMP_FORMAT),
+        "recording_files": [{"status": "completed"}, {"status": "completed"}],
     }
     mock_zoom_api_request = mocker.Mock(return_value=mock_zoom_resp)
     mocker.patch.object(on_demand, "zoom_api_request", mock_zoom_api_request)
     mocker.patch.object(on_demand, "WEBHOOK_ENDPOINT_URL", "mock://foo.com")
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        on_demand, "set_pipeline_status", mock_set_pipeline_status
+    )
     with requests_mock.mock() as m:
         m.post("mock://foo.com", status_code=200)
         handler_event = {

@@ -3,11 +3,17 @@ import json
 import requests
 from os import getenv as env
 from pathlib import Path
-from common import setup_logging, zoom_api_request, TIMESTAMP_FORMAT
+from common.common import (
+    setup_logging,
+    zoom_api_request,
+    TIMESTAMP_FORMAT,
+    retrieve_schedule,
+    schedule_match,
+)
+from common.status import PipelineStatus, set_pipeline_status
 import subprocess
 from pytz import timezone
 from datetime import datetime
-from collections import OrderedDict
 import logging
 import concurrent.futures
 from copy import deepcopy
@@ -26,14 +32,15 @@ DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DOWNLOAD_MESSAGES_PER_INVOCATION = env("DOWNLOAD_MESSAGES_PER_INVOCATION")
-# Recordings that happen within BUFFER_MINUTES a courses schedule
-# start time will be captured
-BUFFER_MINUTES = int(env("BUFFER_MINUTES", 30))
 # Ignore recordings that are less than MIN_DURATION (in minutes)
 MINIMUM_DURATION = int(env("MINIMUM_DURATION", 2))
 
 
 class PermanentDownloadError(Exception):
+    pass
+
+
+class RetryableDownloadError(Exception):
     pass
 
 
@@ -75,11 +82,26 @@ def handler(event, context):
         # for the duration potentially different sets of files
         if dl.duration >= MINIMUM_DURATION or "on_demand_series_id" in dl_data:
             if dl.oc_series_found(ignore_schedule, override_series_id):
+                set_pipeline_status(
+                    dl_data["correlation_id"],
+                    PipelineStatus.OC_SERIES_FOUND,
+                    oc_series_id=dl.opencast_series_id,
+                )
                 break
             else:
                 failure_msg = {"no_oc_series_found": dl_data}
+                set_pipeline_status(
+                    dl_data["correlation_id"],
+                    PipelineStatus.IGNORED,
+                    reason="No opencast series match",
+                )
         else:
             failure_msg = {"recording_too_short": dl_data}
+            set_pipeline_status(
+                dl_data["correlation_id"],
+                PipelineStatus.IGNORED,
+                reason=f"Recording <{MINIMUM_DURATION} minutes",
+            )
 
         # discard and keep checking messages for schedule match
         logger.info(failure_msg)
@@ -98,9 +120,24 @@ def handler(event, context):
         dl.upload_to_s3()
     except PermanentDownloadError as e:
         # push message to deadletter queue, add error reason to message
+        set_pipeline_status(
+            dl.data["correlation_id"],
+            PipelineStatus.DOWNLOADER_FAILED,
+            reason=f"permanent failure: {e}",
+        )
         message = dl.send_to_deadletter_queue(e)
+        set_pipeline_status(
+            dl.data["correlation_id"], PipelineStatus.SENT_TO_UPLOADER
+        )
         download_message.delete()
         logger.error({"Error": e, "Sent to deadletter": message})
+        raise
+    except RetryableDownloadError as e:
+        set_pipeline_status(
+            dl.data["correlation_id"],
+            PipelineStatus.DOWNLOADER_FAILED,
+            reason=f"retryable failure: {e}",
+        )
         raise
 
     # send a message to the opencast uploader
@@ -113,7 +150,7 @@ def retrieve_message(queue):
     messages = queue.receive_messages(
         MaxNumberOfMessages=1, VisibilityTimeout=700
     )
-    if len(messages) == 0:
+    if not messages:
         return None
 
     return messages[0]
@@ -212,80 +249,22 @@ class Download:
         return self._created_utc.astimezone(tz)
 
     @property
-    def _class_schedule(self):
-        """
-        Retrieve the course schedule from DynamoDB.
-        """
-        dynamodb = boto3.resource("dynamodb")
-        table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
-
-        r = table.get_item(
-            Key={"zoom_series_id": str(self.data["zoom_series_id"])}
-        )
-
-        if "Item" not in r:
-            return None
-
-        schedule = r["Item"]
-        # DynamoDB sometimes returns type decimal.Decimal
-        schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
-        return schedule
-
-    @property
     def _series_id_from_schedule(self):
         """
         Check that the recording's start_time matches the schedule and
         extract the opencast series id.
         """
 
-        schedule = self._class_schedule
-
+        schedule = retrieve_schedule(self.data["zoom_series_id"])
         if not schedule:
             return None
 
-        days = OrderedDict(
-            [
-                ("M", "Mondays"),
-                ("T", "Tuesdays"),
-                ("W", "Wednesdays"),
-                ("R", "Thursdays"),
-                ("F", "Fridays"),
-                ("S", "Saturday"),
-                ("U", "Sunday"),
-            ]
-        )
+        event = schedule_match(schedule, self._created_local)
+        if event:
+            self.title = event["title"]
+            return schedule["opencast_series_id"]
 
-        zoom_time = self._created_local
-        logger.info(
-            {"meeting creation time": zoom_time, "course schedule": schedule}
-        )
-        zoom_day_code = list(days.keys())[zoom_time.weekday()]
-
-        # events is a list of {title, day, time} dictionaries
-        for event in schedule["events"]:
-            # match day
-            if zoom_day_code != event["day"]:
-                continue
-
-            # match time
-            scheduled_time = datetime.strptime(event["time"], "%H:%M")
-            timedelta = abs(
-                zoom_time
-                - zoom_time.replace(
-                    hour=scheduled_time.hour, minute=scheduled_time.minute
-                )
-            ).total_seconds()
-            if timedelta < (BUFFER_MINUTES * 60):
-                # Found schedule match
-                self.title = event["title"]
-                return schedule["opencast_series_id"]
-            else:
-                logger.info(
-                    f"Match for day {event['day']} but not within"
-                    f" {BUFFER_MINUTES} minutes of time {event['time']}"
-                )
-
-        logger.info("No opencast series match found")
+        logger.info("No opecast series match found")
         return None
 
     def oc_series_found(self, ignore_schedule=False, override_series_id=None):
@@ -452,7 +431,6 @@ class SQSMessage:
             }
 
         try:
-
             if "fifo" in self.queue.url:
                 message_sent = self.queue.send_message(
                     MessageBody=json.dumps(self.message),
@@ -465,8 +443,14 @@ class SQSMessage:
                     MessageAttributes=message_attributes,
                 )
         except Exception as e:
-            logger.exception(
+            msg = (
                 f"Error when sending SQS message to queue {self.queue.url}:{e}"
+            )
+            logger.exception(msg)
+            set_pipeline_status(
+                self.message["correlation_id"],
+                PipelineStatus.DOWNLOADER_FAILED,
+                reason=f"retryable failure: {msg}",
             )
             raise
 
@@ -685,6 +669,6 @@ class ZoomFile:
         if self.file_extension == "mp4":
             if not self.valid_mp4_file():
                 self.stream.close()
-                raise Exception("MP4 failed to transfer.")
+                raise RetryableDownloadError("MP4 failed to transfer.")
 
         self.stream.close()

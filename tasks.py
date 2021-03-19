@@ -8,7 +8,7 @@ import shutil
 from datetime import datetime, timedelta, date as datetime_date
 from invoke import task, Collection
 from invoke.exceptions import Exit
-from os import symlink, getenv as env
+from os import symlink, mkdir, listdir, getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
@@ -208,6 +208,11 @@ def deploy(ctx, function=None, do_release=False):
 @task(pre=[production_failsafe])
 def deploy_schedule_update(ctx, do_release=False):
     deploy(ctx, names.SCHEDULE_UPDATE_FUNCTION, do_release)
+
+
+@task(pre=[production_failsafe])
+def deploy_status(ctx, do_release=False):
+    deploy(ctx, names.STATUS_FUNCTION, do_release)
 
 
 @task(pre=[production_failsafe])
@@ -736,6 +741,7 @@ deploy_ns.add_task(deploy_downloader, "downloader")
 deploy_ns.add_task(deploy_uploader, "uploader")
 deploy_ns.add_task(deploy_opencast_op_counts, "opencast-op-counts")
 deploy_ns.add_task(deploy_on_demand, "on-demand")
+deploy_ns.add_task(deploy_status, "status-query")
 ns.add_collection(deploy_ns)
 
 exec_ns = Collection("exec")
@@ -887,9 +893,14 @@ def __build_function(ctx, func, upload_to_s3=False):
             "pip install -U -r {} -t {}".format(req_file, build_path), hide=1
         )
 
-    for module in [func, "common", "gsheets"]:
-        module_path = join(dirname(__file__), "functions/{}.py".format(module))
-        module_dist_path = join(build_path, "{}.py".format(module))
+    mkdir(join(build_path, "common"))
+    modules = [
+        "common/" + f.split(".")[0] for f in listdir("functions/common")
+    ]
+    modules.append(func)
+    for module in modules:
+        module_path = join(dirname(__file__), f"functions/{module}.py")
+        module_dist_path = join(build_path, f"{module}.py")
         try:
             symlink(module_path, module_dist_path)
         except FileExistsError:

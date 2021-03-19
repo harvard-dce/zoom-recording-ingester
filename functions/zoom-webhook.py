@@ -1,6 +1,7 @@
 import json
 from os import getenv as env
 from common import setup_logging, TIMESTAMP_FORMAT
+from common.status import PipelineStatus, set_pipeline_status
 from datetime import datetime, timedelta
 from pytz import timezone
 import boto3
@@ -75,15 +76,45 @@ def handler(event, context):
         return resp_400("Missing payload field in webhook notification body.")
     payload = body["payload"]
 
+    if "on_demand_request_id" in payload:
+        origin = "on_demand"
+        correlation_id = payload["on_demand_request_id"]
+    else:
+        origin = "webhook_notification"
+        correlation_id = context.aws_request_id
+
     try:
         validate_payload(payload)
+        # after payload validation, can be sure required object fields exist
+        set_pipeline_status(
+            correlation_id,
+            PipelineStatus.WEBHOOK_RECEIVED,
+            meeting_id=payload["object"]["id"],
+            recording_id=payload["object"]["uuid"],
+            recording_start_time=payload["object"]["start_time"],
+            topic=payload["object"]["topic"],
+            origin=origin,
+        )
+        validate_recording_files(payload["object"]["recording_files"])
     except BadWebhookData as e:
-        return resp_400("Bad data: {}".format(str(e)))
+        set_pipeline_status(
+            correlation_id,
+            PipelineStatus.WEBHOOK_FAILED,
+            reason="Bad webhook data",
+            origin=origin,
+        )
+        return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
+        set_pipeline_status(
+            correlation_id,
+            PipelineStatus.IGNORED,
+            reason="No mp4 files",
+            origin=origin,
+        )
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
 
-    sqs_message = construct_sqs_message(payload, context, zoom_event)
+    sqs_message = construct_sqs_message(payload, correlation_id, zoom_event)
     logger.info({"sqs_message": sqs_message})
 
     if zoom_event == "on.demand.ingest":
@@ -91,6 +122,7 @@ def handler(event, context):
     else:
         delay = DEFAULT_MESSAGE_DELAY
     send_sqs_message(sqs_message, delay)
+    set_pipeline_status(correlation_id, PipelineStatus.SENT_TO_DOWNLOADER)
 
     return {"statusCode": 200, "headers": {}, "body": "Success"}
 
@@ -105,14 +137,6 @@ def validate_payload(payload):
         "start_time",
         "duration",  # duration in minutes
         "recording_files",
-    ]
-    required_file_fields = [
-        "id",  # unique id for the file
-        "recording_start",
-        "recording_end",
-        "download_url",
-        "file_type",
-        "recording_type",
     ]
 
     try:
@@ -132,9 +156,21 @@ def validate_payload(payload):
                         field, obj.keys()
                     )
                 )
+    except Exception as e:
+        raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
-        files = obj["recording_files"]
 
+def validate_recording_files(files):
+    required_file_fields = [
+        "id",  # unique id for the file
+        "recording_start",
+        "recording_end",
+        "download_url",
+        "file_type",
+        "recording_type",
+    ]
+
+    try:
         # make sure there's some mp4 files in here somewhere
         mp4_files = any(x["file_type"].lower() == "mp4" for x in files)
         if not mp4_files:
@@ -163,7 +199,7 @@ def validate_payload(payload):
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
 
-def construct_sqs_message(payload, context, zoom_event):
+def construct_sqs_message(payload, correlation_id, zoom_event):
     now = datetime.strftime(
         timezone(LOCAL_TIME_ZONE).localize(datetime.today()), TIMESTAMP_FORMAT
     )
@@ -196,7 +232,7 @@ def construct_sqs_message(payload, context, zoom_event):
         "host_id": payload["object"]["host_id"],
         "recording_files": recording_files,
         "allow_multiple_ingests": allow_multiple_ingests,
-        "correlation_id": context.aws_request_id,
+        "correlation_id": correlation_id,
         "received_time": now,
     }
 

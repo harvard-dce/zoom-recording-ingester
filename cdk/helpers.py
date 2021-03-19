@@ -1,7 +1,7 @@
 import boto3
 import jmespath
 from os import getenv as _getenv
-from functions.common import zoom_api_request
+from functions.common.common import zoom_api_request
 
 AWS_PROFILE = _getenv("AWS_PROFILE")
 if AWS_PROFILE:

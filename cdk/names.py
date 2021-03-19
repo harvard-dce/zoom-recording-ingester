@@ -4,6 +4,7 @@ NOTIFICATIONS_TOPIC = "notifications"
 METRIC_NAMESPACE = "log-metrics"
 
 SCHEDULE_TABLE = "schedule"
+PIPELINE_STATUS_TABLE = "status"
 
 DOWNLOAD_QUEUE = "download"
 DOWNLOAD_DLQ = "download-dlq"
@@ -18,6 +19,7 @@ UPLOAD_FUNCTION = "zoom-uploader"
 OP_COUNTS_FUNCTION = "opencast-op-counts"
 LOG_NOTIFICATION_FUNCTION = "zoom-log-notifications"
 SCHEDULE_UPDATE_FUNCTION = "schedule-update"
+STATUS_FUNCTION = "status-query"
 FUNCTIONS = [
     ON_DEMAND_FUNCTION,
     WEBHOOK_FUNCTION,
@@ -26,6 +28,7 @@ FUNCTIONS = [
     OP_COUNTS_FUNCTION,
     LOG_NOTIFICATION_FUNCTION,
     SCHEDULE_UPDATE_FUNCTION,
+    STATUS_FUNCTION,
 ]
 
 REST_API = "api"
@@ -33,6 +36,7 @@ API_STAGE = "live"
 WEBHOOK_ENDPOINT = "webhook"
 ON_DEMAND_ENDPOINT = "ingest"
 SCHEDULE_UPDATE_ENDPOINT = "schedule"
+STATUS_ENDPOINT = "status"
 
 CODEBUILD_PROJECT = "codebuild"
 

@@ -9,7 +9,8 @@ from xml.sax.saxutils import escape
 from datetime import datetime
 from hashlib import md5
 from uuid import UUID, uuid4
-from common import TIMESTAMP_FORMAT, setup_logging
+from common.common import setup_logging, TIMESTAMP_FORMAT
+from common.status import PipelineStatus, set_pipeline_status
 
 
 import logging
@@ -51,13 +52,17 @@ session.headers.update(
 UPLOAD_OP_TYPES = ["track", "uri-track"]
 
 
+class OpencastConnectionError(Exception):
+    pass
+
+
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
     logger.info({"url": url, "kwargs": kwargs})
     try:
         resp = session.request(method, url, **kwargs)
     except requests.RequestException:
-        raise
+        raise OpencastConnectionError
     resp.raise_for_status()
     return resp
 
@@ -70,11 +75,11 @@ def handler(event, context):
     messages = upload_queue.receive_messages(
         MaxNumberOfMessages=1, VisibilityTimeout=900
     )
-    if len(messages) == 0:
+    if not messages:
         logger.warning("No upload queue messages available.")
         return
     else:
-        logger.info("{} upload messages in queue".format(len(messages)))
+        logger.info(f"{len(messages)} upload messages in queue")
 
     # don't ingest of opencast is overloaded
     current_uploads = get_current_upload_count()
@@ -82,32 +87,47 @@ def handler(event, context):
         logger.error("Unable to determine number of existing upload ops")
         return
     elif current_uploads >= OC_TRACK_UPLOAD_MAX:
-        logger.warning(
-            "Too many current track uploads: {}".format(current_uploads)
-        )
+        logger.warning(f"Too many current track uploads: {current_uploads}")
         return
     else:
-        logger.info(
-            "Opencast upload count looks good: {}".format(current_uploads)
-        )
+        logger.info(f"Opencast upload count looks good: {current_uploads}")
 
     upload_message = messages[0]
     logger.debug({"queue_message": {"body": upload_message.body}})
 
+    upload_data = None
     try:
         upload_data = json.loads(upload_message.body)
         logger.debug({"processing": upload_data})
+        set_pipeline_status(
+            upload_data["correlation_id"], PipelineStatus.UPLOADER_RECEIVED
+        )
 
         wf_id = process_upload(upload_data)
         upload_message.delete()
         if wf_id:
             logger.info(f"Workflow id {wf_id} initiated.")
             # only ingest one per invocation
+            set_pipeline_status(
+                upload_data["correlation_id"], PipelineStatus.SENT_TO_OPENCAST
+            )
         else:
             logger.info("No workflow initiated.")
-
+    except OpencastConnectionError as e:
+        logger.exception(e)
+        if upload_data and "correlation_id" in upload_data:
+            set_pipeline_status(
+                upload_data["correlation_id"],
+                PipelineStatus.UPLOADER_FAILED,
+                reason="Unable to reach Opencast.",
+            )
+        raise
     except Exception as e:
         logger.exception(e)
+        if upload_data and "correlation_id" in upload_data:
+            set_pipeline_status(
+                upload_data["correlation_id"], PipelineStatus.UPLOADER_FAILED
+            )
         raise
 
 
@@ -167,6 +187,12 @@ class Upload:
                     logger.warning(
                         "Episode with deterministic mediapackage id"
                         f" {mpid} already ingested"
+                    )
+                    set_pipeline_status(
+                        self.data["correlation_id"],
+                        self.meeting_uuid,
+                        PipelineStatus.IGNORED,
+                        reason="Already in opencast",
                     )
                     mpid = None
             else:
@@ -243,7 +269,7 @@ class Upload:
               - foo/bar/001-shared_screen.mp4 (5m)
               - foo/bar/002-shared_screen.mp4 (2h)
 
-        Here we have 3 segments of lenght 1m, 5m and 2h. However, the first
+        Here we have 3 segments of length 1m, 5m and 2h. However, the first
         segment is only present in the "speaker" view. So we can't simply throw
         away the first file from each view; we have to make sure it's from the
         "000" segment.
@@ -365,8 +391,8 @@ class Upload:
         fpg = FileParamGenerator(self.s3_filenames)
         try:
             file_params = fpg.generate()
-        except Exception:
-            logger.exception("Failed to generate file upload params")
+        except Exception as e:
+            logger.exception(f"Failed to generate file upload params: {e}")
             raise
 
         params.extend(file_params)

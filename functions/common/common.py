@@ -7,11 +7,13 @@ from functools import wraps
 from os import getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname
-from urllib.parse import urljoin
+import boto3
+from collections import OrderedDict
+from datetime import datetime
 
 logger = logging.getLogger()
 
-load_dotenv(join(dirname(__file__), "../.env"))
+load_dotenv(join(dirname(__file__), "../../.env"))
 
 LOG_LEVEL = env("DEBUG") and "DEBUG" or "INFO"
 BOTO_LOG_LEVEL = env("BOTO_DEBUG") and "DEBUG" or "INFO"
@@ -20,6 +22,24 @@ ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
 APIGEE_KEY = env("APIGEE_KEY")
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
+CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
+# Recordings that happen within BUFFER_MINUTES a courses schedule
+# start time will be captured
+BUFFER_MINUTES = int(env("BUFFER_MINUTES", 30))
+
+
+schedule_days = OrderedDict(
+    [
+        ("M", "Mondays"),
+        ("T", "Tuesdays"),
+        ("W", "Wednesdays"),
+        ("R", "Thursdays"),
+        ("F", "Fridays"),
+        ("S", "Saturday"),
+        ("U", "Sunday"),
+    ]
+)
 
 
 class ZoomApiRequestError(Exception):
@@ -113,3 +133,53 @@ def zoom_api_request(
         r.raise_for_status()
 
     return r
+
+
+def retrieve_schedule(zoom_mid):
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table(CLASS_SCHEDULE_TABLE)
+
+    r = table.get_item(Key={"zoom_series_id": str(zoom_mid)})
+
+    if "Item" not in r:
+        return None
+
+    schedule = r["Item"]
+    schedule["opencast_series_id"] = str(schedule["opencast_series_id"])
+
+    return schedule
+
+
+def schedule_match(schedule, local_start_time):
+    if not schedule:
+        return None
+
+    zoom_time = local_start_time
+    logger.info(
+        {"meeting creation time": zoom_time, "course schedule": schedule}
+    )
+    zoom_day_code = list(schedule_days.keys())[zoom_time.weekday()]
+
+    # events is a list of {title, day, time} dictionaries
+    for event in schedule["events"]:
+        # match day
+        if zoom_day_code != event["day"]:
+            continue
+
+        # match time
+        scheduled_time = datetime.strptime(event["time"], "%H:%M")
+        timedelta = abs(
+            zoom_time
+            - zoom_time.replace(
+                hour=scheduled_time.hour, minute=scheduled_time.minute
+            )
+        ).total_seconds()
+        if timedelta < (BUFFER_MINUTES * 60):
+            return schedule["opencast_series_id"]
+        else:
+            logger.info(
+                f"Match for day {event['day']} but not within"
+                f" {BUFFER_MINUTES} minutes of time {event['time']}"
+            )
+
+    return None

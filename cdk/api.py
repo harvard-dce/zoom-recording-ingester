@@ -17,6 +17,7 @@ class ZipApi(core.Construct):
         webhook_function,
         on_demand_function,
         schedule_update_function,
+        status_query_function,
         ingest_allowed_ips,
     ):
         super().__init__(scope, id)
@@ -30,7 +31,7 @@ class ZipApi(core.Construct):
                     actions=["execute-api:Invoke"],
                     principals=[iam.AnyPrincipal()],
                     # note that the policy is a prop of the api which cannot
-                    # reference itself see the Cloudformation documentation
+                    # reference itself, see the Cloudformation documentation
                     # for api gateway policy attribute
                     resources=[core.Fn.join("", ["execute-api:/", "*"])],
                 ),
@@ -39,7 +40,8 @@ class ZipApi(core.Construct):
                     actions=["execute-api:Invoke"],
                     principals=[iam.AnyPrincipal()],
                     resources=[
-                        core.Fn.join("", ["execute-api:/", "*/POST/ingest"])
+                        core.Fn.join("", ["execute-api:/", "*/POST/ingest"]),
+                        core.Fn.join("", ["execute-api:/", "*/GET/status"]),
                     ],
                     conditions={
                         "NotIpAddress": {"aws:SourceIp": ingest_allowed_ips}
@@ -78,61 +80,28 @@ class ZipApi(core.Construct):
 
         self.api.add_api_key("ZoomIngesterApiKey")
 
-        self.new_recording_resource = self.api.root.add_resource(
-            "new_recording"
-        )
-        self.new_recording_method = self.new_recording_resource.add_method(
-            "POST",
-            method_responses=[
-                apigw.MethodResponse(
-                    status_code="200",
-                    response_models={
-                        "application/json": apigw.Model.EMPTY_MODEL
-                    },
-                )
-            ],
+        self.new_recording_resource = self.resource(
+            "new_recording", webhook_function, "POST"
         )
 
-        self.ingest_resource = self.api.root.add_resource(
+        self.ingest_resource = self.resource(
             "ingest",
-            default_cors_preflight_options=apigw.CorsOptions(
+            on_demand_function,
+            "POST",
+            cors_options=apigw.CorsOptions(
                 allow_origins=apigw.Cors.ALL_ORIGINS,
                 allow_methods=["POST", "OPTIONS"],
                 allow_headers=apigw.Cors.DEFAULT_HEADERS
                 + ["Accept-Language", "X-Requested-With"],
             ),
         )
-        on_demand_integration = apigw.LambdaIntegration(on_demand_function)
-        self.ingest_method = self.ingest_resource.add_method(
-            "POST",
-            on_demand_integration,
-            method_responses=[
-                apigw.MethodResponse(
-                    status_code="200",
-                    response_models={
-                        "application/json": apigw.Model.EMPTY_MODEL
-                    },
-                )
-            ],
+
+        self.schedule_update_resource = self.resource(
+            "schedule_update", schedule_update_function, "POST"
         )
 
-        self.schedule_update_resource = self.api.root.add_resource(
-            "schedule_update"
-        )
-        schedule_update_integration = apigw.LambdaIntegration(
-            schedule_update_function
-        )
-        self.schedule_update_method = self.schedule_update_resource.add_method(
-            "POST",
-            schedule_update_integration,
-            method_responses=[
-                apigw.MethodResponse(
-                    status_code="200",
-                    response_models={
-                        "application/json": apigw.Model.EMPTY_MODEL
-                    },
-                )
-            ],
+        self.status_query_resource = self.resource(
+            "status", status_query_function, "GET"
         )
 
         def endpoint_url(resource_name):
@@ -169,6 +138,13 @@ class ZipApi(core.Construct):
 
         core.CfnOutput(
             self,
+            "StatusQueryEndpoint",
+            export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-url",
+            value=endpoint_url("status"),
+        )
+
+        core.CfnOutput(
+            self,
             "WebhookResourceId",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-resource-id",
             value=self.new_recording_resource.resource_id,
@@ -190,10 +166,37 @@ class ZipApi(core.Construct):
 
         core.CfnOutput(
             self,
+            "StatusQueryResourceId",
+            export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-resource-id",
+            value=self.status_query_resource.resource_id,
+        )
+
+        core.CfnOutput(
+            self,
             "RestApiId",
             export_name=f"{stack_name}-{names.REST_API}-id",
             value=self.api.rest_api_id,
         )
+
+    def resource(
+        self, resource_name, lambda_function, http_method, cors_options=None
+    ):
+        resource = self.api.root.add_resource(
+            resource_name, default_cors_preflight_options=cors_options
+        )
+        resource.add_method(
+            http_method,
+            apigw.LambdaIntegration(lambda_function),
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    },
+                )
+            ],
+        )
+        return resource
 
     def add_monitoring(self, monitoring):
 
