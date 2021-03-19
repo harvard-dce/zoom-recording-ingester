@@ -56,6 +56,7 @@ def handler(event, context):
 
     uuid = body["uuid"]
     if uuid.startswith("https"):
+        # it's a link; parse the uuid from the query string
         uuid = extract_uuid_from_url(uuid)
 
     logger.info("Got recording uuid: '{}'".format(uuid))
@@ -139,7 +140,6 @@ def handler(event, context):
 
 
 def extract_uuid_from_url(url):
-    # it's a link; parse the uuid from the query string
     parsed_url = urlparse(url)
     query_params = parse_qs(parsed_url.query)
     if "meeting_id" not in query_params:
