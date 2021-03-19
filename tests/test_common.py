@@ -99,7 +99,7 @@ def test_url_construction(caplog):
             common.ZOOM_API_BASE_URL = url
             common.zoom_api_request(endpoint)
             assert (
-                f"zoom api request to https://www.foo.com/meetings"
+                "zoom api request to https://www.foo.com/meetings"
                 in caplog.text.lower()
             )
 

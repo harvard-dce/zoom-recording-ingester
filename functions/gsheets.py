@@ -27,7 +27,7 @@ load_dotenv(join(dirname(__file__), "../.env"))
 class GSheetsAuth:
     def __init__(self, in_lambda=False):
         self.ssm = boto3.client("ssm")
-        self.ssm_path = f"/zoom-ingester/common/gapi-credentials"
+        self.ssm_path = "/zoom-ingester/common/gapi-credentials"
         # if in lambda, must use tmp folder
         self.default_filename = "/tmp/service_account.json"
         self.creds = None
