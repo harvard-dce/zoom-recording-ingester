@@ -57,7 +57,13 @@ def handler(event, context):
     uuid = body["uuid"]
     if uuid.startswith("https"):
         # it's a link; parse the uuid from the query string
-        uuid = extract_uuid_from_url(uuid)
+        parsed_url = urlparse(uuid)
+        query_params = parse_qs(parsed_url.query)
+        if "meeting_id" not in query_params:
+            return resp(
+                404, "Zoom URL is malformed or missing 'meeting_id' " "param."
+            )
+        uuid = query_params["meeting_id"][0]
 
     logger.info("Got recording uuid: '{}'".format(uuid))
 
@@ -137,13 +143,3 @@ def handler(event, context):
         return resp(500, err_msg)
 
     return resp(200, "Ingest accepted")
-
-
-def extract_uuid_from_url(url):
-    parsed_url = urlparse(url)
-    query_params = parse_qs(parsed_url.query)
-    if "meeting_id" not in query_params:
-        return resp(
-            404, "Zoom URL is malformed or missing 'meeting_id' " "param."
-        )
-    return query_params["meeting_id"][0]
