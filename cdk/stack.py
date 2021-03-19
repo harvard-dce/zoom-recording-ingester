@@ -1,8 +1,4 @@
-from aws_cdk import (
-    core,
-    aws_s3 as s3,
-    aws_iam as iam
-)
+from aws_cdk import core, aws_s3 as s3, aws_iam as iam
 
 from .bucket import ZipRecordingsBucket
 from .queues import ZipQueues
@@ -10,7 +6,8 @@ from .schedule_table import ZipSchedule
 from .status_table import ZipStatus
 from .function import (
     ZipDownloaderFunction,
-    ZipOnDemandFunction, ZipSlackQueryFunction,
+    ZipOnDemandFunction,
+    ZipSlackQueryFunction,
     ZipUploaderFunction,
     ZipOpCountsFunction,
     ZipWebhookFunction,
@@ -26,10 +23,9 @@ from . import names
 
 
 class ZipStack(core.Stack):
-
     def __init__(
         self,
-        scope: core.Construct, 
+        scope: core.Construct,
         id: str,
         lambda_code_bucket,
         notification_email,
@@ -97,12 +93,12 @@ class ZipStack(core.Stack):
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
                 "GSHEETS_DOC_ID": gsheets_doc_id,
                 "GSHEETS_SHEET_NAME": gsheets_sheet_name,
-            }
+            },
         )
         schedule_update.function.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["ssm:GetParameter", "ssm:PutParameter"],
-                resources=["*"]
+                resources=["*"],
             )
         )
         # grant schedule update function access to dynamo
@@ -115,8 +111,8 @@ class ZipStack(core.Stack):
             lambda_code_bucket=lambda_code_bucket,
             environment={
                 "STACK_NAME": self.stack_name,
-                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
-            }
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
+            },
         )
         # grant status query function permissions
         pipeline_status.table.grant_read_write_data(status_query.function)
@@ -135,8 +131,8 @@ class ZipStack(core.Stack):
                 "SLACK_ZIP_CHANNEL": slack_zip_channel,
                 "SLACK_ALLOWED_GROUPS": slack_allowed_groups,
                 "SLACK_API_TOKEN": slack_api_token,
-                "OC_CLUSTER_NAME": oc_cluster_name
-            }
+                "OC_CLUSTER_NAME": oc_cluster_name,
+            },
         )
         # grant slack function permissions
         pipeline_status.table.grant_read_write_data(slack.function)
@@ -152,8 +148,8 @@ class ZipStack(core.Stack):
                 "ZOOM_API_KEY": zoom_api_key,
                 "ZOOM_API_SECRET": zoom_api_secret,
                 "APIGEE_KEY": apigee_key,
-                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
-            }
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
+            },
         )
 
         # grant on demand function permissions
@@ -168,8 +164,8 @@ class ZipStack(core.Stack):
                 "DOWNLOAD_QUEUE_NAME": queues.download_queue.queue_name,
                 "LOCAL_TIME_ZONE": local_time_zone,
                 "DEBUG": "0",
-                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
-            }
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
+            },
         )
 
         # grant webhook function permissions
@@ -201,7 +197,7 @@ class ZipStack(core.Stack):
                 "LOCAL_TIME_ZONE": local_time_zone,
                 "DEFAULT_SERIES_ID": default_series_id,
                 "DOWNLOAD_MESSAGES_PER_INVOCATION": download_message_per_invocation,
-            }
+            },
         )
 
         # grant downloader function permissions
@@ -220,14 +216,12 @@ class ZipStack(core.Stack):
             lambda_code_bucket=lambda_code_bucket,
             vpc_id=oc_vpc_id,
             security_group_id=oc_security_group_id,
-            environment={
-                "OPENCAST_DB_URL": oc_db_url
-            }
+            environment={"OPENCAST_DB_URL": oc_db_url},
         )
 
         # uploader lambda uploads recordings to opencast
         uploader = ZipUploaderFunction(
-            self, 
+            self,
             "UploaderFunction",
             name=names.UPLOAD_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
@@ -248,8 +242,8 @@ class ZipStack(core.Stack):
                 "UPLOAD_QUEUE_NAME": queues.upload_queue.queue_name,
                 "DEBUG": "0",
                 "OC_OP_COUNT_FUNCTION": op_counts.function.function_name,
-                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name
-            }
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
+            },
         )
 
         # grant uploader function permissions
@@ -270,7 +264,7 @@ class ZipStack(core.Stack):
             "LogNotificationFunction",
             name=names.LOG_NOTIFICATION_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
-            environment={}
+            environment={},
         )
 
         api = ZipApi(
@@ -281,21 +275,21 @@ class ZipStack(core.Stack):
             schedule_update_function=schedule_update.function,
             status_query_function=status_query.function,
             slack_function=slack.function,
-            ingest_allowed_ips=ingest_allowed_ips
+            ingest_allowed_ips=ingest_allowed_ips,
         )
 
         ZipEvent(
             self,
             "DownloadEvent",
             function=downloader.function,
-            event_rate=downloader_event_rate
+            event_rate=downloader_event_rate,
         )
 
         ZipEvent(
             self,
             "UploadEvent",
             function=uploader.function,
-            event_rate=uploader_event_rate
+            event_rate=uploader_event_rate,
         )
 
         ZipCodebuildProject(
@@ -310,8 +304,8 @@ class ZipStack(core.Stack):
                 uploader.function.function_arn,
                 op_counts.function.function_arn,
                 log_notify.function.function_arn,
-                schedule_update.function.function_arn
-            ]
+                schedule_update.function.function_arn,
+            ],
         )
 
         schedule_update.add_monitoring(monitoring)

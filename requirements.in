@@ -6,7 +6,8 @@ pytest
 pytest-env
 pytest-mock
 pytest-cov
-tox>=3.23.0
+tox
+black
 boto3
 requests
 requests-mock

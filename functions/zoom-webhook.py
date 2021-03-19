@@ -7,6 +7,7 @@ from pytz import timezone
 import boto3
 
 import logging
+
 logger = logging.getLogger()
 
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
@@ -29,26 +30,18 @@ def resp_204(msg):
     be considered a retry-able error by Zoom
     """
     logger.info("http 204 response: {}".format(msg))
-    return {
-        "statusCode": 204,
-        "headers": {},
-        "body": ""  # 204 = no content
-    }
+    return {"statusCode": 204, "headers": {}, "body": ""}  # 204 = no content
 
 
 def resp_400(msg):
     logger.error("http 400 response: {}".format(msg))
-    return {
-        "statusCode": 400,
-        "headers": {},
-        "body": msg
-    }
+    return {"statusCode": 400, "headers": {}, "body": msg}
 
 
 INGEST_EVENT_TYPES = {
     # event type            no mp4 files response callback
-    "recording.completed":  resp_204,
-    "on.demand.ingest":     resp_400
+    "recording.completed": resp_204,
+    "on.demand.ingest": resp_400,
 }
 
 
@@ -100,7 +93,7 @@ def handler(event, context):
             recording_id=payload["object"]["uuid"],
             recording_start_time=payload["object"]["start_time"],
             topic=payload["object"]["topic"],
-            origin=origin
+            origin=origin,
         )
         validate_recording_files(payload["object"]["recording_files"])
     except BadWebhookData as e:
@@ -108,7 +101,7 @@ def handler(event, context):
             correlation_id,
             PipelineStatus.WEBHOOK_FAILED,
             reason="Bad webhook data",
-            origin=origin
+            origin=origin,
         )
         return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
@@ -116,7 +109,7 @@ def handler(event, context):
             correlation_id,
             PipelineStatus.IGNORED,
             reason="No mp4 files",
-            origin=origin
+            origin=origin,
         )
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
@@ -129,22 +122,13 @@ def handler(event, context):
     else:
         delay = DEFAULT_MESSAGE_DELAY
     send_sqs_message(sqs_message, delay)
-    set_pipeline_status(
-        correlation_id,
-        PipelineStatus.SENT_TO_DOWNLOADER
-    )
+    set_pipeline_status(correlation_id, PipelineStatus.SENT_TO_DOWNLOADER)
 
-    return {
-        "statusCode": 200,
-        "headers": {},
-        "body": "Success"
-    }
+    return {"statusCode": 200, "headers": {}, "body": "Success"}
 
 
 def validate_payload(payload):
-    required_payload_fields = [
-        "object"
-    ]
+    required_payload_fields = ["object"]
     required_object_fields = [
         "id",  # zoom series id
         "uuid",  # unique id of the meeting instance,
@@ -152,22 +136,26 @@ def validate_payload(payload):
         "topic",
         "start_time",
         "duration",  # duration in minutes
-        "recording_files"
+        "recording_files",
     ]
 
     try:
         for field in required_payload_fields:
-                if field not in payload.keys():
-                    raise BadWebhookData(
-                        "Missing required payload field '{}'. Keys found: {}"
-                        .format(field, payload.keys()))
+            if field not in payload.keys():
+                raise BadWebhookData(
+                    "Missing required payload field '{}'. Keys found: {}".format(
+                        field, payload.keys()
+                    )
+                )
 
         obj = payload["object"]
         for field in required_object_fields:
             if field not in obj.keys():
                 raise BadWebhookData(
-                    "Missing required object field '{}'. Keys found: {}"
-                    .format(field, obj.keys()))
+                    "Missing required object field '{}'. Keys found: {}".format(
+                        field, obj.keys()
+                    )
+                )
     except Exception as e:
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
 
@@ -179,7 +167,7 @@ def validate_recording_files(files):
         "recording_end",
         "download_url",
         "file_type",
-        "recording_type"
+        "recording_type",
     ]
 
     try:
@@ -196,7 +184,8 @@ def validate_recording_files(files):
             for field in required_file_fields:
                 if field not in file.keys():
                     raise BadWebhookData(
-                        "Missing required file field '{}'".format(field))
+                        "Missing required file field '{}'".format(field)
+                    )
             if "status" in file and file["status"].lower() != "completed":
                 raise BadWebhookData(
                     "File with incomplete status {}".format(file["status"])
@@ -212,8 +201,7 @@ def validate_recording_files(files):
 
 def construct_sqs_message(payload, correlation_id, zoom_event):
     now = datetime.strftime(
-        timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
-        TIMESTAMP_FORMAT
+        timezone(LOCAL_TIME_ZONE).localize(datetime.today()), TIMESTAMP_FORMAT
     )
 
     if "allow_multiple_ingests" in payload:
@@ -224,14 +212,16 @@ def construct_sqs_message(payload, correlation_id, zoom_event):
     recording_files = []
     for file in payload["object"]["recording_files"]:
         if file["file_type"].lower() == "mp4":
-            recording_files.append({
-                "recording_id": file["id"],
-                "recording_start": file["recording_start"],
-                "recording_end": file["recording_end"],
-                "download_url": file["download_url"],
-                "file_type": file["file_type"],
-                "recording_type": file["recording_type"]
-            })
+            recording_files.append(
+                {
+                    "recording_id": file["id"],
+                    "recording_start": file["recording_start"],
+                    "recording_end": file["recording_end"],
+                    "download_url": file["download_url"],
+                    "file_type": file["file_type"],
+                    "recording_type": file["recording_type"],
+                }
+            )
 
     sqs_message = {
         "uuid": payload["object"]["uuid"],
@@ -243,7 +233,7 @@ def construct_sqs_message(payload, correlation_id, zoom_event):
         "recording_files": recording_files,
         "allow_multiple_ingests": allow_multiple_ingests,
         "correlation_id": correlation_id,
-        "received_time": now
+        "received_time": now,
     }
 
     if "on_demand_series_id" in payload:
@@ -255,8 +245,7 @@ def construct_sqs_message(payload, correlation_id, zoom_event):
 
     if zoom_event == "recording.completed":
         zoom_processing_mins = estimated_processing_mins(
-            sqs_message["start_time"],
-            sqs_message["duration"]
+            sqs_message["start_time"], sqs_message["duration"]
         )
         sqs_message["zoom_processing_minutes"] = zoom_processing_mins
 
@@ -278,13 +267,15 @@ def send_sqs_message(message, delay):
         download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
 
         message_sent = download_queue.send_message(
-            MessageBody=json.dumps(message),
-            DelaySeconds=delay
+            MessageBody=json.dumps(message), DelaySeconds=delay
         )
 
     except Exception as e:
-        logger.error("Error when sending SQS message for meeting uuid {} :{}"
-                     .format(message["uuid"], e))
+        logger.error(
+            "Error when sending SQS message for meeting uuid {} :{}".format(
+                message["uuid"], e
+            )
+        )
         raise
 
     logger.debug({"Message sent": message_sent})

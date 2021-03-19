@@ -3,14 +3,13 @@ from aws_cdk import (
     aws_apigateway as apigw,
     aws_cloudwatch as cloudwatch,
     aws_iam as iam,
-    aws_logs as logs
+    aws_logs as logs,
 )
 
 from . import names
 
 
 class ZipApi(core.Construct):
-
     def __init__(
         self,
         scope: core.Construct,
@@ -20,7 +19,7 @@ class ZipApi(core.Construct):
         schedule_update_function,
         status_query_function,
         slack_function,
-        ingest_allowed_ips
+        ingest_allowed_ips,
     ):
         super().__init__(scope, id)
 
@@ -30,27 +29,25 @@ class ZipApi(core.Construct):
             statements=[
                 iam.PolicyStatement(
                     effect=iam.Effect.ALLOW,
-                    actions= ["execute-api:Invoke"],
+                    actions=["execute-api:Invoke"],
                     principals=[iam.AnyPrincipal()],
                     # note that the policy is a prop of the api which cannot
                     # reference itself, see the Cloudformation documentation
                     # for api gateway policy attribute
-                    resources=[core.Fn.join('', ['execute-api:/', '*'])]
+                    resources=[core.Fn.join("", ["execute-api:/", "*"])],
                 ),
                 iam.PolicyStatement(
                     effect=iam.Effect.DENY,
                     actions=["execute-api:Invoke"],
                     principals=[iam.AnyPrincipal()],
                     resources=[
-                        core.Fn.join('', ['execute-api:/', '*/POST/ingest']),
-                        core.Fn.join('', ['execute-api:/', '*/GET/status'])
+                        core.Fn.join("", ["execute-api:/", "*/POST/ingest"]),
+                        core.Fn.join("", ["execute-api:/", "*/GET/status"]),
                     ],
                     conditions={
-                        "NotIpAddress": {
-                            "aws:SourceIp": ingest_allowed_ips
-                        }
-                    }
-                )
+                        "NotIpAddress": {"aws:SourceIp": ingest_allowed_ips}
+                    },
+                ),
             ]
         )
 
@@ -61,7 +58,7 @@ class ZipApi(core.Construct):
             "apilogs",
             log_group_name=f"/aws/apigateway/{self.rest_api_name}/access_logs",
             removal_policy=core.RemovalPolicy.DESTROY,
-            retention=logs.RetentionDays.SIX_MONTHS
+            retention=logs.RetentionDays.SIX_MONTHS,
         )
 
         self.api = apigw.LambdaRestApi(
@@ -78,16 +75,14 @@ class ZipApi(core.Construct):
                 data_trace_enabled=True,
                 metrics_enabled=True,
                 logging_level=apigw.MethodLoggingLevel.INFO,
-                stage_name=names.API_STAGE
-            )
+                stage_name=names.API_STAGE,
+            ),
         )
 
         self.api.add_api_key("ZoomIngesterApiKey")
 
         self.new_recording_resource = self.resource(
-            "new_recording",
-            webhook_function,
-            "POST"
+            "new_recording", webhook_function, "POST"
         )
 
         self.ingest_resource = self.resource(
@@ -98,147 +93,139 @@ class ZipApi(core.Construct):
                 allow_origins=apigw.Cors.ALL_ORIGINS,
                 allow_methods=["POST", "OPTIONS"],
                 allow_headers=apigw.Cors.DEFAULT_HEADERS
-                              + ["Accept-Language", "X-Requested-With"]
-            )
+                + ["Accept-Language", "X-Requested-With"],
+            ),
         )
 
         self.schedule_update_resource = self.resource(
-            "schedule_update",
-            schedule_update_function,
-            "POST"
+            "schedule_update", schedule_update_function, "POST"
         )
 
         self.status_query_resource = self.resource(
-            "status",
-            status_query_function,
-            "GET"
+            "status", status_query_function, "GET"
         )
 
-        self.slack_resource = self.resource(
-            "slack",
-            slack_function,
-            "POST"
-        )
+        self.slack_resource = self.resource("slack", slack_function, "POST")
 
         def endpoint_url(resource_name):
-            return (f"https://{self.api.rest_api_id}.execute-api."
-                    f"{core.Stack.of(self).region}.amazonaws.com/"
-                    f"{names.API_STAGE}/{resource_name}")
+            return (
+                f"https://{self.api.rest_api_id}.execute-api."
+                f"{core.Stack.of(self).region}.amazonaws.com/"
+                f"{names.API_STAGE}/{resource_name}"
+            )
 
         on_demand_function.add_environment(
-            "WEBHOOK_ENDPOINT_URL",
-            endpoint_url("new_recording")
+            "WEBHOOK_ENDPOINT_URL", endpoint_url("new_recording")
         )
 
         core.CfnOutput(
             self,
             "WebhookEndpoint",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-url",
-            value=endpoint_url("new_recording")
+            value=endpoint_url("new_recording"),
         )
 
         core.CfnOutput(
             self,
             "OnDemandEndpoint",
             export_name=f"{stack_name}-{names.ON_DEMAND_ENDPOINT}-url",
-            value=endpoint_url("ingest")
+            value=endpoint_url("ingest"),
         )
 
         core.CfnOutput(
             self,
             "ScheduleUpdateEndpoint",
             export_name=f"{stack_name}-{names.SCHEDULE_UPDATE_ENDPOINT}-url",
-            value=endpoint_url("schedule_update")
+            value=endpoint_url("schedule_update"),
         )
 
         core.CfnOutput(
-            self, 
+            self,
             "StatusQueryEndpoint",
             export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-url",
-            value=endpoint_url("status")
+            value=endpoint_url("status"),
         )
 
         core.CfnOutput(
             self,
             "SlackEndpoint",
             export_name=f"{stack_name}-{names.SLACK_ENDPOINT}-url",
-            value=endpoint_url("slack")
+            value=endpoint_url("slack"),
         )
 
         core.CfnOutput(
             self,
             "WebhookResourceId",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-resource-id",
-            value=self.new_recording_resource.resource_id
+            value=self.new_recording_resource.resource_id,
         )
 
         core.CfnOutput(
             self,
             "OnDemandResourceId",
             export_name=f"{stack_name}-{names.ON_DEMAND_ENDPOINT}-resource-id",
-            value=self.ingest_resource.resource_id
+            value=self.ingest_resource.resource_id,
         )
 
         core.CfnOutput(
             self,
             "ScheduleUpdateResourceId",
             export_name=f"{stack_name}-{names.SCHEDULE_UPDATE_ENDPOINT}-resource-id",
-            value=self.schedule_update_resource.resource_id
+            value=self.schedule_update_resource.resource_id,
         )
 
         core.CfnOutput(
             self,
             "StatusQueryResourceId",
             export_name=f"{stack_name}-{names.STATUS_ENDPOINT}-resource-id",
-            value=self.status_query_resource.resource_id
+            value=self.status_query_resource.resource_id,
         )
 
         core.CfnOutput(
             self,
             "SlackResourceId",
             export_name=f"{stack_name}-{names.SLACK_ENDPOINT}-resource-id",
-            value=self.slack_resource.resource_id
+            value=self.slack_resource.resource_id,
         )
 
         core.CfnOutput(
             self,
             "RestApiId",
             export_name=f"{stack_name}-{names.REST_API}-id",
-            value=self.api.rest_api_id
+            value=self.api.rest_api_id,
         )
 
     def resource(
-        self,
-        resource_name,
-        lambda_function,
-        http_method,
-        cors_options=None
+        self, resource_name, lambda_function, http_method, cors_options=None
     ):
         resource = self.api.root.add_resource(
-            resource_name,
-            default_cors_preflight_options=cors_options
+            resource_name, default_cors_preflight_options=cors_options
         )
         resource.add_method(
             http_method,
             apigw.LambdaIntegration(lambda_function),
-            method_responses=[apigw.MethodResponse(
-                status_code="200",
-                response_models={
-                    "application/json": apigw.Model.EMPTY_MODEL
-                }
-            )]
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    },
+                )
+            ],
         )
         return resource
- 
+
     def add_monitoring(self, monitoring):
 
         resource_metrics = [
             (self.new_recording_resource, "4XXError"),
             (self.new_recording_resource, "5XXError"),
-            (self.ingest_resource, "5XXError")
+            (self.ingest_resource, "5XXError"),
         ]
         for resource, metric_name in resource_metrics:
-            construct_id = f"{metric_name}-{resource.path.replace('/', '_')}-alarm"
+            construct_id = (
+                f"{metric_name}-{resource.path.replace('/', '_')}-alarm"
+            )
             alarm = cloudwatch.Alarm(
                 self,
                 construct_id,
@@ -251,12 +238,12 @@ class ZipApi(core.Construct):
                         "Method": "POST",
                         "Resource": resource.path,
                     },
-                    period=core.Duration.minutes(1)
+                    period=core.Duration.minutes(1),
                 ),
                 statistic="sum",
                 threshold=1,
                 evaluation_periods=1,
-                comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+                comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
             )
             monitoring.add_alarm_action(alarm)
 
@@ -277,7 +264,6 @@ class ZipApi(core.Construct):
             statistic="avg",
             threshold=10000,
             evaluation_periods=3,
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
         )
         monitoring.add_alarm_action(webhook_latency_alarm)
-

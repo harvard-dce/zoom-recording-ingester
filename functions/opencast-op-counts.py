@@ -4,20 +4,21 @@ import urllib.parse as urlparse
 
 import logging
 from common.common import setup_logging
+
 logger = logging.getLogger()
 
-OPENCAST_DB_URL = env("OPENCAST_DB_URL");
+OPENCAST_DB_URL = env("OPENCAST_DB_URL")
 OPENCAST_RUNNING_JOB_STATUS = 2
 
 
 def parse_db_url():
-    db_url = urlparse.urlparse(OPENCAST_DB_URL);
+    db_url = urlparse.urlparse(OPENCAST_DB_URL)
     return {
         "host": db_url.hostname,
         "port": db_url.port,
         "user": db_url.username,
         "password": db_url.password,
-        "database": db_url.path[1:]
+        "database": db_url.path[1:],
     }
 
 
@@ -32,7 +33,9 @@ def handler(event, context):
             status = {}
         GROUP BY
             operation
-    """.format(OPENCAST_RUNNING_JOB_STATUS)
+    """.format(
+        OPENCAST_RUNNING_JOB_STATUS
+    )
 
     try:
         cnx_params = parse_db_url()
@@ -45,11 +48,10 @@ def handler(event, context):
     except mysql.connector.Error as e:
         logger.exception("Error communicating with the db: {}".format(str(e)))
     except Exception as e:
-        logger.exception("Error establishing connection to the db: {}".format(str(e)))
+        logger.exception(
+            "Error establishing connection to the db: {}".format(str(e))
+        )
     finally:
-        logger.info({ "operation_counts": res})
+        logger.info({"operation_counts": res})
         cursor.close()
         cnx.close()
-
-
-
