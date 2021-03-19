@@ -13,6 +13,7 @@ from common import TIMESTAMP_FORMAT, setup_logging
 
 
 import logging
+
 logger = logging.getLogger()
 
 UPLOAD_QUEUE_NAME = env("UPLOAD_QUEUE_NAME")
@@ -32,23 +33,22 @@ MINIMUM_DURATION = int(env("MINIMUM_DURATION", 2))
 
 s3 = boto3.resource("s3")
 aws_lambda = boto3.client("lambda")
-sqs = boto3.resource('sqs')
+sqs = boto3.resource("sqs")
 
 session = requests.Session()
 session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
-session.headers.update({
-    "X-REQUESTED-AUTH": "Digest",
-    # TODO: it's possible this header is not necessary for the endpoints being
-    # used here. It seems like for Opencast endpoints where the header *is*
-    # necessary the correct value is actually
-    # "X-Opencast-Matterhorn-Authorization"
-    "X-Opencast-Matterhorn-Authentication": "true",
-})
+session.headers.update(
+    {
+        "X-REQUESTED-AUTH": "Digest",
+        # TODO: it's possible this header is not necessary for the endpoints being
+        # used here. It seems like for Opencast endpoints where the header *is*
+        # necessary the correct value is actually
+        # "X-Opencast-Matterhorn-Authorization"
+        "X-Opencast-Matterhorn-Authentication": "true",
+    }
+)
 
-UPLOAD_OP_TYPES = [
-    'track',
-    'uri-track'
-]
+UPLOAD_OP_TYPES = ["track", "uri-track"]
 
 
 def oc_api_request(method, endpoint, **kwargs):
@@ -68,8 +68,7 @@ def handler(event, context):
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
     messages = upload_queue.receive_messages(
-        MaxNumberOfMessages=1,
-        VisibilityTimeout=900
+        MaxNumberOfMessages=1, VisibilityTimeout=900
     )
     if len(messages) == 0:
         logger.warning("No upload queue messages available.")
@@ -93,11 +92,7 @@ def handler(event, context):
         )
 
     upload_message = messages[0]
-    logger.debug({
-        "queue_message": {
-            "body": upload_message.body
-        }
-    })
+    logger.debug({"queue_message": {"body": upload_message.body}})
 
     try:
         upload_data = json.loads(upload_message.body)
@@ -126,10 +121,11 @@ def minutes_in_pipeline(webhook_received_time):
 def get_current_upload_count():
     try:
         resp = aws_lambda.invoke(FunctionName=OC_OP_COUNT_FUNCTION)
-        op_counts = json.load(resp['Payload'])
-        logger.info('op counts: {}'.format(op_counts))
+        op_counts = json.load(resp["Payload"])
+        logger.info("op counts: {}".format(op_counts))
         return sum(
-            v for k, v in op_counts.items()
+            v
+            for k, v in op_counts.items()
             if v is not None and k in UPLOAD_OP_TYPES
         )
     except Exception as e:
@@ -144,7 +140,6 @@ def process_upload(upload_data):
 
 
 class Upload:
-
     def __init__(self, data):
         self.data = data
 
@@ -167,9 +162,7 @@ class Upload:
                 if self.data["allow_multiple_ingests"]:
                     # random uuid
                     mpid = str(uuid4())
-                    logger.info(
-                        f"Created random mediapackage id {mpid}"
-                    )
+                    logger.info(f"Created random mediapackage id {mpid}")
                 else:
                     logger.warning(
                         "Episode with deterministic mediapackage id"
@@ -212,8 +205,12 @@ class Upload:
 
     @property
     def publisher(self):
-        series_data = {k: v[0]["value"] for k, v in
-                       json.loads(self.series_catalog)["http://purl.org/dc/terms/"].items()}
+        series_data = {
+            k: v[0]["value"]
+            for k, v in json.loads(self.series_catalog)[
+                "http://purl.org/dc/terms/"
+            ].items()
+        }
 
         if OVERRIDE_PUBLISHER and OVERRIDE_PUBLISHER != "None":
             return OVERRIDE_PUBLISHER
@@ -266,7 +263,9 @@ class Upload:
                 segment_files = file_info["segments"]
 
                 # check the duration of the first file in this view
-                too_short = segment_files[0]["ffprobe_seconds"] < (MINIMUM_DURATION * 60);
+                too_short = segment_files[0]["ffprobe_seconds"] < (
+                    MINIMUM_DURATION * 60
+                )
 
                 # check if this is part of the first segment
                 is_first_segment = segment_files[0]["segment_num"] == 0
@@ -299,21 +298,23 @@ class Upload:
         self.ingest()
 
         wf_id = self.workflow_id
-        logger.info({
-            "workflow_id": wf_id,
-            "mediapackage_id": self.mediapackage_id,
-            "minutes_in_pipeline": minutes_in_pipeline(
-                    self.data["webhook_received_time"]),
-            "recording_data": self.data
-        })
+        logger.info(
+            {
+                "workflow_id": wf_id,
+                "mediapackage_id": self.mediapackage_id,
+                "minutes_in_pipeline": minutes_in_pipeline(
+                    self.data["webhook_received_time"]
+                ),
+                "recording_data": self.data,
+            }
+        )
         return wf_id
 
     def already_ingested(self, mpid):
         endpoint = "/workflow/instances.json?mp={}".format(mpid)
         try:
             resp = oc_api_request("GET", endpoint)
-            logger.debug("Lookup for mpid: {}, {}"
-                         .format(mpid, resp.json()))
+            logger.debug("Lookup for mpid: {}, {}".format(mpid, resp.json()))
             return int(resp.json()["workflows"]["totalCount"]) > 0
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == "404":
@@ -321,8 +322,11 @@ class Upload:
 
     def get_series_catalog(self):
 
-        logger.info("Getting series catalog for series: {}"
-                    .format(self.opencast_series_id))
+        logger.info(
+            "Getting series catalog for series: {}".format(
+                self.opencast_series_id
+            )
+        )
 
         endpoint = "/series/{}.json".format(self.opencast_series_id)
         resp = oc_api_request("GET", endpoint)
@@ -334,27 +338,34 @@ class Upload:
     def ingest(self):
         logger.info("Adding mediapackage and ingesting.")
 
-        endpoint = ("/ingest/addMediaPackage/{}"
-                    .format(self.workflow_definition_id))
+        endpoint = "/ingest/addMediaPackage/{}".format(
+            self.workflow_definition_id
+        )
 
         params = [
             ("identifier", (None, self.mediapackage_id)),
             ("title", (None, self.data["oc_title"])),
             ("type", (None, self.type_num)),
             ("isPartOf", (None, self.opencast_series_id)),
-            ("license", (None, "Creative Commons 3.0: Attribution-NonCommercial-NoDerivs")),
+            (
+                "license",
+                (
+                    None,
+                    "Creative Commons 3.0: Attribution-NonCommercial-NoDerivs",
+                ),
+            ),
             ("publisher", (None, escape(self.publisher))),
             ("created", (None, self.created)),
             ("language", (None, "en")),
             ("seriesDCCatalog", (None, self.series_catalog)),
             ("source", (None, "Zoom Ingester Pipeline")),
-            ("spatial", (None, "Zoom {}".format(self.zoom_series_id)))
+            ("spatial", (None, "Zoom {}".format(self.zoom_series_id))),
         ]
 
         fpg = FileParamGenerator(self.s3_filenames)
         try:
             file_params = fpg.generate()
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to generate file upload params")
             raise
 
@@ -386,13 +397,13 @@ class FileParamGenerator(object):
             "shared_screen",
             "gallery_view",
             "shared_screen_with_gallery_view",
-            "shared_screen_with_speaker_view"
+            "shared_screen_with_speaker_view",
         ],
         "shared_screen_with_speaker_view": [
             "shared_screen",
             "shared_screen_with_gallery_view",
             "gallery_view",
-        ]
+        ],
     }
 
     # if we don't have either of the above then there can only be three
@@ -411,8 +422,7 @@ class FileParamGenerator(object):
         # of sets of files we're dealing with. When hosts stop/start a meeting
         # it results in multiple file sets being generated
         self._file_sets = max(
-            (len(x) for x in s3_filenames.values()),
-            default=0
+            (len(x) for x in s3_filenames.values()), default=0
         )
 
     @property
@@ -465,25 +475,35 @@ class FileParamGenerator(object):
             return
 
         for s3_file in self.s3_filenames[view]:
-            logger.info({
-                "adding": {
-                    "s3_file": s3_file,
-                    "view": view,
-                    "flavor": flavor
+            logger.info(
+                {
+                    "adding": {
+                        "s3_file": s3_file,
+                        "view": view,
+                        "flavor": flavor,
+                    }
                 }
-            })
-            self._params.extend([
-                ("flavor", (None, escape(flavor))),
-                ("mediaUri", (None, self._generate_presigned_url(s3_file)))
-            ])
+            )
+            self._params.extend(
+                [
+                    ("flavor", (None, escape(flavor))),
+                    (
+                        "mediaUri",
+                        (None, self._generate_presigned_url(s3_file)),
+                    ),
+                ]
+            )
             self._used_views.append(view)
 
     def _generate_presigned_url(self, s3_filename):
-        logger.info("Generate presigned url bucket {} key {}"
-                    .format(ZOOM_VIDEOS_BUCKET, s3_filename))
+        logger.info(
+            "Generate presigned url bucket {} key {}".format(
+                ZOOM_VIDEOS_BUCKET, s3_filename
+            )
+        )
         url = s3.meta.client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": s3_filename}
+            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": s3_filename},
         )
         logger.info("Got presigned url {}".format(url))
         return url

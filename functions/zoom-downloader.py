@@ -111,10 +111,9 @@ def handler(event, context):
 
 def retrieve_message(queue):
     messages = queue.receive_messages(
-        MaxNumberOfMessages=1,
-        VisibilityTimeout=700
+        MaxNumberOfMessages=1, VisibilityTimeout=700
     )
-    if (len(messages) == 0):
+    if len(messages) == 0:
         return None
 
     return messages[0]
@@ -127,7 +126,6 @@ def get_admin_token():
 
 
 class Download:
-
     def __init__(self, sqs, data):
         self.sqs = sqs
         self.download_message = deepcopy(data)  # do not modify
@@ -141,12 +139,12 @@ class Download:
     def host_name(self):
         if not hasattr(self, "_host_name"):
             resp = zoom_api_request(
-                    "users/{}".format(self.data["host_id"])
-                   ).json()
+                "users/{}".format(self.data["host_id"])
+            ).json()
             logger.info({"Host details": resp})
             self._host_name = "{} {}".format(
-                                resp["first_name"], resp["last_name"]
-                                )
+                resp["first_name"], resp["last_name"]
+            )
         return self._host_name
 
     @property
@@ -169,9 +167,9 @@ class Download:
             files = self.data["recording_files"]
 
             # number of distinct start times is the count of segments
-            segment_start_times = sorted(set(
-                [file["recording_start"] for file in files]
-            ))
+            segment_start_times = sorted(
+                set([file["recording_start"] for file in files])
+            )
 
             # collect the recording files here as ZoomFile objs
             zoom_files = []
@@ -201,8 +199,8 @@ class Download:
         UTC time object for recording start.
         """
         utc = datetime.strptime(
-            self.data["start_time"], TIMESTAMP_FORMAT) \
-            .replace(tzinfo=timezone("UTC"))
+            self.data["start_time"], TIMESTAMP_FORMAT
+        ).replace(tzinfo=timezone("UTC"))
         return utc
 
     @property
@@ -245,19 +243,22 @@ class Download:
         if not schedule:
             return None
 
-        days = OrderedDict([
-            ("M", "Mondays"),
-            ("T", "Tuesdays"),
-            ("W", "Wednesdays"),
-            ("R", "Thursdays"),
-            ("F", "Fridays"),
-            ("S", "Saturday"),
-            ("U", "Sunday")
-        ])
+        days = OrderedDict(
+            [
+                ("M", "Mondays"),
+                ("T", "Tuesdays"),
+                ("W", "Wednesdays"),
+                ("R", "Thursdays"),
+                ("F", "Fridays"),
+                ("S", "Saturday"),
+                ("U", "Sunday"),
+            ]
+        )
 
         zoom_time = self._created_local
-        logger.info({"meeting creation time": zoom_time,
-                     "course schedule": schedule})
+        logger.info(
+            {"meeting creation time": zoom_time, "course schedule": schedule}
+        )
         zoom_day_code = list(days.keys())[zoom_time.weekday()]
 
         # events is a list of {title, day, time} dictionaries
@@ -268,10 +269,12 @@ class Download:
 
             # match time
             scheduled_time = datetime.strptime(event["time"], "%H:%M")
-            timedelta = abs(zoom_time -
-                            zoom_time.replace(hour=scheduled_time.hour,
-                                              minute=scheduled_time.minute)
-                            ).total_seconds()
+            timedelta = abs(
+                zoom_time
+                - zoom_time.replace(
+                    hour=scheduled_time.hour, minute=scheduled_time.minute
+                )
+            ).total_seconds()
             if timedelta < (BUFFER_MINUTES * 60):
                 # Found schedule match
                 self.title = event["title"]
@@ -289,14 +292,18 @@ class Download:
 
         if override_series_id:
             self.opencast_series_id = override_series_id
-            logger.info("Using override series id '{}'"
-                        .format(self.opencast_series_id))
+            logger.info(
+                "Using override series id '{}'".format(self.opencast_series_id)
+            )
             return True
 
         if "on_demand_series_id" in self.data:
             self.opencast_series_id = self.data["on_demand_series_id"]
-            logger.info("Using on-demand provided series id '{}'"
-                        .format(self.opencast_series_id))
+            logger.info(
+                "Using on-demand provided series id '{}'".format(
+                    self.opencast_series_id
+                )
+            )
             return True
 
         if ignore_schedule:
@@ -304,13 +311,15 @@ class Download:
         else:
             self.opencast_series_id = self._series_id_from_schedule
             if self.opencast_series_id:
-                logger.info("Matched with opencast series '{}'!"
-                            .format(self.opencast_series_id))
+                logger.info(
+                    "Matched with opencast series '{}'!".format(
+                        self.opencast_series_id
+                    )
+                )
                 return True
 
         if DEFAULT_SERIES_ID and DEFAULT_SERIES_ID != "None":
-            logger.info("Using default series id {}"
-                        .format(DEFAULT_SERIES_ID))
+            logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
             self.opencast_series_id = DEFAULT_SERIES_ID
             return True
 
@@ -329,15 +338,15 @@ class Download:
                     "recording_start": file.file_data["recording_start"],
                     "recording_end": file.file_data["recording_end"],
                     "ffprobe_bytes": file.file_data["ffprobe_bytes"],
-                    "ffprobe_seconds": file.file_data["ffprobe_seconds"]
+                    "ffprobe_seconds": file.file_data["ffprobe_seconds"],
                 }
-                segment_durations[segment["recording_start"]] = segment["ffprobe_seconds"]
+                segment_durations[segment["recording_start"]] = segment[
+                    "ffprobe_seconds"
+                ]
                 if file.recording_type in s3_files:
                     s3_files[file.recording_type]["segments"].append(segment)
                 else:
-                    s3_files[file.recording_type] = {
-                        "segments": [segment]
-                    }
+                    s3_files[file.recording_type] = {"segments": [segment]}
 
             all_file_bytes = 0
             all_file_seconds = 0
@@ -373,7 +382,7 @@ class Download:
                 "s3_files": s3_files,
                 "total_file_bytes": all_file_bytes,
                 "total_file_seconds": all_file_seconds,
-                "total_segment_seconds": recording_seconds
+                "total_segment_seconds": recording_seconds,
             }
 
             for field in ["allow_multiple_ingests", "zoom_processing_minutes"]:
@@ -400,11 +409,14 @@ class Download:
             raise PermanentDownloadError(
                 "No files could be downloaded for this recording"
             )
-        logger.info(f"successfully downloaded {len(self.downloaded_files)} files")
+        logger.info(
+            f"successfully downloaded {len(self.downloaded_files)} files"
+        )
 
     def send_to_deadletter_queue(self, error):
         deadletter_queue = self.sqs.get_queue_by_name(
-                                        QueueName=DEADLETTER_QUEUE_NAME)
+            QueueName=DEADLETTER_QUEUE_NAME
+        )
         message = SQSMessage(deadletter_queue, self.download_message)
         message.send(error=error)
         return self.download_message
@@ -416,17 +428,18 @@ class Download:
         return self.upload_message
 
 
-class SQSMessage():
-
+class SQSMessage:
     def __init__(self, queue, message):
         self.queue = queue
         self.message = message
 
     def send(self, error=None):
-        logger.info({
-            "sqs_destination_queue": self.queue.url,
-            "sqs_message": self.message
-        })
+        logger.info(
+            {
+                "sqs_destination_queue": self.queue.url,
+                "sqs_message": self.message,
+            }
+        )
 
         if not error:
             message_attributes = {}
@@ -434,8 +447,9 @@ class SQSMessage():
             message_attributes = {
                 "FailedReason": {
                     "StringValue": str(error),
-                    "DataType": "String"
-                }}
+                    "DataType": "String",
+                }
+            }
 
         try:
 
@@ -443,12 +457,12 @@ class SQSMessage():
                 message_sent = self.queue.send_message(
                     MessageBody=json.dumps(self.message),
                     MessageGroupId=self.message["uuid"],
-                    MessageAttributes=message_attributes
+                    MessageAttributes=message_attributes,
                 )
             else:
                 message_sent = self.queue.send_message(
                     MessageBody=json.dumps(self.message),
-                    MessageAttributes=message_attributes
+                    MessageAttributes=message_attributes,
                 )
         except Exception as e:
             logger.exception(
@@ -456,13 +470,16 @@ class SQSMessage():
             )
             raise
 
-        logger.debug({"Queue": self.queue.url,
-                      "Message sent": message_sent,
-                      "FailedReason": error})
+        logger.debug(
+            {
+                "Queue": self.queue.url,
+                "Message sent": message_sent,
+                "FailedReason": error,
+            }
+        )
 
 
 class ZoomFile:
-
     def __init__(self, file_data, segment_num):
         self.file_data = file_data
         self.segment_num = segment_num
@@ -503,7 +520,10 @@ class ZoomFile:
 
             # If the file has been deleted or if the request is not authorized,
             # Zoom will return 200 and an HTML error page.
-            if "Content-Type" in r.headers and "text/html" in r.headers["Content-Type"]:
+            if (
+                "Content-Type" in r.headers
+                and "text/html" in r.headers["Content-Type"]
+            ):
                 raise ZoomDownloadLinkError()
 
             # Filename that zoom uses should be found in the response headers
@@ -528,41 +548,45 @@ class ZoomFile:
         if not hasattr(self, "_s3_filename"):
             ts = int(self.file_data["created_local"].timestamp())
             self._s3_filename = "{}/{}/{:03d}-{}.{}".format(
-                                    self.file_data["zoom_series_id"],
-                                    ts,
-                                    self.segment_num,
-                                    self.recording_type,
-                                    self.file_extension
-                                )
+                self.file_data["zoom_series_id"],
+                ts,
+                self.segment_num,
+                self.recording_type,
+                self.file_extension,
+            )
         return self._s3_filename
 
     def valid_mp4_file(self):
         # TODO: if file not found, add appropriate error
         url = self.s3.generate_presigned_url(
             "get_object",
-            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": self.s3_filename}
+            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": self.s3_filename},
         )
 
         cmd = f"/var/task/ffprobe -of json -show_format {url}"
         r = subprocess.run(
-                cmd.split(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+            cmd.split(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
         stdout = json.loads(r.stdout)
-        logger.info({
-            "ffprobe": {
-                "command": cmd,
-                "return_code": r.returncode,
-                "stdout": stdout,
-                "stderr": r.stderr
+        logger.info(
+            {
+                "ffprobe": {
+                    "command": cmd,
+                    "return_code": r.returncode,
+                    "stdout": stdout,
+                    "stderr": r.stderr,
+                }
             }
-        })
+        )
 
         if r.returncode == 1 or stdout["format"]["probe_score"] < 100:
-            logger.warning("Corrupt MP4, need to retry download "
-                           "from zoom to S3. {}\n{}".format(url, r.stderr))
+            logger.warning(
+                "Corrupt MP4, need to retry download "
+                "from zoom to S3. {}\n{}".format(url, r.stderr)
+            )
             return False
 
         self.file_data["ffprobe_seconds"] = float(stdout["format"]["duration"])
@@ -590,11 +614,13 @@ class ZoomFile:
         return Path(self.zoom_filename).suffix[1:]
 
     def upload_part(self, upload_id, part_number, chunk):
-        part = self.s3.upload_part(Body=chunk,
-                              Bucket=ZOOM_VIDEOS_BUCKET,
-                              Key=self.s3_filename,
-                              PartNumber=part_number,
-                              UploadId=upload_id)
+        part = self.s3.upload_part(
+            Body=chunk,
+            Bucket=ZOOM_VIDEOS_BUCKET,
+            Key=self.s3_filename,
+            PartNumber=part_number,
+            UploadId=upload_id,
+        )
 
         return part
 
@@ -603,23 +629,21 @@ class ZoomFile:
         metadata = {
             "uuid": self.file_data["meeting_uuid"],
             "file_id": self.file_data["recording_id"],
-            "file_type": self.file_extension
+            "file_type": self.file_extension,
         }
 
         logger.info(
-            {"uploading file to S3": self.s3_filename,
-             "metadata": metadata}
+            {"uploading file to S3": self.s3_filename, "metadata": metadata}
         )
         parts = []
         mpu = self.s3.create_multipart_upload(
-                    Bucket=ZOOM_VIDEOS_BUCKET,
-                    Key=self.s3_filename,
-                    Metadata=metadata)
+            Bucket=ZOOM_VIDEOS_BUCKET, Key=self.s3_filename, Metadata=metadata
+        )
 
         try:
             chunks = enumerate(
-                        self.stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1
-                     )
+                self.stream.iter_content(chunk_size=MIN_CHUNK_SIZE), 1
+            )
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future_map = {}
                 for part_number, chunk in chunks:
@@ -631,10 +655,9 @@ class ZoomFile:
                 for future in concurrent.futures.as_completed(future_map):
                     part_number = future_map[future]
                     part = future.result()
-                    parts.append({
-                        "PartNumber": part_number,
-                        "ETag": part["ETag"]
-                    })
+                    parts.append(
+                        {"PartNumber": part_number, "ETag": part["ETag"]}
+                    )
 
             # complete_multipart_upload requires parts in order by part number
             parts = sorted(parts, key=lambda i: i["PartNumber"])
@@ -643,18 +666,19 @@ class ZoomFile:
                 Bucket=ZOOM_VIDEOS_BUCKET,
                 Key=self.s3_filename,
                 UploadId=mpu["UploadId"],
-                MultipartUpload={"Parts": parts}
+                MultipartUpload={"Parts": parts},
             )
             print("Completed multipart upload of {}.".format(self.s3_filename))
         except Exception as e:
             logger.exception(
-                "Something went wrong with upload of {}:{}"
-                .format(self.s3_filename, e)
+                "Something went wrong with upload of {}:{}".format(
+                    self.s3_filename, e
+                )
             )
             self.s3.abort_multipart_upload(
                 Bucket=ZOOM_VIDEOS_BUCKET,
                 Key=self.s3_filename,
-                UploadId=mpu["UploadId"]
+                UploadId=mpu["UploadId"],
             )
             raise
 

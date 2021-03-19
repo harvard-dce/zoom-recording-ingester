@@ -8,9 +8,11 @@ from urllib.parse import urlparse
 import csv
 import itertools
 from datetime import datetime
+
 # boto imports
 import boto3
 from botocore.exceptions import ClientError
+
 # google sheets imports
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -19,10 +21,10 @@ SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 
 logger = logging.getLogger()
 
-load_dotenv(join(dirname(__file__), '../.env'))
+load_dotenv(join(dirname(__file__), "../.env"))
 
 
-class GSheetsAuth():
+class GSheetsAuth:
     def __init__(self, in_lambda=False):
         self.ssm = boto3.client("ssm")
         self.ssm_path = f"/zoom-ingester/common/gapi-credentials"
@@ -80,8 +82,10 @@ class GSheetsAuth():
         Delete credentials from SSM.
         """
         r = self.ssm.delete_parameter(Name=self.ssm_path)
-        if (r["ResponseMetadata"]["HTTPStatusCode"] == 200):
-            logger.info(f"Successfully destroyed ssm parameter {self.ssm_path}")
+        if r["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            logger.info(
+                f"Successfully destroyed ssm parameter {self.ssm_path}"
+            )
         else:
             logger.info(f"Failed to destroy ssm parameter {self.ssm_path}")
 
@@ -125,7 +129,9 @@ class GSheet:
         schedule_csv_to_dynamo(SCHEDULE_TABLE, file_path)
 
 
-def schedule_json_to_dynamo(dynamo_table_name, json_file=None, schedule_data=None):
+def schedule_json_to_dynamo(
+    dynamo_table_name, json_file=None, schedule_data=None
+):
     if json_file is not None:
         with open(json_file, "r") as file:
             try:
@@ -134,20 +140,22 @@ def schedule_json_to_dynamo(dynamo_table_name, json_file=None, schedule_data=Non
                 logger.error("Unable to load {}: {}".format(json_file, str(e)))
                 return
     elif schedule_data is None:
-        raise Exception("{} called with no json_file or schedule_data args".format(
-            sys._getframe().f_code.co_name
-        ))
+        raise Exception(
+            "{} called with no json_file or schedule_data args".format(
+                sys._getframe().f_code.co_name
+            )
+        )
 
     try:
-        dynamodb = boto3.resource('dynamodb')
+        dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(dynamo_table_name)
 
         for item in schedule_data.values():
             table.put_item(Item=item)
         logger.info(f"Loaded schedule into dynamo table {dynamo_table_name}")
     except ClientError as e:
-        error = e.response['Error']
-        raise Exception("{}: {}".format(error['Code'], error['Message']))
+        error = e.response["Error"]
+        raise Exception("{}: {}".format(error["Code"], error["Message"]))
 
 
 def schedule_csv_to_dynamo(dynamo_table_name, filepath):
@@ -170,11 +178,11 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
         "day",
         "start",
         "meeting id with password",
-        "oc series"
+        "oc series",
     ]
     for col in required_columns:
         if col not in rows[0]:
-            raise Exception(f"Missing required field \"{col}\"")
+            raise Exception(f'Missing required field "{col}"')
 
     schedule_data = {}
     for row in rows:
@@ -201,8 +209,9 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
             )
             continue
         # Validate opencast series id
-        opencast_series_id = urlparse(row["oc series"]) \
-            .fragment.replace("/", "")
+        opencast_series_id = urlparse(row["oc series"]).fragment.replace(
+            "/", ""
+        )
         if not opencast_series_id:
             logger.warning(f"{row['course code']}: \tMissing oc series")
             continue
@@ -214,7 +223,9 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
         print(schedule_data)
 
         # Add opencast series id
-        schedule_data[zoom_series_id]["opencast_series_id"] = opencast_series_id
+        schedule_data[zoom_series_id][
+            "opencast_series_id"
+        ] = opencast_series_id
 
         # Add descriptions
         schedule_data[zoom_series_id]["course_code"] = row["course code"]
