@@ -12,7 +12,7 @@ from common import TIMESTAMP_FORMAT
 
 logger = logging.getLogger()
 
-load_dotenv(join(dirname(__file__), '../.env'))
+load_dotenv(join(dirname(__file__), "../.env"))
 
 DATE_FORMAT = "%Y-%m-%d"
 PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
@@ -45,9 +45,11 @@ status_table = dynamodb.Table(PIPELINE_STATUS_TABLE)
 def ts_to_date_and_seconds(ts):
     date = ts.strftime(DATE_FORMAT)
     t = ts.time()
-    seconds = int(timedelta(
-        hours=t.hour, minutes=t.minute, seconds=t.second
-    ).total_seconds())
+    seconds = int(
+        timedelta(
+            hours=t.hour, minutes=t.minute, seconds=t.second
+        ).total_seconds()
+    )
     return date, seconds
 
 
@@ -69,7 +71,7 @@ def set_pipeline_status(
             ":d": today,
             ":ts": int(seconds),
             ":e": int((datetime.now() + timedelta(days=7)).timestamp()),
-            ":s": state.name
+            ":s": state.name,
         }
         if meeting_id:
             update_expression += ", meeting_id=:m"
@@ -107,7 +109,7 @@ def set_pipeline_status(
                 Key={"correlation_id": correlation_id},
                 UpdateExpression=update_expression,
                 ExpressionAttributeValues=expression_attribute_values,
-                ConditionExpression="attribute_exists(meeting_id) AND attribute_exists(origin)"
+                ConditionExpression="attribute_exists(meeting_id) AND attribute_exists(origin)",
             )
         else:
             status_table.update_item(
@@ -129,7 +131,7 @@ def set_pipeline_status(
 def status_by_mid(mid):
     r = status_table.query(
         IndexName="mid_index",
-        KeyConditionExpression=(Key("meeting_id").eq(mid))
+        KeyConditionExpression=(Key("meeting_id").eq(mid)),
     )
     items = r["Items"]
 
@@ -142,7 +144,9 @@ def status_by_mid(mid):
 
 def status_by_seconds(request_seconds):
     now = datetime.utcnow()
-    logger.info(f"Retrieving records updated within the last {request_seconds} seconds")
+    logger.info(
+        f"Retrieving records updated within the last {request_seconds} seconds"
+    )
     today, time_in_seconds = ts_to_date_and_seconds(now)
 
     if request_seconds > SECONDS_PER_DAY:
@@ -156,15 +160,11 @@ def status_by_seconds(request_seconds):
         ts = today.strptime(DATE_FORMAT)
         yesterday = (ts - timedelta(days=1)).strftime(DATE_FORMAT)
         items += request_recent_items(
-            status_table,
-            yesterday,
-            SECONDS_PER_DAY - remaining
+            status_table, yesterday, SECONDS_PER_DAY - remaining
         )
     else:
         items = request_recent_items(
-            status_table,
-            today,
-            time_in_seconds - request_seconds
+            status_table, today, time_in_seconds - request_seconds
         )
 
     return format_status_records(items)
@@ -176,7 +176,7 @@ def request_recent_items(table, date, seconds):
         IndexName="time_index",
         KeyConditionExpression=(
             Key("update_date").eq(date) & Key("update_time").gte(seconds)
-        )
+        ),
     )
     return r["Items"]
 
@@ -193,7 +193,7 @@ def format_status_records(items):
             meetings[mid] = {
                 "meeting_id": mid,
                 "topic": item["topic"],
-                "recordings": {}
+                "recordings": {},
             }
 
         rec_id = item["recording_id"]
@@ -201,13 +201,13 @@ def format_status_records(items):
             meetings[mid]["recordings"][rec_id] = {
                 "recording_id": rec_id,
                 "start_time": item["recording_start_time"],
-                "zip_ingests": []
+                "zip_ingests": [],
             }
 
         zip_ingest = {
             "last_updated": last_updated,
             "status": item["pipeline_state"],
-            "origin": item["origin"]
+            "origin": item["origin"],
         }
         if "reason" in item:
             zip_ingest["reason"] = item["reason"]
