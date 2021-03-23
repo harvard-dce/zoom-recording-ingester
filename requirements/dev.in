@@ -3,6 +3,7 @@ pytest
 pytest-env
 pytest-mock
 pytest-cov
+requests-mock
 freezegun
 tox
 black

@@ -83,11 +83,7 @@ def zoom_api_request(
         headers = {"X-Api-Key": APIGEE_KEY}
         logger.info(f"Apigee request to {url}")
     else:
-        token = gen_token(
-            ZOOM_API_KEY,
-            ZOOM_API_SECRET,
-            seconds_valid,
-        ).decode()
+        token = gen_token(ZOOM_API_KEY, ZOOM_API_SECRET, seconds_valid)
         headers = {"Authorization": f"Bearer {token}"}
         logger.info(f"Zoom api request to {url}")
 
