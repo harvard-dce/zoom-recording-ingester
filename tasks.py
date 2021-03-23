@@ -25,7 +25,8 @@ from cdk import names
 from functools import lru_cache
 import logging
 
-# suppress warnings for cases where we want to ignore dev cluster dummy certificates
+# suppress warnings for cases where we want to ignore dev
+# cluster dummy certificates
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -54,9 +55,10 @@ if AWS_PROFILE is not None:
 @task
 def production_failsafe(ctx):
     """
-    This is not a standalone task and should not be added to any of the task collections.
-    It is meant to be prepended to the execution of other tasks to force a confirmation
-    when a task is being executed that could have an impact on a production stack
+    This is not a standalone task and should not be added to any of the task
+    collections. It is meant to be prepended to the execution of other tasks
+    to force a confirmation when a task is being executed that could have an
+    impact on a production stack
     """
     if not STACK_NAME:
         raise Exit("No STACK_NAME specified")
@@ -113,7 +115,8 @@ def codebuild(ctx, revision):
 @task(pre=[production_failsafe])
 def stack_create(ctx):
     """
-    Package & upload the lambda function code and build the CloudFormation stack
+    Package & upload the lambda function code
+    and build the CloudFormation stack
     """
     for func in names.FUNCTIONS:
         __build_function(ctx, func, upload_to_s3=True)
@@ -124,7 +127,8 @@ def stack_create(ctx):
 @task(pre=[production_failsafe])
 def stack_update(ctx):
     """
-    Updates the CloudFormation stack (use the deploy.* tasks to update functions)
+    Updates the CloudFormation stack
+    (use the deploy.* tasks to update functions)
     """
     ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
@@ -250,7 +254,8 @@ def deploy_uploader(ctx, do_release=False):
 )
 def release(ctx, function=None, description=None):
     """
-    Publish a new version of the function(s) and update the release alias to point to it
+    Publish a new version of the function(s)
+    and update the release alias to point to it
     """
     functions = resolve_function_arg(function)
     for func in functions:
@@ -359,7 +364,7 @@ def exec_pipeline(ctx, uuid, ignore_schedule=False, oc_series_id=None):
 )
 def exec_webhook(ctx, uuid, oc_series_id=None):
     """
-    Manually trigger the webhook endpoint. Positional argument: uuid, Option: --oc-series-id
+    Manually trigger the webhook endpoint. uuid, optional: --oc-series-id
     """
 
     if not uuid:
@@ -408,7 +413,10 @@ def exec_webhook(ctx, uuid, oc_series_id=None):
 @task(
     help={
         "series_id": "override normal opencast series id lookup",
-        "ignore_schedule": "do opencast series id lookup but ignore if meeting times don't match",
+        "ignore_schedule": (
+            "do opencast series id lookup but"
+            " ignore if meeting times don't match",
+        ),
     }
 )
 def exec_downloader(
@@ -849,7 +857,8 @@ def __invoke_api(resource_id, event_body):
 
 def __update_release_alias(ctx, func, version, description):
     print(
-        f"Setting {func} '{names.LAMBDA_RELEASE_ALIAS}' alias to version {version}"
+        f"Setting {func} '{names.LAMBDA_RELEASE_ALIAS}' alias"
+        f" to version {version}"
     )
     lambda_function_name = f"{STACK_NAME}-{func}"
     if description is None:
@@ -1053,10 +1062,9 @@ def __move_messages(deadletter_queue, source_queue, limit, uuid=None):
         moved_count = len(send_resp["Successful"])
         if moved_count < received_count:
             print(
-                "One or more messages failed to be sent back to the source queue."
-                "Received {} messages and successfully sent {} messages.".format(
-                    received_count, moved_count
-                )
+                "One or more messages failed to be sent back to the source "
+                f"queue. Received {received_count} messages and successfully "
+                f"sent {moved_count} messages."
             )
 
         entries = []
@@ -1075,10 +1083,9 @@ def __move_messages(deadletter_queue, source_queue, limit, uuid=None):
         deleted_count = len(del_resp["Successful"])
         if deleted_count < received_count:
             print(
-                "One or more messages failed to be deleted from the deadletter queue."
-                "Received {} messages and successfully deleted {} messages.".format(
-                    moved_count, deleted_count
-                )
+                "One or more messages failed to be deleted from the deadletter"
+                f" queue. Received {moved_count} messages and successfully "
+                f"deleted {deleted_count} messages."
             )
 
         total_messages_moved += moved_count
@@ -1217,7 +1224,8 @@ def __show_function_status(ctx):
 
         cmd = (
             "aws {} lambda list-versions-by-function --function-name {} "
-            "--query \"Versions[?Version=='\$LATEST'].LastModified\" --output text"
+            r"--query \"Versions[?Version=='\$LATEST'].LastModified\" "
+            "--output text"
         ).format(profile_arg(), lambda_function_name)
         status_row.append(ctx.run(cmd, hide=True).stdout)
 
@@ -1346,11 +1354,10 @@ def queue_url(queue_name):
 def queue_is_empty(ctx, queue_name):
 
     cmd = (
-        "aws {} sqs get-queue-attributes --queue-url {} "
+        f"aws {profile_arg()} sqs get-queue-attributes "
+        f"--queue-url {queue_url(queue_name)} "
         "--attribute-names ApproximateNumberOfMessages "
-        '--query "Attributes.ApproximateNumberOfMessages" --output text'.format(
-            profile_arg(), queue_url(queue_name)
-        )
+        '--query "Attributes.ApproximateNumberOfMessages" --output text'
     )
 
     num_queued = int(ctx.run(cmd, hide=True).stdout.strip())

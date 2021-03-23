@@ -6,7 +6,6 @@ from freezegun import freeze_time
 from pytz import timezone
 from datetime import datetime
 import os
-import copy
 import json
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))

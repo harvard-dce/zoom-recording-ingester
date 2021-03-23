@@ -29,9 +29,10 @@ AWS_REGION = (
 
 oc_vpc_id, oc_security_group_id = vpc_components()
 ingest_allowed_ips = getenv("INGEST_ALLOWED_IPS").split(",")
-default_publisher = getenv("DEFAULT_PUBLISHER", required=False) or getenv(
-    "NOTIFICATION_EMAIL"
-)
+
+default_publisher = getenv("DEFAULT_PUBLISHER", required=False)
+if not default_publisher:
+    default_publisher = getenv("NOTIFICATION_EMAIL")
 
 APIGEE_KEY = getenv("APIGEE_KEY", required=False)
 ZOOM_API_KEY = getenv("ZOOM_API_KEY", required=False)
@@ -73,7 +74,9 @@ stack_props = {
     "oc_base_url": oc_base_url(),
     "oc_db_url": oc_db_url(),
     "zoom_admin_id": zoom_admin_id(),
-    "project_git_url": "https://github.com/harvard-dce/zoom-recording-ingester.git",
+    "project_git_url": (
+        "https://github.com/harvard-dce/zoom-recording-ingester.git"
+    ),
     "gsheets_doc_id": getenv("GSHEETS_DOC_ID"),
     "gsheets_sheet_name": getenv("GSHEETS_SHEET_NAME"),
     "slack_signing_secret": getenv("SLACK_SIGNING_SECRET"),

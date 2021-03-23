@@ -1,7 +1,5 @@
 import site
 from os.path import dirname, join
-import json
-import requests_mock
 from importlib import import_module
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
