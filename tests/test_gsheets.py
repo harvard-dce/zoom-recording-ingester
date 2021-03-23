@@ -1,6 +1,5 @@
 import site
 from os.path import dirname, join
-from importlib import import_module
 import gsheets
 import pytest
 

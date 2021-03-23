@@ -1,0 +1,28 @@
+invoke
+python-dotenv
+awscli
+boto3
+requests
+tabulate
+awslogs
+aws-cdk.core>=1.89.0
+aws-cdk.aws_s3>=1.89.0
+aws-cdk.aws_lambda>=1.89.0
+aws-cdk.aws_dynamodb>=1.89.0
+aws-cdk.aws_apigateway>=1.89.0
+aws-cdk.aws_events_targets>=1.89.0
+aws-cdk.aws_codebuild>=1.89.0
+aws-cdk.aws_sns>=1.89.0
+aws-cdk.aws_cloudwatch>=1.89.0
+aws-cdk.aws_cloudwatch_actions>=1.89.0
+aws-cdk.aws_ec2>=1.89.0
+aws-cdk.aws_logs>=1.89.0
+aws-cdk.aws_iam>=1.89.0
+
+-r ../function_requirements/zoom-webhook.in
+-r ../function_requirements/zoom-downloader.in
+-r ../function_requirements/zoom-uploader.in
+-r ../function_requirements/zoom-log-notifications.in
+-r ../function_requirements/opencast-op-counts.in
+-r ../function_requirements/zoom-on-demand.in
+-r ../function_requirements/schedule-update.in

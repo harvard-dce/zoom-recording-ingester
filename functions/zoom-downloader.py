@@ -158,7 +158,7 @@ def retrieve_message(queue):
 
 def get_admin_token():
     # get admin level zak token from admin id
-    r = zoom_api_request("users/{}/token?type=zak".format(ZOOM_ADMIN_ID))
+    r = zoom_api_request(f"users/{ZOOM_ADMIN_ID}/token?type=zak")
     return r.json()["token"]
 
 
@@ -175,13 +175,9 @@ class Download:
     @property
     def host_name(self):
         if not hasattr(self, "_host_name"):
-            resp = zoom_api_request(
-                "users/{}".format(self.data["host_id"])
-            ).json()
+            resp = zoom_api_request(f"users/{self.data['host_id']}").json()
             logger.info({"Host details": resp})
-            self._host_name = "{} {}".format(
-                resp["first_name"], resp["last_name"]
-            )
+            self._host_name = f"{resp['first_name']} {resp['last_name']}"
         return self._host_name
 
     @property
@@ -272,16 +268,15 @@ class Download:
         if override_series_id:
             self.opencast_series_id = override_series_id
             logger.info(
-                "Using override series id '{}'".format(self.opencast_series_id)
+                f"Using override series id '{self.opencast_series_id}'"
             )
             return True
 
         if "on_demand_series_id" in self.data:
             self.opencast_series_id = self.data["on_demand_series_id"]
             logger.info(
-                "Using on-demand provided series id '{}'".format(
-                    self.opencast_series_id
-                )
+                "Using on-demand provided series id "
+                f"'{self.opencast_series_id}'"
             )
             return True
 
@@ -291,14 +286,13 @@ class Download:
             self.opencast_series_id = self._series_id_from_schedule
             if self.opencast_series_id:
                 logger.info(
-                    "Matched with opencast series '{}'!".format(
-                        self.opencast_series_id
-                    )
+                    "Matched with opencast series "
+                    f"'{self.opencast_series_id}'!"
                 )
                 return True
 
         if DEFAULT_SERIES_ID and DEFAULT_SERIES_ID != "None":
-            logger.info("Using default series id {}".format(DEFAULT_SERIES_ID))
+            logger.info(f"Using default series id {DEFAULT_SERIES_ID}")
             self.opencast_series_id = DEFAULT_SERIES_ID
             return True
 
@@ -372,7 +366,7 @@ class Download:
 
     def upload_to_s3(self):
 
-        logger.info("downloading {} files".format(len(self.recording_files)))
+        logger.info(f"downloading {len(self.recording_files)} files")
 
         self.downloaded_files = []
         for file in self.recording_files:
@@ -490,15 +484,13 @@ class ZoomFile:
             return "active_speaker"
         elif "gallery" in name.lower():
             return "gallery_view"
-        return "unrecognized_type_{}".format(name)
+        return f"unrecognized_type_{name}"
 
     @property
     def zoom_filename(self):
         if not hasattr(self, "_zoom_filename"):
             # First request is for retrieving the filename
-            url = "{}?zak={}".format(
-                self.file_data["download_url"], ADMIN_TOKEN
-            )
+            url = f"{self.file_data['download_url']}?zak={ADMIN_TOKEN}"
             r = requests.get(url, allow_redirects=False)
             r.raise_for_status
 
@@ -520,10 +512,10 @@ class ZoomFile:
                 raise PermanentDownloadError(
                     "Request for download stream from Zoom failed.\n"
                     "Zoom name not found in headers\n"
-                    "request: {} response headers: {}".format(url, r.headers)
+                    f"request: {url} response headers: {r.headers}"
                 )
             self._zoom_filename = zoom_name.lower()
-            logger.info("got filename {}".format(zoom_name))
+            logger.info(f"got filename {zoom_name}")
 
         return self._zoom_filename
 

@@ -22,8 +22,14 @@ def resp(status_code, msg=""):
     logger.info(f"returning {status_code} response: '{msg}'")
     return {
         "statusCode": status_code,
-        "headers": {"Access-Control-Allow-Origin": "*"},
-        "body": json.dumps({"message": msg}),
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+        },
+        "body": json.dumps(
+            {
+                "message": msg,
+            }
+        ),
     }
 
 
@@ -31,8 +37,9 @@ def resp(status_code, msg=""):
 def handler(event, context):
     """
     This function acts as a relay to the traditional zoom webhook. The webhook
-    function is called by Zoom on a "recording.completed" event, along with data
-    about the recordings. Here we fetch the recording data from the zoom API.
+    function is called by Zoom on a "recording.completed" event, along with
+    data about the recordings. Here we fetch the recording data from the zoom
+    API.
     The response to that API call is (mostly) identical to the payload zoom
     sends to the webhook, so we can simply pass it along in our own webhook
     request, using a "on.demand.ingest" event type and including the series id
@@ -53,7 +60,7 @@ def handler(event, context):
     if "uuid" not in body:
         return resp(
             400,
-            "Missing recording uuid field in webhook notification " "body.",
+            "Missing recording uuid field in webhook notification body.",
         )
 
     recording_uuid = body["uuid"]
@@ -63,38 +70,31 @@ def handler(event, context):
         query_params = parse_qs(parsed_url.query)
         if "meeting_id" not in query_params:
             return resp(
-                404, "Zoom URL is malformed or missing 'meeting_id' " "param."
+                404,
+                "Zoom URL is malformed or missing 'meeting_id' param.",
             )
         recording_uuid = query_params["meeting_id"][0]
 
-    logger.info("Got recording uuid: '{}'".format(recording_uuid))
+    logger.info(f"Got recording uuid: '{uuid}'")
 
     try:
         try:
             # zoom api can break if uuid is not double urlencoded
-            double_urlencoded_uuid = quote(
-                quote(recording_uuid, safe=""), safe=""
-            )
-            zoom_endpoint = "/meetings/{}/recordings".format(
-                double_urlencoded_uuid
-            )
-            logger.info("zoom api request to {}".format(zoom_endpoint))
+            double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
+            zoom_endpoint = f"meetings/{double_urlencoded_uuid}/recordings"
             r = zoom_api_request(zoom_endpoint)
             recording_data = r.json()
         except requests.HTTPError as e:
             # return a 404 if there's no such meeting
             if e.response.status_code == 404:
-                return resp(
-                    404,
-                    "No zoom recording with id '{}'".format(recording_uuid),
-                )
+                return resp(404, f"No zoom recording with id '{uuid}'")
             else:
                 raise
     # otherwise return a 500 on any other errors (bad json, bad request, etc)
     except Exception as e:
         return resp(
             500,
-            "Something went wrong querying the zoom api: {}".format(str(e)),
+            f"Something went wrong querying the zoom api: {str(e)}",
         )
 
     if "recording_files" not in recording_data or not len(
@@ -102,9 +102,7 @@ def handler(event, context):
     ):
         return resp(
             503,
-            "Zoom api response contained no recording files for {}".format(
-                recording_uuid
-            ),
+            f"Zoom api response contained no recording files for {uuid}",
         )
 
     # verify that all the recording files are actually "completed"
@@ -115,16 +113,21 @@ def handler(event, context):
     )
 
     if not_completed > 0:
-        return resp(503, "Not all recorded files have status 'completed'")
+        return resp(
+            503,
+            "Not all recorded files have status 'completed'",
+        )
 
     webhook_data = {
         "event": "on.demand.ingest",
-        "payload": {"object": recording_data},
+        "payload": {
+            "object": recording_data,
+        },
     }
 
     # series id is an optional param. if not present the download function will
-    # attempt to determine the series id by matching the recording times against
-    # it's known schedule as usual.
+    # attempt to determine the series id by matching the recording times
+    # against it's known schedule as usual.
     if "oc_series_id" in body and body["oc_series_id"]:
         webhook_data["payload"]["on_demand_series_id"] = body["oc_series_id"]
 
@@ -141,7 +144,9 @@ def handler(event, context):
         r = requests.post(
             WEBHOOK_ENDPOINT_URL,
             data=json.dumps(webhook_data),
-            headers={"Content-type": "application/json"},
+            headers={
+                "Content-type": "application/json",
+            },
         )
         r.raise_for_status()
         if r.status_code == 204:
@@ -149,7 +154,7 @@ def handler(event, context):
     except Exception as e:
         err_msg = str(e)
         logger.exception(
-            "Something went wrong calling the webhook: {}".format(err_msg)
+            f"Something went wrong calling the webhook: {err_msg}"
         )
         return resp(500, err_msg)
 

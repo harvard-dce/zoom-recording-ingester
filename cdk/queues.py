@@ -1,4 +1,8 @@
-from aws_cdk import core, aws_sqs as sqs, aws_cloudwatch as cloudwatch
+from aws_cdk import (
+    core,
+    aws_sqs as sqs,
+    aws_cloudwatch as cloudwatch,
+)
 from . import names
 
 

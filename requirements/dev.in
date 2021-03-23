@@ -1,0 +1,13 @@
+mock
+pytest
+pytest-env
+pytest-mock
+pytest-cov
+requests-mock
+freezegun
+tox
+black
+flake8
+pre-commit
+
+-r base.in

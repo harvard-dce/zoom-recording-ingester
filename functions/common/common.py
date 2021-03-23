@@ -59,7 +59,7 @@ def setup_logging(handler_func):
 
         logger = logging.getLogger()
 
-        logger.debug("{} invoked!".format(context.function_name))
+        logger.debug(f"{context.function_name} invoked!")
         logger.debug({"event": event, "context": context.__dict__})
 
         try:
@@ -68,7 +68,7 @@ def setup_logging(handler_func):
             logger.exception("handler failed!")
             raise
 
-        logger.debug("{} complete!".format(context.function_name))
+        logger.debug(f"{context.function_name} complete!")
         return retval
 
     wrapped_func.__name__ = handler_func.__name__
@@ -104,11 +104,7 @@ def zoom_api_request(
         headers = {"X-Api-Key": APIGEE_KEY}
         logger.info(f"Apigee request to {url}")
     else:
-        token = gen_token(
-            ZOOM_API_KEY,
-            ZOOM_API_SECRET,
-            seconds_valid,
-        ).decode()
+        token = gen_token(ZOOM_API_KEY, ZOOM_API_SECRET, seconds_valid)
         headers = {"Authorization": f"Bearer {token}"}
         logger.info(f"Zoom api request to {url}")
 
@@ -121,13 +117,11 @@ def zoom_api_request(
             requests.exceptions.ConnectTimeout,
         ) as e:
             if retries > 0:
-                logger.warning("Connection Error: {}".format(e))
+                logger.warning(f"Connection Error: {e}")
                 retries -= 1
             else:
-                logger.error("Connection Error: {}".format(e))
-                raise ZoomApiRequestError(
-                    "Error requesting {}: {}".format(url, e)
-                )
+                logger.error(f"Connection Error: {e}")
+                raise ZoomApiRequestError(f"Error requesting {url}: {e}")
 
     if not ignore_failure:
         r.raise_for_status()

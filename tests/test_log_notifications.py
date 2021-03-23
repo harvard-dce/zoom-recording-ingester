@@ -1,5 +1,4 @@
 import site
-from unittest.mock import patch
 from os.path import dirname, join
 from importlib import import_module
 
