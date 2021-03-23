@@ -1,17 +1,8 @@
 invoke
 python-dotenv
 awscli
-mock
-pytest
-pytest-env
-pytest-mock
-pytest-cov
-tox
-black
 boto3
 requests
-requests-mock
-freezegun
 tabulate
 awslogs
 aws-cdk.core>=1.89.0
@@ -28,10 +19,10 @@ aws-cdk.aws_ec2>=1.89.0
 aws-cdk.aws_logs>=1.89.0
 aws-cdk.aws_iam>=1.89.0
 
--r function_requirements/zoom-webhook.in
--r function_requirements/zoom-downloader.in
--r function_requirements/zoom-uploader.in
--r function_requirements/zoom-log-notifications.in
--r function_requirements/opencast-op-counts.in
--r function_requirements/zoom-on-demand.in
--r function_requirements/schedule-update.in
+-r ../function_requirements/zoom-webhook.in
+-r ../function_requirements/zoom-downloader.in
+-r ../function_requirements/zoom-uploader.in
+-r ../function_requirements/zoom-log-notifications.in
+-r ../function_requirements/opencast-op-counts.in
+-r ../function_requirements/zoom-on-demand.in
+-r ../function_requirements/schedule-update.in
