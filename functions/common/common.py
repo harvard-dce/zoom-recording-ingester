@@ -175,7 +175,7 @@ def schedule_match(schedule, local_start_time):
             )
         ).total_seconds()
         if timedelta < (BUFFER_MINUTES * 60):
-            return schedule["opencast_series_id"]
+            return event
         else:
             logger.info(
                 f"Match for day {event['day']} but not within"
