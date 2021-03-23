@@ -6,6 +6,8 @@ ignore =
     E266
     # black compatability: allow line break before binary operator
     W503
+    # black compatability: let black handle line length
+    E501
     # allow module imports not at top of file
     E402
 max-line-length = 79

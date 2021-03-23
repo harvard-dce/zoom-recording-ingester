@@ -94,7 +94,7 @@ def stack_tags():
     """
     env_tags = getenv("STACK_TAGS", False)
 
-    if env_tags is None:
+    if not env_tags:
         return {}
 
     return dict(

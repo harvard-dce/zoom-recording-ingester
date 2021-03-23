@@ -28,13 +28,17 @@ def resp_204(msg):
     the recording is rejected (e.g., no mp4 files) because anything else will
     be considered a retry-able error by Zoom
     """
-    logger.info("http 204 response: {}".format(msg))
+    logger.info(f"http 204 response: {msg}")
     return {"statusCode": 204, "headers": {}, "body": ""}  # 204 = no content
 
 
 def resp_400(msg):
-    logger.error("http 400 response: {}".format(msg))
-    return {"statusCode": 400, "headers": {}, "body": msg}
+    logger.error(f"http 400 response: {msg}")
+    return {
+        "statusCode": 400,
+        "headers": {},
+        "body": msg,
+    }
 
 
 INGEST_EVENT_TYPES = {
@@ -66,10 +70,8 @@ def handler(event, context):
     if zoom_event is None:
         return resp_400("Request has no event type?")
     elif zoom_event not in INGEST_EVENT_TYPES:
-        return resp_204(
-            "Handling not implemented for event '{}'".format(zoom_event)
-        )
-    logger.info("Processing event type: {}".format(zoom_event))
+        return resp_204(f"Handling not implemented for event '{zoom_event}'")
+    logger.info(f"Processing event type: {zoom_event}")
 
     if "payload" not in body:
         return resp_400("Missing payload field in webhook notification body.")
@@ -78,7 +80,7 @@ def handler(event, context):
     try:
         validate_payload(payload)
     except BadWebhookData as e:
-        return resp_400("Bad data: {}".format(str(e)))
+        return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
@@ -92,7 +94,11 @@ def handler(event, context):
         delay = DEFAULT_MESSAGE_DELAY
     send_sqs_message(sqs_message, delay)
 
-    return {"statusCode": 200, "headers": {}, "body": "Success"}
+    return {
+        "statusCode": 200,
+        "headers": {},
+        "body": "Success",
+    }
 
 
 def validate_payload(payload):
@@ -119,18 +125,16 @@ def validate_payload(payload):
         for field in required_payload_fields:
             if field not in payload.keys():
                 raise BadWebhookData(
-                    "Missing required payload field '{}'. Keys found: {}".format(
-                        field, payload.keys()
-                    )
+                    f"Missing required payload field '{field}'. "
+                    f"Keys found: {payload.keys()}"
                 )
 
         obj = payload["object"]
         for field in required_object_fields:
             if field not in obj.keys():
                 raise BadWebhookData(
-                    "Missing required object field '{}'. Keys found: {}".format(
-                        field, obj.keys()
-                    )
+                    f"Missing required object field '{field}'. "
+                    "Keys found: {obj.keys()}"
                 )
 
         files = obj["recording_files"]
@@ -140,19 +144,19 @@ def validate_payload(payload):
         if not mp4_files:
             raise NoMp4Files("No mp4 files in recording data")
 
-        for file in files:
-            if "file_type" not in file:
+        for f in files:
+            if "file_type" not in f:
                 raise BadWebhookData("Missing required file field 'file_type'")
-            if file["file_type"].lower() != "mp4":
+            if f["file_type"].lower() != "mp4":
                 continue
             for field in required_file_fields:
-                if field not in file.keys():
+                if field not in f.keys():
                     raise BadWebhookData(
-                        "Missing required file field '{}'".format(field)
+                        f"Missing required file field '{field}'"
                     )
-            if "status" in file and file["status"].lower() != "completed":
+            if "status" in f and f["status"].lower() != "completed":
                 raise BadWebhookData(
-                    "File with incomplete status {}".format(file["status"])
+                    f"File with incomplete status {f['status']}"
                 )
 
     except NoMp4Files:
@@ -160,12 +164,13 @@ def validate_payload(payload):
         # on who the caller is
         raise
     except Exception as e:
-        raise BadWebhookData("Unrecognized payload format. {}".format(e))
+        raise BadWebhookData(f"Unrecognized payload format. {str(e)}")
 
 
 def construct_sqs_message(payload, context, zoom_event):
     now = datetime.strftime(
-        timezone(LOCAL_TIME_ZONE).localize(datetime.today()), TIMESTAMP_FORMAT
+        timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
+        TIMESTAMP_FORMAT,
     )
 
     if "allow_multiple_ingests" in payload:
@@ -231,14 +236,14 @@ def send_sqs_message(message, delay):
         download_queue = sqs.get_queue_by_name(QueueName=DOWNLOAD_QUEUE_NAME)
 
         message_sent = download_queue.send_message(
-            MessageBody=json.dumps(message), DelaySeconds=delay
+            MessageBody=json.dumps(message),
+            DelaySeconds=delay,
         )
 
     except Exception as e:
         logger.error(
-            "Error when sending SQS message for meeting uuid {} :{}".format(
-                message["uuid"], e
-            )
+            "Error when sending SQS message for meeting "
+            f"uuid {message['uuid']} :{e}"
         )
         raise
 

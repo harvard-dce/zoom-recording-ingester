@@ -7,7 +7,6 @@ from functools import wraps
 from os import getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname
-from urllib.parse import urljoin
 
 logger = logging.getLogger()
 
@@ -39,7 +38,7 @@ def setup_logging(handler_func):
 
         logger = logging.getLogger()
 
-        logger.debug("{} invoked!".format(context.function_name))
+        logger.debug(f"{context.function_name} invoked!")
         logger.debug({"event": event, "context": context.__dict__})
 
         try:
@@ -48,7 +47,7 @@ def setup_logging(handler_func):
             logger.exception("handler failed!")
             raise
 
-        logger.debug("{} complete!".format(context.function_name))
+        logger.debug(f"{context.function_name} complete!")
         return retval
 
     wrapped_func.__name__ = handler_func.__name__
@@ -101,13 +100,11 @@ def zoom_api_request(
             requests.exceptions.ConnectTimeout,
         ) as e:
             if retries > 0:
-                logger.warning("Connection Error: {}".format(e))
+                logger.warning(f"Connection Error: {e}")
                 retries -= 1
             else:
-                logger.error("Connection Error: {}".format(e))
-                raise ZoomApiRequestError(
-                    "Error requesting {}: {}".format(url, e)
-                )
+                logger.error(f"Connection Error: {e}")
+                raise ZoomApiRequestError(f"Error requesting {url}: {e}")
 
     if not ignore_failure:
         r.raise_for_status()
