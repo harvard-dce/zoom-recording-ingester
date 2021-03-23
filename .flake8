@@ -10,5 +10,3 @@ ignore =
     E501
     # allow module imports not at top of file
     E402
-max-line-length = 79
-select = B,C,E,F,W,T4,B9
