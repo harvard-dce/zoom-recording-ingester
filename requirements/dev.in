@@ -4,7 +4,6 @@ pytest-env
 pytest-mock
 pytest-cov
 freezegun
-requests-mock
 tox
 black
 flake8

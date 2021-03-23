@@ -1,6 +1,5 @@
 import json
 import gzip
-import base64
 import boto3
 from os import getenv as env
 from io import BytesIO
