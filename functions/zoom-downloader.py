@@ -268,7 +268,8 @@ class Download:
             timedelta = abs(
                 zoom_time
                 - zoom_time.replace(
-                    hour=scheduled_time.hour, minute=scheduled_time.minute
+                    hour=scheduled_time.hour,
+                    minute=scheduled_time.minute,
                 )
             ).total_seconds()
             if timedelta < (BUFFER_MINUTES * 60):
