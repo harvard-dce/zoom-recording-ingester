@@ -455,7 +455,7 @@ def slack_response_blocks(
             ingest_details_text += (
                 f"*Status:* {status_description(ingest, on_demand, match)}\n"
                 f"*Updated:* {update_time}\n"
-                f"*Zoom+ ingest?* {on_demand_text}\n\n"
+                f"*+Zoom ingest?* {on_demand_text}\n\n"
             )
 
         blocks.extend(
@@ -574,6 +574,6 @@ def status_description(ingest_details, on_demand, match):
         status_msg = status
 
     if "reason" in ingest_details:
-        status_msg += f" {ingest_details['reason']}."
+        status_msg += f" {ingest_details['reason']}"
 
     return status_msg
