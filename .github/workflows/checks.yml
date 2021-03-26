@@ -16,7 +16,8 @@ jobs:
         with:
           python-version: 3.8
       - name: Install libraries
-        run: pip install -r requirements/dev.txt
+        run: pip install pip-tools
+        run: pip-sync requirements/dev.txt
       - name: Run tests
         run: pytest ./tests
         env:
