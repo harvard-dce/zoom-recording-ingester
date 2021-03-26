@@ -538,13 +538,13 @@ def status_description(ingest_details, on_demand, match):
 
     # Processing
     if status == PipelineStatus.ON_DEMAND_RECEIVED.name:
-        status_msg = "Received Zoom+ request."
+        status_msg = "Received +Zoom request."
     elif (
         status == PipelineStatus.WEBHOOK_RECEIVED.name
         or status == PipelineStatus.SENT_TO_DOWNLOADER.name
     ):
         if on_demand:
-            status_msg = "ZIP received Zoom+ request."
+            status_msg = "ZIP received +Zoom request."
         elif match:
             status_msg = "ZIP received scheduled ingest."
         else:
