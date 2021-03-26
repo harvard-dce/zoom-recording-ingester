@@ -75,7 +75,7 @@ def handler(event, context):
             )
         recording_uuid = query_params["meeting_id"][0]
 
-    logger.info(f"Got recording uuid: '{uuid}'")
+    logger.info(f"Got recording uuid: '{recording_uuid}'")
 
     try:
         try:

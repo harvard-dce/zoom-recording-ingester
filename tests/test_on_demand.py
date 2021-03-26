@@ -9,6 +9,10 @@ import os
 import json
 import requests_mock
 
+site.addsitedir(join(dirname(dirname(__file__)), "functions"))
+
+on_demand = import_module("zoom-on-demand")
+
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
