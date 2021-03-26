@@ -1,6 +1,6 @@
 invoke
 python-dotenv
-awscli
+awscli>=1.19.38
 boto3
 requests
 tabulate
