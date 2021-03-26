@@ -53,7 +53,7 @@ Info on Zoom's API and webhook functionality can be found at:
 * node.js 10.3 or higher
 * the `aws-cdk` node.js toolkit installed 
     * this is usually just `npm install -g aws-cdk`
-    * it's best if the version matches the version of the `aws-cdk.core` package in `requirements.txt`
+    * it's best if the version matches the version of the `aws-cdk.core` package in `requirements/base.txt`
     * see [https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html](https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html) for more info
     
 ##### other stuff
@@ -74,12 +74,13 @@ Info on Zoom's API and webhook functionality can be found at:
    at least have one set of credentials in an `~/.aws/configure` file.
 1. Make a python virtualenv and activate it however you normally do those things, e.g.: `virtualenv venv && source venv/bin/activate`
 1. Python dependencies are handled via `pip-tools` so you need to install that first: `pip install pip-tools`
-1. Install the dependencies by running `pip-sync`.
+1. Install the dependencies by running `pip-sync requirements/dev.txt`.
 1. Copy `example.env` to `.env` and update as necessary. See inline comments for an explanation of each setting.
 1. If you have more than one set of AWS credentials configured you can set `AWS_PROFILE` in your `.env` file. Otherwise
    you'll need to remember to set in your shell session prior to any `invoke` commands.
 1. Run `invoke test` to confirm the installation.
 1. (Optional) run `invoke -l` to see a list of all available tasks + descriptions.
+1. (Optional) If you plan to make contributions. Install the pre-commit checks with `pip install pre-commit && pre-commit install`.
 
 #### deployment
 
@@ -294,7 +295,7 @@ Dependencies for the project as a whole and the individual functions are managed
 the `pip-tools` command, `pip-compile`. Top-level dependencies are listed in a `.in` file
 which is then compiled to a "locked" `.txt` version like so:
 
-`pip-compile -o requirements.txt requirements.in`
+`pip-compile requirements/dev.in`
 
 Both the `.in` and `.txt` files are version-controlled, so the initial compile was
 only necessary once. Now we only have to run `pip-compile` in a couple of situations:
@@ -306,7 +307,7 @@ In the first case you run `pip-compile -P [package-name] [source file]` where `s
 
 Following that you must run `pip-compile` in the project root to pull the function-specific change(s) into the main project list.
 
-Finally, run `pip-sync` to ensure the packages are updated in your virtualenv .
+Finally, run `pip-sync requirements/dev.txt` to ensure the packages are updated in your virtualenv .
 
 ## Testing
 

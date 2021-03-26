@@ -6,14 +6,17 @@ from pytz import timezone
 import boto3
 
 import logging
+
 logger = logging.getLogger()
 
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
 
+
 class BadWebhookData(Exception):
     pass
+
 
 class NoMp4Files(Exception):
     pass
@@ -25,27 +28,23 @@ def resp_204(msg):
     the recording is rejected (e.g., no mp4 files) because anything else will
     be considered a retry-able error by Zoom
     """
-    logger.info("http 204 response: {}".format(msg))
-    return {
-        "statusCode": 204,
-        "headers": {},
-        "body": ""  # 204 = no content
-    }
+    logger.info(f"http 204 response: {msg}")
+    return {"statusCode": 204, "headers": {}, "body": ""}  # 204 = no content
 
 
 def resp_400(msg):
-    logger.error("http 400 response: {}".format(msg))
+    logger.error(f"http 400 response: {msg}")
     return {
         "statusCode": 400,
         "headers": {},
-        "body": msg
+        "body": msg,
     }
 
 
 INGEST_EVENT_TYPES = {
     # event type            no mp4 files response callback
-    "recording.completed":  resp_204,
-    "on.demand.ingest":     resp_400
+    "recording.completed": resp_204,
+    "on.demand.ingest": resp_400,
 }
 
 
@@ -71,10 +70,8 @@ def handler(event, context):
     if zoom_event is None:
         return resp_400("Request has no event type?")
     elif zoom_event not in INGEST_EVENT_TYPES:
-        return resp_204(
-            "Handling not implemented for event '{}'".format(zoom_event)
-        )
-    logger.info("Processing event type: {}".format(zoom_event))
+        return resp_204(f"Handling not implemented for event '{zoom_event}'")
+    logger.info(f"Processing event type: {zoom_event}")
 
     if "payload" not in body:
         return resp_400("Missing payload field in webhook notification body.")
@@ -83,7 +80,7 @@ def handler(event, context):
     try:
         validate_payload(payload)
     except BadWebhookData as e:
-        return resp_400("Bad data: {}".format(str(e)))
+        return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
@@ -100,14 +97,12 @@ def handler(event, context):
     return {
         "statusCode": 200,
         "headers": {},
-        "body": "Success"
+        "body": "Success",
     }
 
 
 def validate_payload(payload):
-    required_payload_fields = [
-        "object"
-    ]
+    required_payload_fields = ["object"]
     required_object_fields = [
         "id",  # zoom series id
         "uuid",  # unique id of the meeting instance,
@@ -115,7 +110,7 @@ def validate_payload(payload):
         "topic",
         "start_time",
         "duration",  # duration in minutes
-        "recording_files"
+        "recording_files",
     ]
     required_file_fields = [
         "id",  # unique id for the file
@@ -123,22 +118,24 @@ def validate_payload(payload):
         "recording_end",
         "download_url",
         "file_type",
-        "recording_type"
+        "recording_type",
     ]
 
     try:
         for field in required_payload_fields:
             if field not in payload.keys():
                 raise BadWebhookData(
-                    "Missing required payload field '{}'. Keys found: {}"
-                    .format(field, payload.keys()))
+                    f"Missing required payload field '{field}'. "
+                    f"Keys found: {payload.keys()}"
+                )
 
         obj = payload["object"]
         for field in required_object_fields:
             if field not in obj.keys():
                 raise BadWebhookData(
-                    "Missing required object field '{}'. Keys found: {}"
-                    .format(field, obj.keys()))
+                    f"Missing required object field '{field}'. "
+                    "Keys found: {obj.keys()}"
+                )
 
         files = obj["recording_files"]
 
@@ -147,18 +144,19 @@ def validate_payload(payload):
         if not mp4_files:
             raise NoMp4Files("No mp4 files in recording data")
 
-        for file in files:
-            if "file_type" not in file:
+        for f in files:
+            if "file_type" not in f:
                 raise BadWebhookData("Missing required file field 'file_type'")
-            if file["file_type"].lower() != "mp4":
+            if f["file_type"].lower() != "mp4":
                 continue
             for field in required_file_fields:
-                if field not in file.keys():
+                if field not in f.keys():
                     raise BadWebhookData(
-                        "Missing required file field '{}'".format(field))
-            if "status" in file and file["status"].lower() != "completed":
+                        f"Missing required file field '{field}'"
+                    )
+            if "status" in f and f["status"].lower() != "completed":
                 raise BadWebhookData(
-                    "File with incomplete status {}".format(file["status"])
+                    f"File with incomplete status {f['status']}"
                 )
 
     except NoMp4Files:
@@ -166,13 +164,14 @@ def validate_payload(payload):
         # on who the caller is
         raise
     except Exception as e:
-        raise BadWebhookData("Unrecognized payload format. {}".format(e))
+        raise BadWebhookData(f"Unrecognized payload format. {str(e)}")
 
 
 def construct_sqs_message(payload, context, zoom_event):
     now = datetime.strftime(
-                timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
-                TIMESTAMP_FORMAT)
+        timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
+        TIMESTAMP_FORMAT,
+    )
 
     if "allow_multiple_ingests" in payload:
         allow_multiple_ingests = payload["allow_multiple_ingests"]
@@ -182,14 +181,16 @@ def construct_sqs_message(payload, context, zoom_event):
     recording_files = []
     for file in payload["object"]["recording_files"]:
         if file["file_type"].lower() == "mp4":
-            recording_files.append({
-                "recording_id": file["id"],
-                "recording_start": file["recording_start"],
-                "recording_end": file["recording_end"],
-                "download_url": file["download_url"],
-                "file_type": file["file_type"],
-                "recording_type": file["recording_type"]
-            })
+            recording_files.append(
+                {
+                    "recording_id": file["id"],
+                    "recording_start": file["recording_start"],
+                    "recording_end": file["recording_end"],
+                    "download_url": file["download_url"],
+                    "file_type": file["file_type"],
+                    "recording_type": file["recording_type"],
+                }
+            )
 
     sqs_message = {
         "uuid": payload["object"]["uuid"],
@@ -201,7 +202,7 @@ def construct_sqs_message(payload, context, zoom_event):
         "recording_files": recording_files,
         "allow_multiple_ingests": allow_multiple_ingests,
         "correlation_id": context.aws_request_id,
-        "received_time": now
+        "received_time": now,
     }
 
     if "on_demand_series_id" in payload:
@@ -213,8 +214,7 @@ def construct_sqs_message(payload, context, zoom_event):
 
     if zoom_event == "recording.completed":
         zoom_processing_mins = estimated_processing_mins(
-            sqs_message["start_time"],
-            sqs_message["duration"]
+            sqs_message["start_time"], sqs_message["duration"]
         )
         sqs_message["zoom_processing_minutes"] = zoom_processing_mins
 
@@ -237,12 +237,14 @@ def send_sqs_message(message, delay):
 
         message_sent = download_queue.send_message(
             MessageBody=json.dumps(message),
-            DelaySeconds=delay
+            DelaySeconds=delay,
         )
 
     except Exception as e:
-        logger.error("Error when sending SQS message for meeting uuid {} :{}"
-                     .format(message["uuid"], e))
+        logger.error(
+            "Error when sending SQS message for meeting "
+            f"uuid {message['uuid']} :{e}"
+        )
         raise
 
     logger.debug({"Message sent": message_sent})

@@ -9,7 +9,7 @@ phases:
       - python -m virtualenv venv
       - source venv/bin/activate
       - pip install -U pip pip-tools
-      - pip-sync requirements.txt
+      - pip-sync requirements/base.txt
       - invoke test
   build:
     commands:

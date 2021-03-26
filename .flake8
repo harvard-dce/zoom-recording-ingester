@@ -1,0 +1,13 @@
+[flake8]
+ignore = 
+    # black compatablity: allow whitespace before ':'
+    E203
+    # black compatability: allow comments with > 1 leading #
+    E266
+    # black compatability: allow line break before binary operator
+    W503
+    # black compatability: let black handle line length
+    E501
+    # allow module imports not at top of file
+    E402
+select = B,C,E,F,W,T4,B9

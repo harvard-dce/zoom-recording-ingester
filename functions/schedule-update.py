@@ -21,8 +21,4 @@ def handler(event, context):
     logger.info(f"Import data from '{GSHEETS_SHEET_NAME}' sheet")
     sheet.import_to_dynamo(GSHEETS_SHEET_NAME)
 
-    return {
-        "statusCode": 200,
-        "headers": {},
-        "body": "Success"
-    }
+    return {"statusCode": 200, "headers": {}, "body": "Success"}

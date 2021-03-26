@@ -1,10 +1,9 @@
 boto3
 aws-lambda-logging
 requests
-PyJWT
+PyJWT>=2.0.1
 pytz
 python-dotenv
 google-api-python-client
-google-auth
+google-auth>=1.28.0
 google-auth-oauthlib
-
