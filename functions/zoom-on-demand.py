@@ -2,8 +2,12 @@ import json
 import requests
 from os import getenv as env
 from urllib.parse import urlparse, parse_qs, quote
-from common.common import zoom_api_request, setup_logging
-from common.status import PipelineStatus, set_pipeline_status
+from utils import (
+    zoom_api_request,
+    setup_logging,
+    PipelineStatus,
+    set_pipeline_status,
+)
 import uuid
 
 import logging

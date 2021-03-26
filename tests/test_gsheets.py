@@ -1,6 +1,6 @@
 import site
 from os.path import dirname, join
-import gsheets
+import utils
 import pytest
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
@@ -8,9 +8,7 @@ site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
 def test_schedule_successful_parsing(mocker):
     mock_table_name = "mock_table_name"
-    mock_json_to_dynamo = mocker.patch.object(
-        gsheets, "schedule_json_to_dynamo"
-    )
+    mock_json_to_dynamo = mocker.patch.object(utils, "schedule_json_to_dynamo")
 
     schedule1_expected = {
         "0123456789": {
@@ -60,9 +58,7 @@ def test_schedule_successful_parsing(mocker):
     }
 
     # pass something into schedule csv
-    gsheets.schedule_csv_to_dynamo(
-        mock_table_name, "tests/input/schedule1.csv"
-    )
+    utils.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule1.csv")
     mock_json_to_dynamo.assert_called_with(
         mock_table_name, schedule_data=schedule1_expected
     )
@@ -70,16 +66,14 @@ def test_schedule_successful_parsing(mocker):
 
 def test_schedule_missing_req_field(mocker):
     with pytest.raises(Exception, match="Missing required field"):
-        gsheets.schedule_csv_to_dynamo(
+        utils.schedule_csv_to_dynamo(
             "mock_table_name", "tests/input/schedule2.csv"
         )
 
 
 def test_schedule_missing_zoom_link(mocker):
     mock_table_name = "mock_table_name"
-    mock_json_to_dynamo = mocker.patch.object(
-        gsheets, "schedule_json_to_dynamo"
-    )
+    mock_json_to_dynamo = mocker.patch.object(utils, "schedule_json_to_dynamo")
 
     # 2 meetings but 1 does not have a Zoom link so only 1 meeting added
     schedule3_expected = {
@@ -94,9 +88,7 @@ def test_schedule_missing_zoom_link(mocker):
         }
     }
 
-    gsheets.schedule_csv_to_dynamo(
-        mock_table_name, "tests/input/schedule3.csv"
-    )
+    utils.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule3.csv")
     mock_json_to_dynamo.assert_called_with(
         "mock_table_name", schedule_data=schedule3_expected
     )
@@ -104,9 +96,7 @@ def test_schedule_missing_zoom_link(mocker):
 
 def test_schedule_invalid_zoom_link(mocker):
     mock_table_name = "mock_table_name"
-    mock_json_to_dynamo = mocker.patch.object(
-        gsheets, "schedule_json_to_dynamo"
-    )
+    mock_json_to_dynamo = mocker.patch.object(utils, "schedule_json_to_dynamo")
 
     # 2 meetings but 1 has an invalid Zoom link so only 1 meeting added
     schedule4_expected = {
@@ -121,9 +111,7 @@ def test_schedule_invalid_zoom_link(mocker):
         }
     }
 
-    gsheets.schedule_csv_to_dynamo(
-        mock_table_name, "tests/input/schedule4.csv"
-    )
+    utils.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule4.csv")
     mock_json_to_dynamo.assert_called_with(
         "mock_table_name", schedule_data=schedule4_expected
     )
@@ -131,9 +119,7 @@ def test_schedule_invalid_zoom_link(mocker):
 
 def test_schedule_missing_oc_series(mocker):
     mock_table_name = "mock_table_name"
-    mock_json_to_dynamo = mocker.patch.object(
-        gsheets, "schedule_json_to_dynamo"
-    )
+    mock_json_to_dynamo = mocker.patch.object(utils, "schedule_json_to_dynamo")
 
     # 2 meetings but 1 has no opencast series id so only 1 meeting added
     schedule5_expected = {
@@ -148,9 +134,7 @@ def test_schedule_missing_oc_series(mocker):
         }
     }
 
-    gsheets.schedule_csv_to_dynamo(
-        mock_table_name, "tests/input/schedule5.csv"
-    )
+    utils.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule5.csv")
     mock_json_to_dynamo.assert_called_with(
         "mock_table_name", schedule_data=schedule5_expected
     )
@@ -158,9 +142,7 @@ def test_schedule_missing_oc_series(mocker):
 
 def test_schedule_invalid_time(mocker):
     mock_table_name = "mock_table_name"
-    mock_json_to_dynamo = mocker.patch.object(
-        gsheets, "schedule_json_to_dynamo"
-    )
+    mock_json_to_dynamo = mocker.patch.object(utils, "schedule_json_to_dynamo")
 
     # 2 meetings but 1 has an invalid time so only 1 meeting added
     schedule6_expected = {
@@ -172,9 +154,7 @@ def test_schedule_invalid_time(mocker):
         }
     }
 
-    gsheets.schedule_csv_to_dynamo(
-        mock_table_name, "tests/input/schedule6.csv"
-    )
+    utils.schedule_csv_to_dynamo(mock_table_name, "tests/input/schedule6.csv")
     mock_json_to_dynamo.assert_called_with(
         "mock_table_name", schedule_data=schedule6_expected
     )

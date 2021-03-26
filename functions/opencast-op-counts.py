@@ -3,7 +3,7 @@ from os import getenv as env
 import urllib.parse as urlparse
 
 import logging
-from common.common import setup_logging
+from utils import setup_logging
 
 logger = logging.getLogger()
 

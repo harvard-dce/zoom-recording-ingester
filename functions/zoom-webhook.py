@@ -1,7 +1,11 @@
 import json
 from os import getenv as env
-from common import setup_logging, TIMESTAMP_FORMAT
-from common.status import PipelineStatus, set_pipeline_status
+from utils import (
+    setup_logging,
+    TIMESTAMP_FORMAT,
+    PipelineStatus,
+    set_pipeline_status,
+)
 from datetime import datetime, timedelta
 from pytz import timezone
 import boto3

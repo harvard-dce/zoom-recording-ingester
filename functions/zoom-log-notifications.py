@@ -6,7 +6,7 @@ from io import BytesIO
 import codecs
 
 import logging
-from common.common import setup_logging
+from utils import setup_logging
 
 logger = logging.getLogger()
 
