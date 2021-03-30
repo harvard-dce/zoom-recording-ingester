@@ -9,8 +9,12 @@ from xml.sax.saxutils import escape
 from datetime import datetime
 from hashlib import md5
 from uuid import UUID, uuid4
-from common.common import setup_logging, TIMESTAMP_FORMAT
-from common.status import PipelineStatus, set_pipeline_status
+from utils import (
+    setup_logging,
+    TIMESTAMP_FORMAT,
+    PipelineStatus,
+    set_pipeline_status,
+)
 
 
 import logging

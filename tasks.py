@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
-from functions.common import zoom_api_request
-from functions.common.gsheets import (
+from functions.utils import (
+    zoom_api_request,
     GSheetsAuth,
     schedule_json_to_dynamo,
     schedule_csv_to_dynamo,

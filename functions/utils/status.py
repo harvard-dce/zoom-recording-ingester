@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from os import getenv as env
 from dotenv import load_dotenv
 from os.path import join, dirname
-from common import TIMESTAMP_FORMAT
+from .common import TIMESTAMP_FORMAT
 
 
 logger = logging.getLogger()
@@ -15,7 +15,7 @@ logger = logging.getLogger()
 load_dotenv(join(dirname(__file__), "../.env"))
 
 DATE_FORMAT = "%Y-%m-%d"
-PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE")
+PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE", None)
 SECONDS_PER_DAY = 86400
 
 
@@ -37,9 +37,11 @@ class PipelineStatus(Enum):
     UPLOADER_FAILED = auto()
 
 
-dynamodb = boto3.resource("dynamodb")
-logger.info(PIPELINE_STATUS_TABLE)
-status_table = dynamodb.Table(PIPELINE_STATUS_TABLE)
+def zip_status_table():
+    if PIPELINE_STATUS_TABLE:
+        dynamodb = boto3.resource("dynamodb")
+        return dynamodb.Table(PIPELINE_STATUS_TABLE)
+    return None
 
 
 def ts_to_date_and_seconds(ts):
@@ -66,6 +68,7 @@ def set_pipeline_status(
 ):
     today, seconds = ts_to_date_and_seconds(datetime.utcnow())
     try:
+        status_table = zip_status_table()
         update_expression = "set update_date=:d, update_time=:ts, expiration=:e, pipeline_state=:s"
         expression_attribute_values = {
             ":d": today,
@@ -129,6 +132,7 @@ def set_pipeline_status(
 
 
 def status_by_mid(mid):
+    status_table = zip_status_table()
     r = status_table.query(
         IndexName="mid_index",
         KeyConditionExpression=(Key("meeting_id").eq(mid)),
@@ -143,6 +147,7 @@ def status_by_mid(mid):
 
 
 def status_by_seconds(request_seconds):
+    status_table = zip_status_table()
     now = datetime.utcnow()
     logger.info(
         f"Retrieving records updated within the last {request_seconds} seconds"

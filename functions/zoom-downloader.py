@@ -3,14 +3,15 @@ import json
 import requests
 from os import getenv as env
 from pathlib import Path
-from common.common import (
+from utils import (
     setup_logging,
     zoom_api_request,
     TIMESTAMP_FORMAT,
     retrieve_schedule,
     schedule_match,
+    PipelineStatus,
+    set_pipeline_status,
 )
-from common.status import PipelineStatus, set_pipeline_status
 import subprocess
 from pytz import timezone
 from datetime import datetime

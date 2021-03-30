@@ -11,3 +11,6 @@ ignore =
     # allow module imports not at top of file
     E402
 select = B,C,E,F,W,T4,B9
+# allow unused imports in __init__.py
+per-file-ignores =
+    */__init__.py: F401

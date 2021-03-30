@@ -1,5 +1,9 @@
-from common.common import setup_logging
-from common.status import status_by_mid, status_by_seconds, InvalidStatusQuery
+from utils import (
+    setup_logging,
+    status_by_mid,
+    status_by_seconds,
+    InvalidStatusQuery,
+)
 import json
 
 import logging
