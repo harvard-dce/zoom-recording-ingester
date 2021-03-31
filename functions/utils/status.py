@@ -66,14 +66,22 @@ def set_pipeline_status(
     topic=None,
     oc_series_id=None,
 ):
-    today, seconds = ts_to_date_and_seconds(datetime.utcnow())
+    logger.info(f"Set pipeline status to {state.name} for id {correlation_id}")
+
+    utcnow = datetime.utcnow()
+    today, seconds = ts_to_date_and_seconds(utcnow)
     try:
         status_table = zip_status_table()
-        update_expression = "set update_date=:d, update_time=:ts, expiration=:e, pipeline_state=:s"
+        update_expression = (
+            "set update_date=:d, "
+            "update_time=:ts, "
+            "expiration=:e, "
+            "pipeline_state=:s"
+        )
         expression_attribute_values = {
             ":d": today,
             ":ts": int(seconds),
-            ":e": int((datetime.now() + timedelta(days=7)).timestamp()),
+            ":e": int((utcnow + timedelta(days=7)).timestamp()),
             ":s": state.name,
         }
         if meeting_id:
@@ -108,21 +116,59 @@ def set_pipeline_status(
         # you start status tracking for the first time or make modifications
         # to the table that require it to be recreated.)
         if not meeting_id or not origin:
+            condition_expression = (
+                "attribute_exists(meeting_id) AND attribute_exists(origin)"
+            )
+            logger.debug(
+                {
+                    "dynamo update item": {
+                        "correlation_id": correlation_id,
+                        "update_expression": update_expression,
+                        "expresssion_attribute_values": expression_attribute_values,
+                        "condition_expression": condition_expression,
+                    }
+                }
+            )
             status_table.update_item(
                 Key={"correlation_id": correlation_id},
                 UpdateExpression=update_expression,
                 ExpressionAttributeValues=expression_attribute_values,
-                ConditionExpression="attribute_exists(meeting_id) AND attribute_exists(origin)",
+                ConditionExpression=condition_expression,
             )
         else:
+            logger.debug(
+                {
+                    "dynamo update item": {
+                        "correlation_id": correlation_id,
+                        "update_expression": update_expression,
+                        "expresssion_attribute_values": expression_attribute_values,
+                    }
+                }
+            )
+            # New request
             status_table.update_item(
                 Key={"correlation_id": correlation_id},
                 UpdateExpression=update_expression,
                 ExpressionAttributeValues=expression_attribute_values,
             )
 
-        logger.info(
-            f"Set pipeline status to {state.name} for id {correlation_id}"
+        # Conditionally update origin time
+        condition_expression = "if_not_exists(origin_time)"
+        logger.debug(
+            {
+                "dynamo update item": {
+                    "correlation_id": correlation_id,
+                    "update_expression": update_expression,
+                    "expresssion_attribute_values": expression_attribute_values,
+                    "condition_expression": condition_expression,
+                }
+            }
+        )
+        status_table.update_item(
+            Key={"correlation_id": correlation_id},
+            UpdateExpression="set origin_time=:ot",
+            ExpressionAttributeValues={":ot": int(utcnow.timestamp())},
+            ConditionExpression=condition_expression,
         )
     except ClientError as e:
         error = e.response["Error"]

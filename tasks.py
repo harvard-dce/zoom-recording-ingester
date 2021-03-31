@@ -902,10 +902,8 @@ def __build_function(ctx, func, upload_to_s3=False):
             "pip install -U -r {} -t {}".format(req_file, build_path), hide=1
         )
 
-    mkdir(join(build_path, "common"))
-    modules = [
-        "common/" + f.split(".")[0] for f in listdir("functions/common")
-    ]
+    mkdir(join(build_path, "utils"))
+    modules = ["utils/" + f.split(".")[0] for f in listdir("functions/utils")]
     modules.append(func)
     for module in modules:
         module_path = join(dirname(__file__), f"functions/{module}.py")
