@@ -8,7 +8,7 @@ from utils import (
     PipelineStatus,
     set_pipeline_status,
 )
-import uuid
+from uuid import uuid4
 
 import logging
 
@@ -84,14 +84,18 @@ def handler(event, context):
     try:
         try:
             # zoom api can break if uuid is not double urlencoded
-            double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
+            double_urlencoded_uuid = quote(
+                quote(recording_uuid, safe=""), safe=""
+            )
             zoom_endpoint = f"meetings/{double_urlencoded_uuid}/recordings"
             r = zoom_api_request(zoom_endpoint)
             recording_data = r.json()
         except requests.HTTPError as e:
             # return a 404 if there's no such meeting
             if e.response.status_code == 404:
-                return resp(404, f"No zoom recording with id '{uuid}'")
+                return resp(
+                    404, f"No zoom recording with id '{recording_uuid}'"
+                )
             else:
                 raise
     # otherwise return a 500 on any other errors (bad json, bad request, etc)
@@ -101,12 +105,14 @@ def handler(event, context):
             f"Something went wrong querying the zoom api: {str(e)}",
         )
 
-    if "recording_files" not in recording_data or not len(
-        recording_data["recording_files"]
+    if (
+        "recording_files" not in recording_data
+        or not recording_data["recording_files"]
     ):
         return resp(
             503,
-            f"Zoom api response contained no recording files for {uuid}",
+            "Zoom api response contained no recording files for "
+            f"{recording_uuid}",
         )
 
     # verify that all the recording files are actually "completed"
@@ -140,7 +146,7 @@ def handler(event, context):
             "allow_multiple_ingests"
         ]
 
-    request_id = str(uuid.uuid4())
+    request_id = str(uuid4())
     webhook_data["payload"]["on_demand_request_id"] = request_id
 
     logger.info({"webhook_data": webhook_data})

@@ -1,25 +1,15 @@
 import site
 from os.path import dirname, join
-
-site.addsitedir(join(dirname(dirname(__file__)), "functions"))
-from importlib import import_module
-
 from datetime import datetime
 import os
 import json
 import requests_mock
+from importlib import import_module
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
 on_demand = import_module("zoom-on-demand")
-
-
-site.addsitedir(join(dirname(dirname(__file__)), "functions"))
-
-on_demand = import_module("zoom-on-demand")
-
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
-on_demand = import_module("zoom-on-demand")
 
 
 def test_missing_body(handler):
@@ -81,7 +71,10 @@ def test_recordings_empty(handler, mocker):
 def test_recordings_not_completed(handler, mocker):
     mock_zoom_resp = mocker.Mock()
     mock_zoom_resp.json.return_value = {
-        "recording_files": [{"status": "not done"}, {"status": "completed"}]
+        "recording_files": [
+            {"status": "not done"},
+            {"status": "completed"},
+        ]
     }
     mock_zoom_api_request = mocker.Mock(return_value=mock_zoom_resp)
     mocker.patch.object(on_demand, "zoom_api_request", mock_zoom_api_request)
@@ -124,7 +117,10 @@ def test_on_demand_happy_trail(handler, mocker):
 def test_on_demand_ingest_not_accepted(handler, mocker):
     mock_zoom_resp = mocker.Mock()
     mock_zoom_resp.json.return_value = {
-        "recording_files": [{"status": "completed"}, {"status": "completed"}]
+        "recording_files": [
+            {"status": "completed"},
+            {"status": "completed"},
+        ]
     }
     mock_zoom_api_request = mocker.Mock(return_value=mock_zoom_resp)
     mocker.patch.object(on_demand, "zoom_api_request", mock_zoom_api_request)

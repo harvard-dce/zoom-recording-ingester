@@ -84,14 +84,20 @@ class TestHandler(unittest.TestCase):
         message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
 
         self.mocker.patch.object(
-            downloader, "retrieve_message", return_value=message
+            downloader,
+            "retrieve_message",
+            return_value=message,
         )
         self.mocker.patch.object(
-            downloader.Download, "_class_schedule", return_value={}
+            downloader.Download,
+            "_series_id_from_schedule",
+            None,
         )
         mock_set_pipeline_status = self.mocker.Mock(return_value=None)
         self.mocker.patch.object(
-            downloader, "set_pipeline_status", mock_set_pipeline_status
+            downloader,
+            "set_pipeline_status",
+            mock_set_pipeline_status,
         )
 
         with self.assertLogs(level="INFO") as cm:
@@ -335,12 +341,17 @@ class TestDownloader(unittest.TestCase):
         for start_time, schedule, expected in cases:
             time_object = datetime.strptime(start_time, TIMESTAMP_FORMAT)
             with patch.object(
-                downloader.Download, "_class_schedule", schedule
+                downloader,
+                "retrieve_schedule",
+                return_value=schedule,
             ):
                 with patch.object(
                     downloader.Download, "_created_local", time_object
                 ):
-                    dl = downloader.Download(None, None)
+                    dl = downloader.Download(
+                        None,
+                        {"zoom_series_id": "123456789"},
+                    )
                     assert dl._series_id_from_schedule == expected
 
     """
