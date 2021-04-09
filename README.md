@@ -26,7 +26,7 @@ Info on Zoom's API and webhook functionality can be found at:
 
 ## Pipeline flow diagram
 
-![zoom ingester pipeline diagram](docs/Zoom%20Ingester%20Pipeline.png)
+![zoom ingester pipeline diagram](docs/zoom-ingester-pipeline.png)
 
 
 * [Setup](#setup)

@@ -251,7 +251,6 @@ class Download:
         Check that the recording's start_time matches the schedule and
         extract the opencast series id.
         """
-
         schedule = retrieve_schedule(self.data["zoom_series_id"])
         if not schedule:
             return None

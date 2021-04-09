@@ -75,9 +75,6 @@ def test_validate_payload(webhook_payload):
     minimum_valid_payload = webhook_payload()["payload"]
     webhook.validate_payload(minimum_valid_payload)
 
-    missing_file_id = webhook_payload()["payload"]
-    del missing_file_id["object"]["recording_files"][0]["id"]
-
     missing_recording_files = webhook_payload()["payload"]
     del missing_recording_files["object"]["recording_files"]
 
@@ -85,7 +82,6 @@ def test_validate_payload(webhook_payload):
     del missing_object_field["object"]
 
     payloads = [
-        (missing_file_id, "Missing required file field 'id'"),
         (
             missing_recording_files,
             "Missing required object field 'recording_files'",
@@ -99,12 +95,23 @@ def test_validate_payload(webhook_payload):
         assert exc_info.match(msg), msg
 
 
+def test_validate_recording_files(webhook_payload):
+    missing_file_id = webhook_payload()["payload"]["object"]["recording_files"]
+    del missing_file_id[0]["id"]
+
+    expected_msg = "Missing required file field 'id'"
+
+    with pytest.raises(webhook.BadWebhookData) as exc_info:
+        webhook.validate_recording_files(missing_file_id)
+    assert exc_info.match(expected_msg), expected_msg
+
+
 @freeze_time(FROZEN_TIME)
 def test_no_mp4s_validation(webhook_payload):
-    payload = webhook_payload()["payload"]
-    payload["object"]["recording_files"][0]["file_type"] = "foo"
+    recording_files = webhook_payload()["payload"]["object"]["recording_files"]
+    recording_files[0]["file_type"] = "foo"
     with pytest.raises(webhook.NoMp4Files) as exc_info:
-        webhook.validate_payload(payload)
+        webhook.validate_recording_files(recording_files)
     assert exc_info.match("No mp4 files in recording data")
 
 
