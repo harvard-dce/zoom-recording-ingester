@@ -23,6 +23,13 @@ class InvalidStatusQuery(Exception):
     pass
 
 
+class ZoomStatus(Enum):
+    RECORDING_IN_PROGRESS = auto()
+    RECORDING_PAUSED = auto()
+    RECORDING_STOPPED = auto()
+    RECORDING_PROCESSING = auto()
+
+
 class PipelineStatus(Enum):
     ON_DEMAND_RECEIVED = auto()
     WEBHOOK_RECEIVED = auto()
@@ -53,6 +60,16 @@ def ts_to_date_and_seconds(ts):
         ).total_seconds()
     )
     return date, seconds
+
+
+def status_currently_recording(uuid):
+    status_table = zip_status_table()
+    r = status_table.get_item(Key={"correlation_id": uuid})
+    if "Item" in r:
+        state = r["Item"]["pipeline_state"]
+        return state in [status.name for status in ZoomStatus]
+    else:
+        return False
 
 
 def set_pipeline_status(
@@ -152,29 +169,50 @@ def set_pipeline_status(
                 ExpressionAttributeValues=expression_attribute_values,
             )
 
-        # Conditionally update origin time
-        condition_expression = "if_not_exists(origin_time)"
-        logger.debug(
-            {
-                "dynamo update item": {
-                    "correlation_id": correlation_id,
-                    "update_expression": update_expression,
-                    "expresssion_attribute_values": expression_attribute_values,
-                    "condition_expression": condition_expression,
-                }
-            }
-        )
-        status_table.update_item(
-            Key={"correlation_id": correlation_id},
-            UpdateExpression="set origin_time=:ot",
-            ExpressionAttributeValues={":ot": int(utcnow.timestamp())},
-            ConditionExpression=condition_expression,
-        )
+            origin_time = int(utcnow.timestamp())
+            __set_origin_time(status_table, correlation_id, origin_time)
     except ClientError as e:
         error = e.response["Error"]
         logger.exception(f"{error['Code']}: {error['Message']}")
     except Exception as e:
         logger.exception(f"Something went wrong updating pipeline status: {e}")
+
+    if state.name == PipelineStatus.WEBHOOK_RECEIVED and recording_id:
+        __delete_record(recording_id)
+
+
+def __set_origin_time(status_table, correlation_id, origin_time):
+    """
+    Set origin time only if not yet set
+    """
+    update_expression = "set origin_time=:ot"
+    expression_attribute_values = {":ot": origin_time}
+    condition_expression = "attribute_not_exists(origin_time)"
+    logger.debug(
+        {
+            "dynamo update item": {
+                "correlation_id": correlation_id,
+                "update_expression": update_expression,
+                "expression_attribute_values": expression_attribute_values,
+                "condition_expression": condition_expression,
+            }
+        }
+    )
+    try:
+        status_table.update_item(
+            Key={"correlation_id": correlation_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values,
+            ConditionExpression=condition_expression,
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return
+        raise
+
+
+def __delete_record(status_table, correlation_id):
+    status_table.delete_item(Key={"correlation_id": correlation_id})
 
 
 def status_by_mid(mid):

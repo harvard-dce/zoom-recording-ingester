@@ -3,8 +3,10 @@ from os import getenv as env
 from utils import (
     setup_logging,
     TIMESTAMP_FORMAT,
+    ZoomStatus,
     PipelineStatus,
     set_pipeline_status,
+    status_currently_recording,
 )
 from datetime import datetime, timedelta
 from pytz import timezone
@@ -46,6 +48,15 @@ def resp_400(msg):
     }
 
 
+STATUS_EVENT_TYPES = [
+    "recording.started",
+    "recording.resumed",
+    "recording.paused",
+    "recording.stopped",
+    "meeting.ended",
+]
+
+
 INGEST_EVENT_TYPES = {
     # event type            no mp4 files response callback
     "recording.completed": resp_204,
@@ -72,9 +83,12 @@ def handler(event, context):
         return resp_400("Webhook notification body is not valid json.")
 
     zoom_event = body.get("event")
-    if zoom_event is None:
+    if not zoom_event:
         return resp_400("Request has no event type?")
-    elif zoom_event not in INGEST_EVENT_TYPES:
+    elif (
+        zoom_event not in INGEST_EVENT_TYPES
+        and zoom_event not in STATUS_EVENT_TYPES
+    ):
         return resp_204(f"Handling not implemented for event '{zoom_event}'")
     logger.info(f"Processing event type: {zoom_event}")
 
@@ -88,6 +102,9 @@ def handler(event, context):
     else:
         origin = "webhook_notification"
         correlation_id = context.aws_request_id
+
+    if zoom_event in STATUS_EVENT_TYPES:
+        return update_zoom_status(zoom_event, payload)
 
     try:
         validate_payload(payload)
@@ -137,6 +154,45 @@ def handler(event, context):
     }
 
 
+def update_zoom_status(zoom_event, payload):
+    mid = payload["object"]["id"]
+    uuid = payload["object"]["uuid"]
+
+    status = None
+    if zoom_event == "recording.started" or zoom_event == "recording.resumed":
+        status = ZoomStatus.RECORDING_IN_PROGRESS
+    elif zoom_event == "recording.paused":
+        status = ZoomStatus.RECORDING_PAUSED
+    elif zoom_event == "recording.stopped":
+        status = ZoomStatus.RECORDING_STOPPED
+    elif zoom_event == "meeting.ended":
+        if status_currently_recording(uuid):
+            status = ZoomStatus.RECORDING_PROCESSING
+        else:
+            return resp_204(
+                f"Ignore meeting.ended for meeting id {mid} uuid {uuid} "
+                "not recorded"
+            )
+
+    # This should not happen
+    if not status:
+        return resp_204(f"Unhandled zoom event {zoom_event}")
+
+    set_pipeline_status(
+        uuid,
+        status,
+        meeting_id=payload["object"]["id"],
+        recording_id=payload["object"]["uuid"],
+        recording_start_time=payload["object"]["start_time"],
+        topic=payload["object"]["topic"],
+        origin="webhook_notification",
+    )
+
+    return resp_204(
+        f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {zoom_event}"
+    )
+
+
 def validate_payload(payload):
     required_payload_fields = ["object"]
     required_object_fields = [
@@ -162,7 +218,7 @@ def validate_payload(payload):
             if field not in obj.keys():
                 raise BadWebhookData(
                     f"Missing required object field '{field}'. "
-                    "Keys found: {obj.keys()}"
+                    f"Keys found: {obj.keys()}"
                 )
     except Exception as e:
         raise BadWebhookData("Unrecognized payload format. {}".format(e))
