@@ -6,7 +6,8 @@ from utils import (
     ZoomStatus,
     PipelineStatus,
     set_pipeline_status,
-    status_currently_recording,
+    zoom_api_request,
+    record_exists,
 )
 from datetime import datetime, timedelta
 from pytz import timezone
@@ -100,11 +101,13 @@ def handler(event, context):
         origin = "on_demand"
         correlation_id = payload["on_demand_request_id"]
     else:
+        if "object" not in payload or "uuid" not in payload["object"]:
+            return resp_400("Bad data: missing uuid")
         origin = "webhook_notification"
-        correlation_id = context.aws_request_id
+        correlation_id = f"auto-ingest-{payload['object']['uuid']}"
 
     if zoom_event in STATUS_EVENT_TYPES:
-        return update_zoom_status(zoom_event, payload)
+        return update_zoom_status(zoom_event, payload, correlation_id)
 
     try:
         validate_payload(payload)
@@ -154,7 +157,7 @@ def handler(event, context):
     }
 
 
-def update_zoom_status(zoom_event, payload):
+def update_zoom_status(zoom_event, payload, correlation_id):
     mid = payload["object"]["id"]
     uuid = payload["object"]["uuid"]
 
@@ -164,9 +167,15 @@ def update_zoom_status(zoom_event, payload):
     elif zoom_event == "recording.paused":
         status = ZoomStatus.RECORDING_PAUSED
     elif zoom_event == "recording.stopped":
-        status = ZoomStatus.RECORDING_STOPPED
+        r = zoom_api_request(f"/past_meetings/{uuid}", ignore_failure=True)
+        if r.status_code == 404:
+            status = ZoomStatus.RECORDING_STOPPED
+        else:
+            r.raise_for_status
+            logger.info(f"Meeting {uuid} ended. Recording processing.")
+            status = ZoomStatus.RECORDING_PROCESSING
     elif zoom_event == "meeting.ended":
-        if status_currently_recording(uuid):
+        if record_exists(correlation_id):
             status = ZoomStatus.RECORDING_PROCESSING
         else:
             return resp_204(
@@ -179,7 +188,7 @@ def update_zoom_status(zoom_event, payload):
         return resp_204(f"Unhandled zoom event {zoom_event}")
 
     set_pipeline_status(
-        uuid,
+        correlation_id,
         status,
         meeting_id=payload["object"]["id"],
         recording_id=payload["object"]["uuid"],

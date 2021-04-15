@@ -134,6 +134,10 @@ class ZipStack(core.Stack):
             name=names.WEBHOOK_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
             environment={
+                "ZOOM_API_BASE_URL": zoom_api_base_url,
+                "ZOOM_API_KEY": zoom_api_key,
+                "ZOOM_API_SECRET": zoom_api_secret,
+                "APIGEE_KEY": apigee_key,
                 "DOWNLOAD_QUEUE_NAME": queues.download_queue.queue_name,
                 "LOCAL_TIME_ZONE": local_time_zone,
                 "DEBUG": "0",

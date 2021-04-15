@@ -18,5 +18,5 @@ from .status import (
     ZoomStatus,
     PipelineStatus,
     set_pipeline_status,
-    status_currently_recording,
+    record_exists,
 )
