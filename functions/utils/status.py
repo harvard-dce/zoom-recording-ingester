@@ -175,6 +175,9 @@ def set_pipeline_status(
             )
     except ClientError as e:
         error = e.response["Error"]
+        if error["Code"] == "ConditionalCheckFailedException":
+            # Don't treat failed conditional update as an error
+            return
         logger.exception(f"{error['Code']}: {error['Message']}")
     except Exception as e:
         logger.exception(f"Something went wrong updating pipeline status: {e}")
