@@ -23,6 +23,13 @@ class InvalidStatusQuery(Exception):
     pass
 
 
+class ZoomStatus(Enum):
+    RECORDING_IN_PROGRESS = auto()
+    RECORDING_PAUSED = auto()
+    RECORDING_STOPPED = auto()
+    RECORDING_PROCESSING = auto()
+
+
 class PipelineStatus(Enum):
     ON_DEMAND_RECEIVED = auto()
     WEBHOOK_RECEIVED = auto()
@@ -55,6 +62,12 @@ def ts_to_date_and_seconds(ts):
     return date, seconds
 
 
+def record_exists(correlation_id):
+    status_table = zip_status_table()
+    r = status_table.get_item(Key={"correlation_id": correlation_id})
+    return "Item" in r
+
+
 def set_pipeline_status(
     correlation_id,
     state,
@@ -73,62 +86,72 @@ def set_pipeline_status(
     try:
         status_table = zip_status_table()
         update_expression = (
-            "set update_date=:d, "
-            "update_time=:ts, "
-            "expiration=:e, "
-            "pipeline_state=:s"
+            "set update_date=:update_date, "
+            "update_time=:update_time, "
+            "expiration=:expiration, "
+            "pipeline_state=:pipeline_state"
         )
         expression_attribute_values = {
-            ":d": today,
-            ":ts": int(seconds),
-            ":e": int((utcnow + timedelta(days=7)).timestamp()),
-            ":s": state.name,
+            ":update_date": today,
+            ":update_time": int(seconds),
+            ":expiration": int((utcnow + timedelta(days=7)).timestamp()),
+            ":pipeline_state": state.name,
         }
-        if meeting_id:
-            update_expression += ", meeting_id=:m"
-            expression_attribute_values[":m"] = meeting_id
-        if recording_id:
-            update_expression += ", recording_id=:u"
-            expression_attribute_values[":u"] = recording_id
-        if reason:
-            update_expression += ", reason=:r"
-            expression_attribute_values[":r"] = reason
-        if origin:
-            update_expression += ", origin=:o"
-            expression_attribute_values[":o"] = origin
-        if recording_start_time:
-            update_expression += ", recording_start_time=:rst"
-            expression_attribute_values[":rst"] = recording_start_time
-        if topic:
-            update_expression += ", topic=:t"
-            expression_attribute_values[":t"] = topic
-        if oc_series_id:
-            update_expression += ", oc_series_id=:osi"
-            expression_attribute_values[":osi"] = oc_series_id
 
-        # When a recording enters the ZIP pipeline, for simplicity,
-        # only the first status tracking update includes additional metadata
-        # such as the meeting_id or origin. Subsequent status updates report
-        # status using a unique correlation id.
-        # Prevent adding records to dynamo status table for recordings
-        # that haven't been tracked since the beginning of the pipeline and
-        # therefore don't contain enough useful metadata. (This happens when
-        # you start status tracking for the first time or make modifications
-        # to the table that require it to be recreated.)
+        ingest_request_time = None
+        if (
+            state == PipelineStatus.WEBHOOK_RECEIVED
+            or state == PipelineStatus.ON_DEMAND_RECEIVED
+        ):
+            ingest_request_time = utcnow.strftime(TIMESTAMP_FORMAT)
+
+        optional_attributes = {
+            "ingest_request_time": ingest_request_time,
+            "meeting_id": int(meeting_id) if meeting_id else None,
+            "recording_id": recording_id,
+            "reason": reason,
+            "origin": origin,
+            "recording_start_time": recording_start_time,
+            "topic": topic,
+            "oc_series_id": oc_series_id,
+        }
+        for key, val in optional_attributes.items():
+            if val:
+                update_expression += f", {key}=:{key}"
+                expression_attribute_values[f":{key}"] = val
+
+        condition_expression = None
         if not meeting_id or not origin:
+            # When a recording enters the ZIP pipeline, for simplicity,
+            # only the first status tracking update includes additional metadata
+            # such as the meeting_id or origin. Subsequent status updates report
+            # status using a unique correlation id.
+            # Prevent adding records to dynamo status table for recordings
+            # that haven't been tracked since the beginning of the pipeline and
+            # therefore don't contain enough useful metadata. (This happens when
+            # you start status tracking for the first time or make modifications
+            # to the table that require it to be recreated.)
             condition_expression = (
                 "attribute_exists(meeting_id) AND attribute_exists(origin)"
             )
-            logger.debug(
-                {
-                    "dynamo update item": {
-                        "correlation_id": correlation_id,
-                        "update_expression": update_expression,
-                        "expresssion_attribute_values": expression_attribute_values,
-                        "condition_expression": condition_expression,
-                    }
-                }
+        elif state in ZoomStatus:
+            # Enforce that recording processing is the last Zoom status
+            condition_expression = (
+                f":pipeline_state <> {ZoomStatus.RECORDING_PROCESSING.name}"
             )
+
+        logger.debug(
+            {
+                "dynamo update item": {
+                    "correlation_id": correlation_id,
+                    "update_expression": update_expression,
+                    "expression_attribute_values": expression_attribute_values,
+                    "condition_expression": condition_expression,
+                }
+            }
+        )
+
+        if condition_expression:
             status_table.update_item(
                 Key={"correlation_id": correlation_id},
                 UpdateExpression=update_expression,
@@ -136,40 +159,11 @@ def set_pipeline_status(
                 ConditionExpression=condition_expression,
             )
         else:
-            logger.debug(
-                {
-                    "dynamo update item": {
-                        "correlation_id": correlation_id,
-                        "update_expression": update_expression,
-                        "expresssion_attribute_values": expression_attribute_values,
-                    }
-                }
-            )
-            # New request
             status_table.update_item(
                 Key={"correlation_id": correlation_id},
                 UpdateExpression=update_expression,
                 ExpressionAttributeValues=expression_attribute_values,
             )
-
-        # Conditionally update origin time
-        condition_expression = "if_not_exists(origin_time)"
-        logger.debug(
-            {
-                "dynamo update item": {
-                    "correlation_id": correlation_id,
-                    "update_expression": update_expression,
-                    "expresssion_attribute_values": expression_attribute_values,
-                    "condition_expression": condition_expression,
-                }
-            }
-        )
-        status_table.update_item(
-            Key={"correlation_id": correlation_id},
-            UpdateExpression="set origin_time=:ot",
-            ExpressionAttributeValues={":ot": int(utcnow.timestamp())},
-            ConditionExpression=condition_expression,
-        )
     except ClientError as e:
         error = e.response["Error"]
         logger.exception(f"{error['Code']}: {error['Message']}")
@@ -222,7 +216,6 @@ def status_by_seconds(request_seconds):
 
 
 def request_recent_items(table, date, seconds):
-    logger.warning(f"Request items since {seconds}")
     r = table.query(
         IndexName="time_index",
         KeyConditionExpression=(

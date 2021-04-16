@@ -146,7 +146,7 @@ def handler(event, context):
             "allow_multiple_ingests"
         ]
 
-    request_id = str(uuid4())
+    request_id = f"on-demand-{str(uuid4())}"
     webhook_data["payload"]["on_demand_request_id"] = request_id
 
     logger.info({"webhook_data": webhook_data})

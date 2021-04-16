@@ -63,8 +63,8 @@ def deep_merge(dict1, dict2):
 
 
 @pytest.fixture
-def webhook_payload():
-    def _payload_maker(payload_extras=None):
+def webhook_payload(aws_request_id):
+    def _payload_maker(on_demand=False, payload_extras=None):
         payload = {
             "payload": {
                 "object": {
@@ -84,11 +84,16 @@ def webhook_payload():
                             "recording_type": "shared_screen_with_speaker_view",
                         }
                     ],
-                }
+                },
+                "allow_multiple_ingests": False,
             },
             "event": "recording.completed",
-            "allow_multiple_ingests": False,
         }
+        if on_demand:
+            payload["event"] = "on.demand.ingest"
+            payload["payload"][
+                "on_demand_request_id"
+            ] = f"on-demand-{aws_request_id}"
 
         if payload_extras is not None:
             payload = deep_merge(payload, payload_extras)
@@ -98,9 +103,14 @@ def webhook_payload():
 
 
 @pytest.fixture
-def sqs_message_from_webhook_payload(webhook_payload, aws_request_id):
-    def _message_maker(frozen_time, zoom_event):
-        payload_obj = webhook_payload()["payload"]["object"]
+def sqs_message_from_webhook_payload():
+    def _message_maker(frozen_time, payload):
+        zoom_event = payload["event"]
+        payload_obj = payload["payload"]["object"]
+        if zoom_event == "on.demand.ingest":
+            correlation_id = payload["payload"]["on_demand_request_id"]
+        else:
+            correlation_id = f"auto-ingest-{payload_obj['uuid']}"
         msg = {
             "uuid": payload_obj["uuid"],
             "zoom_series_id": payload_obj["id"],
@@ -110,7 +120,7 @@ def sqs_message_from_webhook_payload(webhook_payload, aws_request_id):
             "host_id": payload_obj["host_id"],
             "recording_files": payload_obj["recording_files"],
             "received_time": frozen_time,
-            "correlation_id": aws_request_id,
+            "correlation_id": correlation_id,
             "allow_multiple_ingests": False,
         }
 
