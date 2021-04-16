@@ -1,5 +1,9 @@
 import json
 from os import getenv as env
+from urllib.parse import quote
+from datetime import datetime, timedelta
+from pytz import timezone
+import boto3
 from utils import (
     setup_logging,
     TIMESTAMP_FORMAT,
@@ -9,9 +13,6 @@ from utils import (
     zoom_api_request,
     record_exists,
 )
-from datetime import datetime, timedelta
-from pytz import timezone
-import boto3
 
 import logging
 
@@ -167,7 +168,11 @@ def update_zoom_status(zoom_event, payload, correlation_id):
     elif zoom_event == "recording.paused":
         status = ZoomStatus.RECORDING_PAUSED
     elif zoom_event == "recording.stopped":
-        r = zoom_api_request(f"/past_meetings/{uuid}", ignore_failure=True)
+        double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
+        r = zoom_api_request(
+            f"/past_meetings/{double_urlencoded_uuid}",
+            ignore_failure=True,
+        )
         if r.status_code == 404:
             status = ZoomStatus.RECORDING_STOPPED
         else:
