@@ -134,8 +134,17 @@ def set_pipeline_status(
             condition_expression = (
                 "attribute_exists(meeting_id) AND attribute_exists(origin)"
             )
+        elif state == ZoomStatus.RECORDING_PROCESSING:
+            # Enforce transition to recording processing can only happen from
+            # recording in progress states
+            condition_expression = (
+                f":pipeline_state = {ZoomStatus.RECORDING_IN_PROGRESS.name} "
+                f"OR :pipeline_state = {ZoomStatus.RECORDING_PAUSED.name} "
+                f"OR :pipeline_state = {ZoomStatus.RECORDING_STOPPED.name} "
+            )
         elif state in ZoomStatus:
-            # Enforce that recording processing is the last Zoom status
+            # Enforce cannot transition back to a recording in progress state
+            # from recording processing
             condition_expression = (
                 f":pipeline_state <> {ZoomStatus.RECORDING_PROCESSING.name}"
             )
