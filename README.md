@@ -33,6 +33,8 @@ Info on Zoom's API and webhook functionality can be found at:
 
 * [Development](#development)
 
+* [Endpoints](#endpoints)
+
 * [Testing](#testing)
 
 * [Release Process](#release-process)
@@ -155,19 +157,84 @@ and enter the API endpoint under "Event Subscription."
 1. Make sure to subscribe to "All recordings have completed" events.
 1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
 
-### Setup on demand ingests
 
-The easiest way to find the on demand ingest endpoint is to run `invoke stack.status`.
+## Endpoints
 
-The on-demand endpoint appears in the stack **Outputs** listing. Look for the row where `ExportName` is
-something like `my-zip-stack-ingest-url`.
+The easiest way to find a listing of the endpoints for your stack is to run `invoke stack.status` and look in the **Outputs**. Identify the endpoints by their `ExportName`.
+
+### Webhook Receiving Endpoint
+
+**Description:** Receives webhook notifications from Zoom for ingests or status updates and receives on-demand ingest requests forwarded from the on-demand endpoint.
+
+**Endpoint:** `POST /new_recording`  
+**ExportName** : `<stack-name>-webhook-url`  
+
+**Accepted Zoom webhook notifications for status updates:**
+
+* "recording.started"
+* "recording.stopped"
+* "recording.paused"
+* "recording.resumed"
+* "meeting.ended"
+
+**Accepted Zoom webhook notifications for ingests:**
+
+* "recording.completed"
+
+### On-Demand Endpoint (requests from Opencast only)
+
+**Description:** Initiate a new on demand ingests from Opencast.
+
+**Endpoint:** `POST /ingest`  
+**ExportName:**`<stack-name>-ingest-url`
+
+**Request Body Schema**
+
+| Parameter      | Required?     | Type          | Description   |
+| -------------  | ------------- |-------------  |-------------  |
+| uuid           | Yes           | string        | Either the recording uuid or the link to the recording files. Recording files link example: `https://zoom.us/recording/management/detail?meeting_id=ajXp112QmuoKj4854875%3D%3D`  |
+| oc\_series_id  | No            | string        | Opencast series id to ingest this recording to. Default: Recording only ingested if it matches the existing ZIP schedule.   |
+| allow\_multiple_ingests  | No  | boolean       | Whether to allow the same Zoom recording to be ingested multiple times into Opencast. Default false. |
+
+**Request Body Example**
+
+	{
+	    "uuid": "ajXp112QmuoKj4854875==",
+	    "oc-series-id": "20210299999",
+	    "allow_multiple_ingests": false
+	}
 	
-Opencast can send on demand ingest requests to this endpoint as POST requests. 
-The payload parameter `uuid`, a unique Zoom recording id, is requried. 
-The payload parameters `oc_series_id`, the Opencast series id, and 
-`allow_multiple_ingests`, whether to allow multiple ingests of the same 
-Zoom recording, are optional.
 
+
+### Schedule Update Endpoint
+
+**Description:** Update the ZIP schedule.
+
+**Endpoint:** `POST /schedule_update`  
+**ExportName:**`<stack-name>-schedule-url`  
+**Parameters:** No parameters. Retrieves schedule from stack associated google sheet.
+
+### Status Endpoint (requests from Opencast only)
+
+**Description:** Check the status of a recording.
+
+**Endpoint:** `GET /status`  
+**ExportName:** `<stack-name>-status-url`
+
+**Request Path Parameters**
+
+Provide only one of the following:
+
+`meeting_id` - A Zoom meeting id.  
+`seconds` - Retrieve status' updated within the last X seconds.
+
+**Request Examples**
+
+Retrieve all status' updated within the last 10 seconds:  
+`GET https://<your-stack-endpoint-url>/status?seconds=10`
+
+Retrieve current status of all recordings with Zoom meeting id 86168921331:  
+`GET https://<your-stack-endpoint-url>/status?meeting_id=86168921331`
 
 
 ## Development
