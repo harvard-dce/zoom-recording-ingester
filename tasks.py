@@ -1216,7 +1216,7 @@ def __show_function_status(ctx):
 
         cmd = (
             "aws {} lambda list-versions-by-function --function-name {} "
-            r"--query \"Versions[?Version=='\$LATEST'].LastModified\" "
+            r"--query \"Versions[?Version=='$LATEST'].LastModified\" "
             "--output text"
         ).format(profile_arg(), lambda_function_name)
         status_row.append(ctx.run(cmd, hide=True).stdout)
