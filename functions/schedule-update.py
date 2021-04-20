@@ -3,8 +3,6 @@ import logging
 from utils import setup_logging, GSheet
 
 
-# If modifying scopes or the spreadsheet id,
-# a new token.pickle file must be generated
 GSHEETS_DOC_ID = env("GSHEETS_DOC_ID")
 GSHEETS_SHEET_NAME = env("GSHEETS_SHEET_NAME")
 
