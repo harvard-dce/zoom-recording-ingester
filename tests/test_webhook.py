@@ -60,7 +60,11 @@ def test_invalid_payload(handler):
     assert "bad data" in res["body"].lower()
 
 
-def test_started_event(handler, webhook_payload):
+def test_started_event(handler, mocker, webhook_payload):
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        webhook, "set_pipeline_status", mock_set_pipeline_status
+    )
     recording_started = webhook_payload()
     recording_started["event"] = "recording.started"
     event = {"body": json.dumps(recording_started)}
@@ -107,7 +111,7 @@ def test_validate_recording_files(webhook_payload):
 
 
 @freeze_time(FROZEN_TIME)
-def test_no_mp4s_validation(webhook_payload):
+def test_no_mp4s_validation(mocker, webhook_payload):
     recording_files = webhook_payload()["payload"]["object"]["recording_files"]
     recording_files[0]["file_type"] = "foo"
     with pytest.raises(webhook.NoMp4Files) as exc_info:
@@ -119,6 +123,10 @@ def test_no_mp4s_validation(webhook_payload):
 def test_handler_happy_trail(
     handler, mocker, webhook_payload, sqs_message_from_webhook_payload
 ):
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        webhook, "set_pipeline_status", mock_set_pipeline_status
+    )
     event = {"body": json.dumps(webhook_payload())}
     mock_sqs_send = mocker.patch.object(webhook, "send_sqs_message")
 
@@ -134,6 +142,10 @@ def test_handler_happy_trail(
 
 @freeze_time(FROZEN_TIME)
 def test_no_mp4s_response(handler, mocker, webhook_payload):
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        webhook, "set_pipeline_status", mock_set_pipeline_status
+    )
     payload = webhook_payload()
 
     payload["event"] = "recording.completed"
@@ -154,6 +166,10 @@ def test_no_mp4s_response(handler, mocker, webhook_payload):
 def test_on_demand_no_delay(
     handler, mocker, webhook_payload, sqs_message_from_webhook_payload
 ):
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        webhook, "set_pipeline_status", mock_set_pipeline_status
+    )
     payload = webhook_payload(on_demand=True)
     event = {"body": json.dumps(payload)}
     mock_sqs_send = mocker.patch.object(webhook, "send_sqs_message")

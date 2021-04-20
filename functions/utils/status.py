@@ -160,19 +160,13 @@ def set_pipeline_status(
             }
         )
 
-        if condition_expression:
-            status_table.update_item(
-                Key={"correlation_id": correlation_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues=expression_attribute_values,
-                ConditionExpression=condition_expression,
-            )
-        else:
-            status_table.update_item(
-                Key={"correlation_id": correlation_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues=expression_attribute_values,
-            )
+        update_status_table(
+            status_table,
+            correlation_id,
+            update_expression,
+            expression_attribute_values,
+            condition_expression,
+        )
     except ClientError as e:
         error = e.response["Error"]
         if error["Code"] == "ConditionalCheckFailedException":
@@ -181,6 +175,29 @@ def set_pipeline_status(
         logger.exception(f"{error['Code']}: {error['Message']}")
     except Exception as e:
         logger.exception(f"Something went wrong updating pipeline status: {e}")
+
+
+# Isolated for unit testing
+def update_status_table(
+    status_table,
+    correlation_id,
+    update_expression,
+    expression_attribute_values,
+    condition_expression=None,
+):
+    if condition_expression:
+        status_table.update_item(
+            Key={"correlation_id": correlation_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values,
+            ConditionExpression=condition_expression,
+        )
+    else:
+        status_table.update_item(
+            Key={"correlation_id": correlation_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_attribute_values,
+        )
 
 
 def status_by_mid(mid):

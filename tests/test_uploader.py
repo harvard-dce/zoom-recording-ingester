@@ -100,6 +100,10 @@ def test_no_messages_available(handler, mocker, caplog):
 
 
 def test_ingestion_error(handler, mocker, upload_message):
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        uploader, "set_pipeline_status", mock_set_pipeline_status
+    )
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
         uploader, "get_current_upload_count", mocker.Mock(return_value=3)
@@ -151,6 +155,10 @@ def test_workflow_initiated(handler, mocker, upload_message, caplog):
 
 
 def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
+    mock_set_pipeline_status = mocker.Mock(return_value=None)
+    mocker.patch.object(
+        uploader, "set_pipeline_status", mock_set_pipeline_status
+    )
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
         uploader, "get_current_upload_count", mocker.Mock(return_value=3)
