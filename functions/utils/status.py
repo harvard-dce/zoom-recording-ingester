@@ -17,6 +17,7 @@ load_dotenv(join(dirname(__file__), "../.env"))
 DATE_FORMAT = "%Y-%m-%d"
 PIPELINE_STATUS_TABLE = env("PIPELINE_STATUS_TABLE", None)
 SECONDS_PER_DAY = 86400
+SECONDS_PER_HOUR = 3600
 
 
 class InvalidStatusQuery(Exception):
@@ -173,8 +174,10 @@ def set_pipeline_status(
             # Don't treat failed conditional update as an error
             return
         logger.exception(f"{error['Code']}: {error['Message']}")
+        raise
     except Exception as e:
         logger.exception(f"Something went wrong updating pipeline status: {e}")
+        raise
 
 
 # Isolated for unit testing
@@ -204,7 +207,7 @@ def status_by_mid(mid):
     status_table = zip_status_table()
     r = status_table.query(
         IndexName="mid_index",
-        KeyConditionExpression=(Key("meeting_id").eq(mid)),
+        KeyConditionExpression=Key("meeting_id").eq(mid),
     )
     items = r["Items"]
 
@@ -223,18 +226,20 @@ def status_by_seconds(request_seconds):
     )
     today, time_in_seconds = ts_to_date_and_seconds(now)
 
-    if request_seconds > SECONDS_PER_DAY:
+    if request_seconds > SECONDS_PER_HOUR:
         raise InvalidStatusQuery(
-            f"Invalid number of seconds. Seconds must be <= {SECONDS_PER_DAY}"
+            f"Invalid number of seconds. Seconds must be <= {SECONDS_PER_HOUR}"
         )
     elif time_in_seconds < request_seconds:
         # handle case in which request spans two dates
         items = request_recent_items(status_table, today, 0)
-        remaining = time_in_seconds - request_seconds
-        ts = today.strptime(DATE_FORMAT)
+        remaining = request_seconds - time_in_seconds
+        ts = datetime.strptime(today, DATE_FORMAT)
         yesterday = (ts - timedelta(days=1)).strftime(DATE_FORMAT)
         items += request_recent_items(
-            status_table, yesterday, SECONDS_PER_DAY - remaining
+            status_table,
+            yesterday,
+            SECONDS_PER_DAY - remaining,
         )
     else:
         items = request_recent_items(
