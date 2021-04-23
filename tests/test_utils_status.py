@@ -208,10 +208,41 @@ def test_format_status_records_empty():
     assert status.format_status_records(test_items) == expected
 
 
-# def test_format_status_records():
-#     test_items = []
-#     expected = {
-#         "meetings": []
-#     }
+def test_format_status_records():
+    test_items = [
+        {
+            "origin": "webhook_notification",
+            "update_time": 65075,
+            "correlation_id": "auto-ingest-mEN4a+AfQ1i9TYhk0gkqdg==",
+            "topic": "Class Topic",
+            "recording_id": "recording_uuid",
+            "expiration": 1619805875,
+            "pipeline_state": "RECORDING_IN_PROGRESS",
+            "meeting_id": 123456789,
+            "recording_start_time": "2021-04-23T17:45:24Z",
+            "update_date": "2021-04-23",
+        }
+    ]
+    expected = {
+        "meetings": [
+            {
+                "meeting_id": 123456789,
+                "topic": "Class Topic",
+                "recordings": [
+                    {
+                        "recording_id": "recording_uuid",
+                        "start_time": "2021-04-23T17:45:24Z",
+                        "zip_ingests": [
+                            {
+                                "last_updated": "2021-04-23T18:04:35Z",
+                                "status": "RECORDING_IN_PROGRESS",
+                                "origin": "webhook_notification",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
 
-#     assert status.format_status_records(test_items) == expected
+    assert status.format_status_records(test_items) == expected
