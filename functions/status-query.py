@@ -25,15 +25,27 @@ def handler(event, context):
     request_seconds = None
 
     query = event["queryStringParameters"]
-    if "meeting_id" in query:
-        meeting_id = int(query["meeting_id"])
-    elif "seconds" in query:
-        request_seconds = int(query["seconds"])
+    if query and "meeting_id" in query:
+        meeting_id = query["meeting_id"]
+    elif query and "seconds" in query:
+        request_seconds = query["seconds"]
     else:
         return resp_400(
             "Missing identifer in query params. "
             "Must include one of 'meeting_id', 'seconds'"
         )
+
+    if meeting_id:
+        if meeting_id.isnumeric():
+            meeting_id = int(meeting_id)
+        else:
+            return resp_400(f"Invalid meeting_id: {meeting_id}")
+
+    if request_seconds:
+        if request_seconds.isnumeric():
+            request_seconds = int(request_seconds)
+        else:
+            return resp_400(f"Invalid request seconds: {request_seconds}")
 
     try:
         if meeting_id:
@@ -43,8 +55,7 @@ def handler(event, context):
     except InvalidStatusQuery as e:
         return resp_400(e)
 
-    # sort by last updated
-    records = sorted(records, key=lambda r: r["last_updated"], reverse=True)
+    logger.info(records)
 
     return {
         "statusCode": 200,
