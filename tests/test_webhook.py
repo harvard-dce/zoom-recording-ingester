@@ -300,7 +300,7 @@ def test_update_meeting_ended(mocker):
         origin="webhook_notification",
     )
 
-    # Case 2: Do not update a meeting that is not being tracked.
+    # Case 2 - Do not update a meeting that is not being tracked.
     # (If meeting.ended is sent from a non-recorded meeting then we
     # don't care about it)
     mock_set_pipeline_status.reset_mock()
