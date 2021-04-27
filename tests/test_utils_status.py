@@ -311,10 +311,11 @@ def test_format_status_records():
             "topic": "Class Topic",
             "recording_id": "recording_uuid",
             "expiration": 1619805875,
-            "pipeline_state": "RECORDING_IN_PROGRESS",
+            "pipeline_state": "WEBHOOK_FAILED",
             "meeting_id": 123456789,
             "recording_start_time": "2021-04-23T17:45:24Z",
             "update_date": "2021-04-23",
+            "reason": "no mp4 files",
         }
     ]
     expected = {
@@ -329,8 +330,9 @@ def test_format_status_records():
                         "zip_ingests": [
                             {
                                 "last_updated": "2021-04-23T18:04:35Z",
-                                "status": "RECORDING_IN_PROGRESS",
+                                "status": "WEBHOOK_FAILED",
                                 "origin": "webhook_notification",
+                                "reason": "no mp4 files",
                             }
                         ],
                     }
