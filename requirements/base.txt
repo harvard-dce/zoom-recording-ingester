@@ -659,7 +659,7 @@ requests==2.25.1
     #   -r requirements/base.in
     #   google-api-core
     #   requests-oauthlib
-rsa==4.7.2
+rsa==4.7
     # via
     #   awscli
     #   google-auth
