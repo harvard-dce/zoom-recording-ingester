@@ -1,11 +1,13 @@
-from common.common import (
+from utils import (
     setup_logging,
     TIMESTAMP_FORMAT,
     retrieve_schedule,
     schedule_days,
     schedule_match,
+    PipelineStatus,
+    ZoomStatus,
+    status_by_mid,
 )
-from common.status import PipelineStatus, status_by_mid
 import json
 from os import getenv as env
 from urllib.parse import quote, parse_qs
@@ -536,8 +538,17 @@ def status_description(ingest_details, on_demand, match):
 
     status = ingest_details["status"]
 
+    # Recording
+    if status == ZoomStatus.RECORDING_IN_PROGRESS.name:
+        status_msg = "Recording in progress"
+    elif status == ZoomStatus.RECORDING_PAUSED.name:
+        status_msg = "Recording paused"
+    elif status == ZoomStatus.RECORDING_STOPPED.name:
+        status_msg = "Recording stopped"
+    elif status == ZoomStatus.RECORDING_PROCESSING.name:
+        status_msg = "Recording files processing in Zoom"
     # Processing
-    if status == PipelineStatus.ON_DEMAND_RECEIVED.name:
+    elif status == PipelineStatus.ON_DEMAND_RECEIVED.name:
         status_msg = "Received +Zoom request."
     elif (
         status == PipelineStatus.WEBHOOK_RECEIVED.name
