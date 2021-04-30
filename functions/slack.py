@@ -24,7 +24,7 @@ import logging
 logger = logging.getLogger()
 
 SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
-PRETTY_TIMESTAMP_FORMAT = "%B %d, %Y at %-I:%M%p"
+PRETTY_TIMESTAMP_FORMAT = "%A, %B %d, %Y at %-I:%M%p"
 STACK_NAME = env("STACK_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 SLACK_ZIP_CHANNEL = env("SLACK_ZIP_CHANNEL")
@@ -438,27 +438,36 @@ def slack_response_blocks(
 
     for rec in recordings:
         pretty_start_time = pretty_local_time(rec["start_time"])
-        rec_id = quote(rec["recording_id"])
-        mgmt_url = (
-            f"https://zoom.us/recording/management/detail?meeting_id={rec_id}"
-        )
         match = schedule_match(schedule, local_time(rec["start_time"]))
-
-        ingest_details_text = ""
-        # Sort ingests from most to least recent
-        ingests = sorted(
-            rec["zip_ingests"], key=lambda r: r["last_updated"], reverse=True
-        )
-        for ingest in ingests:
-            update_time = pretty_local_time(ingest["last_updated"])
-            on_demand = ingest["origin"] == "on_demand"
-            on_demand_text = "Yes" if on_demand else "No"
-
-            ingest_details_text += (
-                f"*Status:* {status_description(ingest, on_demand, match)}\n"
-                f"*Updated:* {update_time}\n"
-                f"*+Zoom ingest?* {on_demand_text}\n\n"
+        in_zip = True
+        if len(rec["zip_ingests"]) == 1:
+            recording_status_txt = recording_status_description(
+                rec["zip_ingests"][0]
             )
+            if recording_status_txt:
+                in_zip = False
+
+        if in_zip:
+            ingest_details_text = ""
+            # Sort ingests from most to least recent
+            ingests = sorted(
+                rec["zip_ingests"],
+                key=lambda r: r["last_updated"],
+                reverse=True,
+            )
+
+            for ingest in ingests:
+                update_time = pretty_local_time(ingest["last_updated"])
+                on_demand = ingest["origin"] == "on_demand"
+                on_demand_text = "Yes" if on_demand else "No"
+
+                ingest_details_text += (
+                    f"*Status:* {pipeline_status_description(ingest, on_demand, match)}\n"
+                    f"*Updated:* {update_time}\n"
+                    f"*+Zoom ingest?* {on_demand_text}\n\n"
+                )
+        else:
+            ingest_details_text = f"*Status* : {recording_status_txt}"
 
         blocks.extend(
             [
@@ -474,15 +483,21 @@ def slack_response_blocks(
                     "type": "section",
                     "text": {"type": "mrkdwn", "text": ingest_details_text},
                 },
+            ]
+        )
+
+        if in_zip:
+            rec_id = quote(rec["recording_id"])
+            mgmt_url = f"https://zoom.us/recording/management/detail?meeting_id={rec_id}"
+            blocks.append(
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
                         "text": f"<{mgmt_url}|*View in Zoom*>",
                     },
-                },
-            ]
-        )
+                }
+            )
 
     if more_results:
         search_identifier = recordings[0]["start_time"]
@@ -534,11 +549,9 @@ def format_mid(mid):
         return f"{s[:3]} {s[3:7]} {s[7:]}"
 
 
-def status_description(ingest_details, on_demand, match):
-
+def recording_status_description(ingest_details):
     status = ingest_details["status"]
 
-    # Recording
     if status == ZoomStatus.RECORDING_IN_PROGRESS.name:
         status_msg = "Recording in progress"
     elif status == ZoomStatus.RECORDING_PAUSED.name:
@@ -547,8 +560,18 @@ def status_description(ingest_details, on_demand, match):
         status_msg = "Recording stopped"
     elif status == ZoomStatus.RECORDING_PROCESSING.name:
         status_msg = "Recording files processing in Zoom"
+    else:
+        return None
+
+    return status_msg
+
+
+def pipeline_status_description(ingest_details, on_demand=False, match=False):
+
+    status = ingest_details["status"]
+
     # Processing
-    elif status == PipelineStatus.ON_DEMAND_RECEIVED.name:
+    if status == PipelineStatus.ON_DEMAND_RECEIVED.name:
         status_msg = "Received +Zoom request."
     elif (
         status == PipelineStatus.WEBHOOK_RECEIVED.name
