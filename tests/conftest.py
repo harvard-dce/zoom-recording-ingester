@@ -1,7 +1,12 @@
 import os
 import json
+import site
 import pytest
+from os.path import join, dirname
 from datetime import datetime, timedelta
+from unittest import mock
+
+site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 
@@ -137,3 +142,39 @@ def sqs_message_from_webhook_payload():
         return msg
 
     return _message_maker
+
+
+@pytest.fixture(autouse=True)
+def mock_downloader_set_pipeline_status():
+    with mock.patch(
+        "zoom-downloader.set_pipeline_status",
+        mock.Mock(),
+    ) as _fixture:
+        yield _fixture
+
+
+@pytest.fixture(autouse=True)
+def mock_webhook_set_pipeline_status():
+    with mock.patch(
+        "zoom-webhook.set_pipeline_status",
+        mock.Mock(),
+    ) as _fixture:
+        yield _fixture
+
+
+@pytest.fixture(autouse=True)
+def mock_uploader_set_pipeline_status():
+    with mock.patch(
+        "zoom-uploader.set_pipeline_status",
+        mock.Mock(),
+    ) as _fixture:
+        yield _fixture
+
+
+@pytest.fixture(autouse=True)
+def mock_on_demand_set_pipeline_status():
+    with mock.patch(
+        "zoom-on-demand.set_pipeline_status",
+        mock.Mock(),
+    ) as _fixture:
+        yield _fixture
