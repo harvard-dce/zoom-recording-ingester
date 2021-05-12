@@ -3,6 +3,7 @@ from enum import Enum, auto
 from datetime import datetime, timedelta
 import boto3
 from boto3.dynamodb.conditions import Key
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from os import getenv as env
 from dotenv import load_dotenv
@@ -47,7 +48,13 @@ class PipelineStatus(Enum):
 
 def zip_status_table():
     if PIPELINE_STATUS_TABLE:
-        dynamodb = boto3.resource("dynamodb")
+        logger.warning("set config")
+        config = Config(
+            connect_timeout=0.01,
+            read_timeout=0.01,
+            retries={"max_attempts": 3},
+        )
+        dynamodb = boto3.resource("dynamodb", config=config)
         return dynamodb.Table(PIPELINE_STATUS_TABLE)
     return None
 

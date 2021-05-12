@@ -109,6 +109,7 @@ class ZipStack(core.Stack):
             "StatusFunction",
             name=names.STATUS_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
+            memory_size=500,
             environment={
                 "STACK_NAME": self.stack_name,
                 "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,

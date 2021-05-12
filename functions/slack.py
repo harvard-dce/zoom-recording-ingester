@@ -177,6 +177,7 @@ def handler(event, context):
             )
         meeting_id = int(mid_txt)
 
+    logger.info("call status_by_mid...")
     meeting_status = status_by_mid(meeting_id)
     logger.info({"meeting_data": meeting_status})
 
