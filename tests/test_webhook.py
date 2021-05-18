@@ -209,6 +209,7 @@ def test_update_recording_stopped(mocker, mock_webhook_set_pipeline_status):
             "uuid": "mock_uuid",
             "start_time": "mock_start_time",
             "topic": "mock_topic",
+            "type": 1,  # Instant meeting
         }
     }
 
