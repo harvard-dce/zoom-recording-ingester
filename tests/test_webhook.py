@@ -128,30 +128,27 @@ def test_handler_happy_trail(
 
     resp = handler(webhook, event)
     expected_msg = sqs_message_from_webhook_payload(
-        FROZEN_TIME, webhook_payload()
+        FROZEN_TIME,
+        webhook_payload(),
     )
     mock_sqs_send.assert_called_once_with(
-        expected_msg, webhook.DEFAULT_MESSAGE_DELAY
+        expected_msg,
+        webhook.DEFAULT_MESSAGE_DELAY,
     )
     assert resp["statusCode"] == 200
 
 
 @freeze_time(FROZEN_TIME)
 def test_no_mp4s_response(handler, mocker, webhook_payload):
-    payload = webhook_payload()
+    cases = [(False, 204), (True, 400)]
 
-    payload["event"] = "recording.completed"
-    payload["payload"]["object"]["recording_files"][0]["file_type"] = "foo"
-    event = {"body": json.dumps(payload)}
+    for on_demand, expected_status_code in cases:
+        payload = webhook_payload(on_demand=on_demand)
+        payload["payload"]["object"]["recording_files"][0]["file_type"] = "foo"
+        event = {"body": json.dumps(payload)}
 
-    resp = handler(webhook, event)
-    assert resp["statusCode"] == 204
-
-    payload["event"] = "on.demand.ingest"
-    event = {"body": json.dumps(payload)}
-
-    resp = handler(webhook, event)
-    assert resp["statusCode"] == 400
+        resp = handler(webhook, event)
+        assert resp["statusCode"] == expected_status_code
 
 
 @freeze_time(FROZEN_TIME)
@@ -191,10 +188,10 @@ def test_update_recording_started_paused(
         webhook.update_zoom_status(
             event,
             mock_payload,
-            "mock_correlation_id",
+            "mock_zip_id",
         )
         mock_webhook_set_pipeline_status.assert_called_with(
-            "mock_correlation_id",
+            "mock_zip_id",
             expected_status,
             meeting_id=mock_payload["object"]["id"],
             recording_id=mock_payload["object"]["uuid"],
@@ -205,7 +202,7 @@ def test_update_recording_started_paused(
 
 
 def test_update_recording_stopped(mocker, mock_webhook_set_pipeline_status):
-    mock_correlation_id = "mock_correlation_id"
+    mock_zip_id = "mock_zip_id"
     mock_payload = {
         "object": {
             "id": "12345678",
@@ -229,10 +226,10 @@ def test_update_recording_stopped(mocker, mock_webhook_set_pipeline_status):
             webhook.update_zoom_status(
                 "recording.stopped",
                 mock_payload,
-                mock_correlation_id,
+                mock_zip_id,
             )
             mock_webhook_set_pipeline_status.assert_called_with(
-                "mock_correlation_id",
+                "mock_zip_id",
                 expected_recording_status,
                 meeting_id=mock_payload["object"]["id"],
                 recording_id=mock_payload["object"]["uuid"],
@@ -244,7 +241,7 @@ def test_update_recording_stopped(mocker, mock_webhook_set_pipeline_status):
 
 def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
     #    mock_webhook_set_pipeline_status.reset_mock()
-    mock_correlation_id = "mock_correlation_id"
+    mock_zip_id = "mock_zip_id"
     mock_payload = {
         "object": {
             "id": "12345678",
@@ -264,11 +261,11 @@ def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
     webhook.update_zoom_status(
         "meeting.ended",
         mock_payload,
-        mock_correlation_id,
+        mock_zip_id,
     )
 
     mock_webhook_set_pipeline_status.assert_called_once_with(
-        mock_correlation_id,
+        mock_zip_id,
         webhook.ZoomStatus.RECORDING_PROCESSING,
         meeting_id=mock_payload["object"]["id"],
         recording_id=mock_payload["object"]["uuid"],

@@ -80,11 +80,11 @@ class ZipApi(core.Construct):
 
         self.api.add_api_key("ZoomIngesterApiKey")
 
-        self.new_recording_resource = self.resource(
+        self.new_recording_resource = self.create_resource(
             "new_recording", webhook_function, "POST"
         )
 
-        self.ingest_resource = self.resource(
+        self.ingest_resource = self.create_resource(
             "ingest",
             on_demand_function,
             "POST",
@@ -96,11 +96,11 @@ class ZipApi(core.Construct):
             ),
         )
 
-        self.schedule_update_resource = self.resource(
+        self.schedule_update_resource = self.create_resource(
             "schedule_update", schedule_update_function, "POST"
         )
 
-        self.status_query_resource = self.resource(
+        self.status_query_resource = self.create_resource(
             "status", status_query_function, "GET"
         )
 
@@ -178,7 +178,7 @@ class ZipApi(core.Construct):
             value=self.api.rest_api_id,
         )
 
-    def resource(
+    def create_resource(
         self, resource_name, lambda_function, http_method, cors_options=None
     ):
         resource = self.api.root.add_resource(

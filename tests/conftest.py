@@ -44,7 +44,7 @@ def upload_message(mocker):
             "topic": "TEST E-50",
             "created": "2020-03-09T23:19:20Z",
             "webhook_received_time": "2020-03-10T01:58:03Z",
-            "correlation_id": "1234",
+            "zip_id": "1234",
         }
         if message_data is not None:
             msg.update(message_data)
@@ -96,9 +96,7 @@ def webhook_payload(aws_request_id):
         }
         if on_demand:
             payload["event"] = "on.demand.ingest"
-            payload["payload"][
-                "on_demand_request_id"
-            ] = f"on-demand-{aws_request_id}"
+            payload["payload"]["zip_id"] = f"on-demand-{aws_request_id}"
 
         if payload_extras is not None:
             payload = deep_merge(payload, payload_extras)
@@ -113,9 +111,9 @@ def sqs_message_from_webhook_payload():
         zoom_event = payload["event"]
         payload_obj = payload["payload"]["object"]
         if zoom_event == "on.demand.ingest":
-            correlation_id = payload["payload"]["on_demand_request_id"]
+            zip_id = payload["payload"]["zip_id"]
         else:
-            correlation_id = f"auto-ingest-{payload_obj['uuid']}"
+            zip_id = f"auto-ingest-{payload_obj['uuid']}"
         msg = {
             "uuid": payload_obj["uuid"],
             "zoom_series_id": payload_obj["id"],
@@ -125,8 +123,11 @@ def sqs_message_from_webhook_payload():
             "host_id": payload_obj["host_id"],
             "recording_files": payload_obj["recording_files"],
             "received_time": frozen_time,
-            "correlation_id": correlation_id,
+            "zip_id": zip_id,
             "allow_multiple_ingests": False,
+            "on_demand_ingest": True
+            if zoom_event == "on.demand.ingest"
+            else False,
         }
 
         if zoom_event == "recording.completed":

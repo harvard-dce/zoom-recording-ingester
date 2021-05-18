@@ -25,7 +25,7 @@ tz = timezone(LOCAL_TIME_ZONE)
 FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 
 SAMPLE_MESSAGE_BODY = {
-    "correlation_id": "abc",
+    "zip_id": "abc",
     "duration": 30,
     "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT),
 }
@@ -57,7 +57,7 @@ class TestHandler(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def initfixtures(self, mocker):
         self.mocker = mocker
-        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.context = MockContext(aws_request_id="mock-zip_id")
         self.mock_sqs = unittest.mock.Mock()
         self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
         self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
@@ -217,7 +217,7 @@ class TestDownloader(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def initfixtures(self, mocker):
         self.mocker = mocker
-        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.context = MockContext(aws_request_id="mock-zip_id")
         self.mock_sqs = unittest.mock.Mock()
         self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
         self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
@@ -581,9 +581,7 @@ def test_handler_duration_check(handler, mocker):
     )
 
     # duration should be good
-    mock_msg = mocker.Mock(
-        body=json.dumps({"duration": 10, "correlation_id": "abc"})
-    )
+    mock_msg = mocker.Mock(body=json.dumps({"duration": 10, "zip_id": "abc"}))
     mocker.patch.object(
         downloader, "retrieve_message", mocker.Mock(return_value=mock_msg)
     )
@@ -597,9 +595,7 @@ def test_handler_duration_check(handler, mocker):
     downloader.Download.oc_series_found.reset_mock()
 
     # duration should be too short
-    mock_msg = mocker.Mock(
-        body=json.dumps({"duration": 1, "correlation_id": "abc"})
-    )
+    mock_msg = mocker.Mock(body=json.dumps({"duration": 1, "zip_id": "abc"}))
     mocker.patch.object(
         downloader, "retrieve_message", mocker.Mock(return_value=mock_msg)
     )
@@ -623,7 +619,7 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
             {
                 "on_demand_series_id": 1234,
                 "duration": 0,
-                "correlation_id": "abc",
+                "zip_id": "abc",
             }
         )
     )

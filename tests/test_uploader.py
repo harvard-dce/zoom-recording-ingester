@@ -64,7 +64,7 @@ def test_upload_count_ok(handler, mocker):
             "webhook_received_time": datetime.strftime(
                 datetime.now(), TIMESTAMP_FORMAT
             ),
-            "correlation_id": 123,
+            "zip_id": 123,
         }
     )
     receive_messages = mocker.Mock(return_value=[mock_message])
@@ -166,7 +166,7 @@ def test_first_ingest_mpid_from_uuid(mocker):
 
 def test_multiple_ingests_not_allowed(mocker):
     upload_data = {
-        "correlation_id": 123,
+        "zip_id": 123,
         "uuid": "mock_uuid",
         "allow_multiple_ingests": False,
     }
@@ -177,7 +177,7 @@ def test_multiple_ingests_not_allowed(mocker):
 
 def test_multiple_ingests_allowed(mocker):
     upload_data = {
-        "correlation_id": 123,
+        "zip_id": 123,
         "uuid": "mock_uuid",
         "allow_multiple_ingests": True,
     }

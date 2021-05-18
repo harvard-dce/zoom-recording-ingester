@@ -63,14 +63,14 @@ def ts_to_date_and_seconds(ts):
     return date, seconds
 
 
-def record_exists(correlation_id):
+def record_exists(zip_id):
     status_table = zip_status_table()
-    r = status_table.get_item(Key={"correlation_id": correlation_id})
+    r = status_table.get_item(Key={"zip_id": zip_id})
     return "Item" in r
 
 
 def set_pipeline_status(
-    correlation_id,
+    zip_id,
     state,
     origin=None,
     reason=None,
@@ -80,7 +80,7 @@ def set_pipeline_status(
     topic=None,
     oc_series_id=None,
 ):
-    logger.info(f"Set pipeline status to {state.name} for id {correlation_id}")
+    logger.info(f"Set pipeline status to {state.name} for id {zip_id}")
 
     utcnow = datetime.utcnow()
     today, seconds = ts_to_date_and_seconds(utcnow)
@@ -153,7 +153,7 @@ def set_pipeline_status(
         logger.debug(
             {
                 "dynamo update item": {
-                    "correlation_id": correlation_id,
+                    "zip_id": zip_id,
                     "update_expression": update_expression,
                     "expression_attribute_values": expression_attribute_values,
                     "condition_expression": condition_expression,
@@ -163,7 +163,7 @@ def set_pipeline_status(
 
         update_status_table(
             status_table,
-            correlation_id,
+            zip_id,
             update_expression,
             expression_attribute_values,
             condition_expression,
@@ -183,24 +183,20 @@ def set_pipeline_status(
 # Isolated for unit testing
 def update_status_table(
     status_table,
-    correlation_id,
+    zip_id,
     update_expression,
     expression_attribute_values,
     condition_expression=None,
 ):
+    update_args = dict(
+        Key={"zip_id": zip_id},
+        UpdateExpression=update_expression,
+        ExpressionAttributeValues=expression_attribute_values,
+    )
     if condition_expression:
-        status_table.update_item(
-            Key={"correlation_id": correlation_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_attribute_values,
-            ConditionExpression=condition_expression,
-        )
-    else:
-        status_table.update_item(
-            Key={"correlation_id": correlation_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_attribute_values,
-        )
+        update_args["ConditionExpression"] = condition_expression
+
+    status_table.update_item(**update_args)
 
 
 def status_by_mid(mid):

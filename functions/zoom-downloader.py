@@ -84,7 +84,7 @@ def handler(event, context):
         if dl.duration >= MINIMUM_DURATION or "on_demand_series_id" in dl_data:
             if dl.oc_series_found(ignore_schedule, override_series_id):
                 set_pipeline_status(
-                    dl_data["correlation_id"],
+                    dl_data["zip_id"],
                     PipelineStatus.OC_SERIES_FOUND,
                     oc_series_id=dl.opencast_series_id,
                 )
@@ -92,14 +92,14 @@ def handler(event, context):
             else:
                 failure_msg = {"no_oc_series_found": dl_data}
                 set_pipeline_status(
-                    dl_data["correlation_id"],
+                    dl_data["zip_id"],
                     PipelineStatus.IGNORED,
                     reason="No opencast series match",
                 )
         else:
             failure_msg = {"recording_too_short": dl_data}
             set_pipeline_status(
-                dl_data["correlation_id"],
+                dl_data["zip_id"],
                 PipelineStatus.IGNORED,
                 reason=f"Recording <{MINIMUM_DURATION} minutes",
             )
@@ -122,20 +122,18 @@ def handler(event, context):
     except PermanentDownloadError as e:
         # push message to deadletter queue, add error reason to message
         set_pipeline_status(
-            dl.data["correlation_id"],
+            dl.data["zip_id"],
             PipelineStatus.DOWNLOADER_FAILED,
             reason=f"permanent failure: {e}",
         )
         message = dl.send_to_deadletter_queue(e)
-        set_pipeline_status(
-            dl.data["correlation_id"], PipelineStatus.SENT_TO_UPLOADER
-        )
+        set_pipeline_status(dl.data["zip_id"], PipelineStatus.SENT_TO_UPLOADER)
         download_message.delete()
         logger.error({"Error": e, "Sent to deadletter": message})
         raise
     except RetryableDownloadError as e:
         set_pipeline_status(
-            dl.data["correlation_id"],
+            dl.data["zip_id"],
             PipelineStatus.DOWNLOADER_FAILED,
             reason=f"retryable failure: {e}",
         )
@@ -351,7 +349,7 @@ class Download:
                     self._created_local, TIMESTAMP_FORMAT
                 ),
                 "webhook_received_time": self.data["received_time"],
-                "correlation_id": self.data["correlation_id"],
+                "zip_id": self.data["zip_id"],
                 "s3_files": s3_files,
                 "total_file_bytes": all_file_bytes,
                 "total_file_seconds": all_file_seconds,
@@ -442,7 +440,7 @@ class SQSMessage:
             )
             logger.exception(msg)
             set_pipeline_status(
-                self.message["correlation_id"],
+                self.message["zip_id"],
                 PipelineStatus.DOWNLOADER_FAILED,
                 reason=f"retryable failure: {msg}",
             )

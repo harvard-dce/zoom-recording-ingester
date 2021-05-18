@@ -111,7 +111,7 @@ def handler(event, context):
         upload_data = json.loads(upload_message.body)
         logger.debug({"processing": upload_data})
         set_pipeline_status(
-            upload_data["correlation_id"], PipelineStatus.UPLOADER_RECEIVED
+            upload_data["zip_id"], PipelineStatus.UPLOADER_RECEIVED
         )
 
         wf_id = process_upload(upload_data)
@@ -120,24 +120,24 @@ def handler(event, context):
             logger.info(f"Workflow id {wf_id} initiated.")
             # only ingest one per invocation
             set_pipeline_status(
-                upload_data["correlation_id"], PipelineStatus.SENT_TO_OPENCAST
+                upload_data["zip_id"], PipelineStatus.SENT_TO_OPENCAST
             )
         else:
             logger.info("No workflow initiated.")
     except OpencastConnectionError as e:
         logger.exception(e)
-        if upload_data and "correlation_id" in upload_data:
+        if upload_data and "zip_id" in upload_data:
             set_pipeline_status(
-                upload_data["correlation_id"],
+                upload_data["zip_id"],
                 PipelineStatus.UPLOADER_FAILED,
                 reason="Unable to reach Opencast.",
             )
         raise
     except Exception as e:
         logger.exception(e)
-        if upload_data and "correlation_id" in upload_data:
+        if upload_data and "zip_id" in upload_data:
             set_pipeline_status(
-                upload_data["correlation_id"], PipelineStatus.UPLOADER_FAILED
+                upload_data["zip_id"], PipelineStatus.UPLOADER_FAILED
             )
         raise
 
@@ -200,7 +200,7 @@ class Upload:
                         f" {mpid} already ingested"
                     )
                     set_pipeline_status(
-                        self.data["correlation_id"],
+                        self.data["zip_id"],
                         self.meeting_uuid,
                         PipelineStatus.IGNORED,
                         reason="Already in opencast",

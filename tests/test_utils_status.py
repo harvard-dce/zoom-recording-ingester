@@ -32,7 +32,7 @@ def test_set_pipeline_status_webhook_received(mocker):
     )
 
     status.set_pipeline_status(
-        "correlation_id",
+        "zip_id",
         status.PipelineStatus.WEBHOOK_RECEIVED,
         origin="webhook_notification",
         meeting_id="123456789",
@@ -44,7 +44,7 @@ def test_set_pipeline_status_webhook_received(mocker):
 
     mock_update_status_table.assert_called_with(
         "status_table",
-        "correlation_id",
+        "zip_id",
         (
             "set update_date=:update_date, "
             "update_time=:update_time, "
@@ -86,13 +86,13 @@ def test_set_pipeline_status_update_status(mocker):
     )
 
     status.set_pipeline_status(
-        "correlation_id",
+        "zip_id",
         status.PipelineStatus.UPLOADER_RECEIVED,
     )
 
     mock_update_status_table.assert_called_with(
         "status_table",
-        "correlation_id",
+        "zip_id",
         (
             "set update_date=:update_date, "
             "update_time=:update_time, "
@@ -120,7 +120,7 @@ def set_pipeline_status_recording_processing(mocker):
     )
 
     status.set_pipeline_status(
-        "correlation_id",
+        "zip_id",
         status.PipelineStatus.RECORDING_PROCESSING,
         origin="webhook_notification",
         meeting_id="123456789",
@@ -130,7 +130,7 @@ def set_pipeline_status_recording_processing(mocker):
     )
 
     mock_update_status_table.assert_called_with(
-        "correlation_id",
+        "zip_id",
         (
             "set update_date=:update_date, "
             "update_time=:update_time, "
@@ -168,7 +168,7 @@ def set_pipeline_status_recording_stopped(mocker):
     )
 
     status.set_pipeline_status(
-        "correlation_id",
+        "zip_id",
         status.PipelineStatus.RECORDING_STOPPED,
         origin="webhook_notification",
         meeting_id="123456789",
@@ -178,7 +178,7 @@ def set_pipeline_status_recording_stopped(mocker):
     )
 
     mock_update_status_table.assert_called_with(
-        "correlation_id",
+        "zip_id",
         (
             "set update_date=:update_date, "
             "update_time=:update_time, "
@@ -222,14 +222,14 @@ def test_conditional_update_failed(mocker):
     # Expect no exception for ClientError code
     # ConditionalCheckFailedException
     status.set_pipeline_status(
-        "correlation_id",
+        "zip_id",
         status.PipelineStatus.SENT_TO_UPLOADER,
     )
 
     # Expect exception for any other ClientError code
     with pytest.raises(ClientError):
         status.set_pipeline_status(
-            "correlation_id",
+            "zip_id",
             status.PipelineStatus.SENT_TO_UPLOADER,
         )
 
@@ -307,7 +307,7 @@ def test_format_status_records():
         {
             "origin": "webhook_notification",
             "update_time": 65075,
-            "correlation_id": "auto-ingest-mEN4a+AfQ1i9TYhk0gkqdg==",
+            "zip_id": "auto-ingest-mEN4a+AfQ1i9TYhk0gkqdg==",
             "topic": "Class Topic",
             "recording_id": "recording_uuid",
             "expiration": 1619805875,
