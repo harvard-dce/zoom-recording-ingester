@@ -166,6 +166,7 @@ and enter the API endpoint under "Event Subscription."
     * Recording - "Recording Resumed"
     * Recording - "Recording Stopped"
     * Meeting - "End Meeting"
+    * Webinar - "End Webinar"
 1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
 
 

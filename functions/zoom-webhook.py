@@ -21,6 +21,7 @@ logger = logging.getLogger()
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
+ZOOM_WEBINAR_TYPES = [5, 6, 9]
 
 
 class BadWebhookData(Exception):
@@ -56,6 +57,7 @@ STATUS_EVENT_TYPES = [
     "recording.paused",
     "recording.stopped",
     "meeting.ended",
+    "webinar.ended",
 ]
 
 
@@ -169,22 +171,24 @@ def update_zoom_status(zoom_event, payload, zip_id):
         status = ZoomStatus.RECORDING_PAUSED
     elif zoom_event == "recording.stopped":
         double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
-        r = zoom_api_request(
-            f"/past_meetings/{double_urlencoded_uuid}",
-            ignore_failure=True,
-        )
+        if payload["object"]["type"] in ZOOM_WEBINAR_TYPES:
+            endpoint = f"/past_meetings/{double_urlencoded_uuid}"
+        else:
+            endpoint = f"/past_webinars/{double_urlencoded_uuid}/instances"
+
+        r = zoom_api_request(endpoint, ignore_failure=True)
         if r.status_code == 404:
             status = ZoomStatus.RECORDING_STOPPED
         else:
             r.raise_for_status
             logger.info(f"Meeting {uuid} ended. Recording processing.")
             status = ZoomStatus.RECORDING_PROCESSING
-    elif zoom_event == "meeting.ended":
+    elif zoom_event == "meeting.ended" or zoom_event == "webinar.ended":
         if record_exists(zip_id):
             status = ZoomStatus.RECORDING_PROCESSING
         else:
             return resp_204(
-                f"Ignore meeting.ended for meeting id {mid} uuid {uuid} "
+                f"Ignore {zoom_event} for meeting id {mid} uuid {uuid} "
                 "not recorded"
             )
 
