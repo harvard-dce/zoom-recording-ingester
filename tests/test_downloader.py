@@ -581,7 +581,11 @@ def test_handler_duration_check(handler, mocker):
     )
 
     # duration should be good
-    mock_msg = mocker.Mock(body=json.dumps({"duration": 10, "zip_id": "abc"}))
+    mock_msg = mocker.Mock(
+        body=json.dumps(
+            {"duration": 10, "zip_id": "abc", "on_demand_ingest": False}
+        )
+    )
     mocker.patch.object(
         downloader, "retrieve_message", mocker.Mock(return_value=mock_msg)
     )
@@ -595,7 +599,11 @@ def test_handler_duration_check(handler, mocker):
     downloader.Download.oc_series_found.reset_mock()
 
     # duration should be too short
-    mock_msg = mocker.Mock(body=json.dumps({"duration": 1, "zip_id": "abc"}))
+    mock_msg = mocker.Mock(
+        body=json.dumps(
+            {"duration": 1, "zip_id": "abc", "on_demand_ingest": False}
+        )
+    )
     mocker.patch.object(
         downloader, "retrieve_message", mocker.Mock(return_value=mock_msg)
     )
@@ -620,6 +628,7 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
                 "on_demand_series_id": 1234,
                 "duration": 0,
                 "zip_id": "abc",
+                "on_demand_ingest": True,
             }
         )
     )
