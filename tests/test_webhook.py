@@ -7,7 +7,6 @@ from pytz import timezone
 from datetime import datetime
 import os
 import json
-import requests_mock
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
@@ -199,45 +198,6 @@ def test_update_recording_started_paused(
             topic=mock_payload["object"]["topic"],
             origin="webhook_notification",
         )
-
-
-def test_update_recording_stopped(mocker, mock_webhook_set_pipeline_status):
-    mock_zip_id = "mock_zip_id"
-    mock_payload = {
-        "object": {
-            "id": "12345678",
-            "uuid": "mock_uuid",
-            "start_time": "mock_start_time",
-            "topic": "mock_topic",
-            "type": 1,  # Instant meeting
-        }
-    }
-
-    cases = [
-        (404, webhook.ZoomStatus.RECORDING_STOPPED),
-        (200, webhook.ZoomStatus.RECORDING_PROCESSING),
-    ]
-
-    for http_status, expected_recording_status in cases:
-        with requests_mock.mock() as req_mock:
-            req_mock.get(
-                requests_mock.ANY,
-                status_code=http_status,
-            )
-            webhook.update_zoom_status(
-                "recording.stopped",
-                mock_payload,
-                mock_zip_id,
-            )
-            mock_webhook_set_pipeline_status.assert_called_with(
-                "mock_zip_id",
-                expected_recording_status,
-                meeting_id=mock_payload["object"]["id"],
-                recording_id=mock_payload["object"]["uuid"],
-                recording_start_time=mock_payload["object"]["start_time"],
-                topic=mock_payload["object"]["topic"],
-                origin="webhook_notification",
-            )
 
 
 def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
