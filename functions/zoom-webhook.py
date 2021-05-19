@@ -306,6 +306,9 @@ def construct_sqs_message(payload, zip_id, zoom_event):
         "received_time": now,
     }
 
+    if "on_demand_series_id" in payload:
+        sqs_message["on_demand_series_id"] = payload["on_demand_series_id"]
+
     # not used in downloader or uploader but useful for cloudwatch dashboard
     if "total_size" in payload["object"]:
         sqs_message["zoom_total_size_bytes"] = payload["object"]["total_size"]
