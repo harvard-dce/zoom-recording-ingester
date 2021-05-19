@@ -160,7 +160,7 @@ def set_pipeline_status(
             # from recording processing
             condition_expression = "pipeline_state <> :recording_processing"
 
-        logger.debug(
+        logger.info(
             {
                 "dynamo update item": {
                     "zip_id": zip_id,

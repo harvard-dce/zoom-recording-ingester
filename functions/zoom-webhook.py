@@ -201,7 +201,7 @@ def update_zoom_status(zoom_event, payload, zip_id):
     )
 
     return resp_204(
-        f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {zoom_event}"
+        f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {status.name}"
     )
 
 
@@ -366,9 +366,9 @@ def finished_recording(mid, uuid, webinar=False):
     r = zoom_api_request(endpoint, ignore_failure=True)
     if r.status_code == 200:
         if webinar:
-            # Webinar response lists all instances so check if this instance
-            # is listed
-            return any(x["uuid"] == uuid for x in r.json().items())
+            # Webinar response lists all instances
+            # check if this instance is listed
+            return any(x["uuid"] == uuid for x in r.json()["webinars"])
         return True
     elif r.status_code == 404:
         return False
