@@ -81,7 +81,7 @@ def handler(event, context):
         # this is checking for ~total~ duration of the recording as reported
         # by zoom in the webhook payload data. There is a separate check later
         # for the duration potentially different sets of files
-        if dl.duration >= MINIMUM_DURATION or "on_demand_series_id" in dl_data:
+        if dl.duration >= MINIMUM_DURATION or dl_data["on_demand_ingest"]:
             if dl.oc_series_found(ignore_schedule, override_series_id):
                 set_pipeline_status(
                     dl_data["zip_id"],
