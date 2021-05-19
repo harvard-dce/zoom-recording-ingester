@@ -170,19 +170,13 @@ def update_zoom_status(zoom_event, payload, zip_id):
     elif zoom_event == "recording.paused":
         status = ZoomStatus.RECORDING_PAUSED
     elif zoom_event == "recording.stopped":
-        double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
-        if payload["object"]["type"] in ZOOM_WEBINAR_TYPES:
-            endpoint = f"/past_meetings/{double_urlencoded_uuid}"
-        else:
-            endpoint = f"/past_webinars/{double_urlencoded_uuid}/instances"
-
-        r = zoom_api_request(endpoint, ignore_failure=True)
-        if r.status_code == 404:
-            status = ZoomStatus.RECORDING_STOPPED
-        else:
-            r.raise_for_status
+        webinar = payload["object"]["type"] in ZOOM_WEBINAR_TYPES
+        if finished_recording(mid, uuid, webinar):
             logger.info(f"Meeting {uuid} ended. Recording processing.")
             status = ZoomStatus.RECORDING_PROCESSING
+        else:
+            logger.info(f"Meeting {uuid} still going on. Recording stopped.")
+            status = ZoomStatus.RECORDING_STOPPED
     elif zoom_event == "meeting.ended" or zoom_event == "webinar.ended":
         if record_exists(zip_id):
             status = ZoomStatus.RECORDING_PROCESSING
@@ -360,3 +354,26 @@ def send_sqs_message(message, delay):
         raise
 
     logger.debug({"Message sent": message_sent})
+
+
+def finished_recording(mid, uuid, webinar=False):
+    if webinar:
+        endpoint = f"/past_webinars/{mid}/instances"
+    else:
+        double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
+        endpoint = f"/past_meetings/{double_urlencoded_uuid}"
+
+    r = zoom_api_request(endpoint, ignore_failure=True)
+    if r.status_code == 200:
+        if webinar:
+            # Webinar response lists all instances so check if this instance
+            # is listed
+            return any(x["uuid"] == uuid for x in r.json().items())
+        return True
+    elif r.status_code == 404:
+        return False
+    else:
+        if r.status_code == 400:
+            # Zoom returns error details in 400 json payload
+            raise Exception(f"Zoom API request {endpoint} returned {r.json()}")
+        r.raise_for_status()

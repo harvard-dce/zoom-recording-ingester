@@ -136,19 +136,29 @@ def set_pipeline_status(
                 "attribute_exists(meeting_id) AND attribute_exists(origin)"
             )
         elif state == ZoomStatus.RECORDING_PROCESSING:
+            expression_attribute_values.update(
+                {
+                    ":recording_in_progress": ZoomStatus.RECORDING_IN_PROGRESS.name,
+                    ":recording_paused": ZoomStatus.RECORDING_PAUSED.name,
+                    ":recording_stopped": ZoomStatus.RECORDING_STOPPED.name,
+                }
+            )
+
             # Enforce transition to recording processing can only happen from
             # recording in progress states
             condition_expression = (
-                f":pipeline_state = {ZoomStatus.RECORDING_IN_PROGRESS.name} "
-                f"OR :pipeline_state = {ZoomStatus.RECORDING_PAUSED.name} "
-                f"OR :pipeline_state = {ZoomStatus.RECORDING_STOPPED.name} "
+                "pipeline_state = :recording_in_progress "
+                "OR pipeline_state = :recording_paused "
+                "OR pipeline_state = :recording_stopped "
             )
         elif state in ZoomStatus:
+            expression_attribute_values[
+                ":recording_processing"
+            ] = ZoomStatus.RECORDING_PROCESSING.name
+
             # Enforce cannot transition back to a recording in progress state
             # from recording processing
-            condition_expression = (
-                f":pipeline_state <> {ZoomStatus.RECORDING_PROCESSING.name}"
-            )
+            condition_expression = "pipeline_state <> :recording_processing"
 
         logger.debug(
             {
@@ -172,6 +182,7 @@ def set_pipeline_status(
         error = e.response["Error"]
         if error["Code"] == "ConditionalCheckFailedException":
             # Don't treat failed conditional update as an error
+            logger.info(f"Conditional check ({condition_expression}) failed.")
             return
         logger.exception(f"{error['Code']}: {error['Message']}")
         raise
