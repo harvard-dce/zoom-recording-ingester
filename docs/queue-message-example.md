@@ -28,9 +28,11 @@
           "recording_type": "shared_screen_with_speaker_view"
       }
   ],
-  // webhook function's aws request id
-  "correlation_id": "cab436d8-64bc-11ea-bc55-0242ac130003",
+  // ZIP id for tracking ingests
+  "zip_id": "cab436d8-64bc-11ea-bc55-0242ac130003",
   "received_time": "2020-03-12T22:40:00Z",
+  "on_demand_ingest": true,
+  "zoom_total_size_bytes": 2680726302,
   // optional fields
   "on_demand_series_id": "2020019999",
   "allow_multiple_ingests": true,
@@ -55,7 +57,7 @@
       "created_local": "2020-03-12T16:43:36Z",
       "webhook_received_time": "2020-03-13T00:34:12Z",
       // webhook function's aws request id
-      "correlation_id": "cab436d8-64bc-11ea-bc55-0242ac130003",
+      "zip_id": "cab436d8-64bc-11ea-bc55-0242ac130003",
       "s3_files": {
           "shared_screen_with_speaker_view": {
             "segments": [

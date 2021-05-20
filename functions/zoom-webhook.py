@@ -1,6 +1,5 @@
 import json
 from os import getenv as env
-from urllib.parse import quote
 from datetime import datetime, timedelta
 from pytz import timezone
 import boto3
@@ -10,7 +9,6 @@ from utils import (
     ZoomStatus,
     PipelineStatus,
     set_pipeline_status,
-    zoom_api_request,
     record_exists,
 )
 
@@ -21,6 +19,7 @@ logger = logging.getLogger()
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
+ZOOM_WEBINAR_TYPES = [5, 6, 9]
 
 
 class BadWebhookData(Exception):
@@ -56,6 +55,7 @@ STATUS_EVENT_TYPES = [
     "recording.paused",
     "recording.stopped",
     "meeting.ended",
+    "webinar.ended",
 ]
 
 
@@ -98,23 +98,23 @@ def handler(event, context):
         return resp_400("Missing payload field in webhook notification body.")
     payload = body["payload"]
 
-    if "on_demand_request_id" in payload:
+    if zoom_event == "on.demand.ingest":
         origin = "on_demand"
-        correlation_id = payload["on_demand_request_id"]
+        zip_id = payload["zip_id"]
     else:
         if "object" not in payload or "uuid" not in payload["object"]:
             return resp_400("Bad data: missing uuid")
         origin = "webhook_notification"
-        correlation_id = f"auto-ingest-{payload['object']['uuid']}"
+        zip_id = f"auto-ingest-{payload['object']['uuid']}"
 
     if zoom_event in STATUS_EVENT_TYPES:
-        return update_zoom_status(zoom_event, payload, correlation_id)
+        return update_zoom_status(zoom_event, payload, zip_id)
 
     try:
         validate_payload(payload)
         # after payload validation, can be sure required object fields exist
         set_pipeline_status(
-            correlation_id,
+            zip_id,
             PipelineStatus.WEBHOOK_RECEIVED,
             meeting_id=payload["object"]["id"],
             recording_id=payload["object"]["uuid"],
@@ -125,7 +125,7 @@ def handler(event, context):
         validate_recording_files(payload["object"]["recording_files"])
     except BadWebhookData as e:
         set_pipeline_status(
-            correlation_id,
+            zip_id,
             PipelineStatus.WEBHOOK_FAILED,
             reason="Bad webhook data",
             origin=origin,
@@ -133,7 +133,7 @@ def handler(event, context):
         return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
         set_pipeline_status(
-            correlation_id,
+            zip_id,
             PipelineStatus.IGNORED,
             reason="No mp4 files",
             origin=origin,
@@ -141,7 +141,7 @@ def handler(event, context):
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
 
-    sqs_message = construct_sqs_message(payload, correlation_id, zoom_event)
+    sqs_message = construct_sqs_message(payload, zip_id, zoom_event)
     logger.info({"sqs_message": sqs_message})
 
     if zoom_event == "on.demand.ingest":
@@ -149,7 +149,7 @@ def handler(event, context):
     else:
         delay = DEFAULT_MESSAGE_DELAY
     send_sqs_message(sqs_message, delay)
-    set_pipeline_status(correlation_id, PipelineStatus.SENT_TO_DOWNLOADER)
+    set_pipeline_status(zip_id, PipelineStatus.SENT_TO_DOWNLOADER)
 
     return {
         "statusCode": 200,
@@ -158,7 +158,7 @@ def handler(event, context):
     }
 
 
-def update_zoom_status(zoom_event, payload, correlation_id):
+def update_zoom_status(zoom_event, payload, zip_id):
     mid = payload["object"]["id"]
     uuid = payload["object"]["uuid"]
 
@@ -168,23 +168,13 @@ def update_zoom_status(zoom_event, payload, correlation_id):
     elif zoom_event == "recording.paused":
         status = ZoomStatus.RECORDING_PAUSED
     elif zoom_event == "recording.stopped":
-        double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
-        r = zoom_api_request(
-            f"/past_meetings/{double_urlencoded_uuid}",
-            ignore_failure=True,
-        )
-        if r.status_code == 404:
-            status = ZoomStatus.RECORDING_STOPPED
-        else:
-            r.raise_for_status
-            logger.info(f"Meeting {uuid} ended. Recording processing.")
-            status = ZoomStatus.RECORDING_PROCESSING
-    elif zoom_event == "meeting.ended":
-        if record_exists(correlation_id):
+        status = ZoomStatus.RECORDING_STOPPED
+    elif zoom_event == "meeting.ended" or zoom_event == "webinar.ended":
+        if record_exists(zip_id):
             status = ZoomStatus.RECORDING_PROCESSING
         else:
             return resp_204(
-                f"Ignore meeting.ended for meeting id {mid} uuid {uuid} "
+                f"Ignore {zoom_event} for meeting id {mid} uuid {uuid} "
                 "not recorded"
             )
 
@@ -193,7 +183,7 @@ def update_zoom_status(zoom_event, payload, correlation_id):
         return resp_204(f"Unhandled zoom event {zoom_event}")
 
     set_pipeline_status(
-        correlation_id,
+        zip_id,
         status,
         meeting_id=payload["object"]["id"],
         recording_id=payload["object"]["uuid"],
@@ -203,7 +193,7 @@ def update_zoom_status(zoom_event, payload, correlation_id):
     )
 
     return resp_204(
-        f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {zoom_event}"
+        f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {status.name}"
     )
 
 
@@ -277,7 +267,7 @@ def validate_recording_files(files):
         raise BadWebhookData(f"Unrecognized payload format. {str(e)}")
 
 
-def construct_sqs_message(payload, correlation_id, zoom_event):
+def construct_sqs_message(payload, zip_id, zoom_event):
     now = datetime.strftime(
         timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
         TIMESTAMP_FORMAT,
@@ -311,7 +301,8 @@ def construct_sqs_message(payload, correlation_id, zoom_event):
         "host_id": payload["object"]["host_id"],
         "recording_files": recording_files,
         "allow_multiple_ingests": allow_multiple_ingests,
-        "correlation_id": correlation_id,
+        "on_demand_ingest": zoom_event == "on.demand.ingest",
+        "zip_id": zip_id,
         "received_time": now,
     }
 

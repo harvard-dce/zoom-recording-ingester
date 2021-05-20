@@ -64,7 +64,7 @@ def test_upload_count_ok(handler, mocker):
             "webhook_received_time": datetime.strftime(
                 datetime.now(), TIMESTAMP_FORMAT
             ),
-            "correlation_id": 123,
+            "zip_id": 123,
         }
     )
     receive_messages = mocker.Mock(return_value=[mock_message])
@@ -74,11 +74,6 @@ def test_upload_count_ok(handler, mocker):
     mocker.patch.object(
         uploader, "get_current_upload_count", mocker.Mock(return_value=3)
     )
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        uploader, "set_pipeline_status", mock_set_pipeline_status
-    )
-    uploader.process_upload = mocker.Mock()
 
     # with max = 3 and fake count = 5 the handler should proceed
     # to processing the upload
@@ -100,10 +95,6 @@ def test_no_messages_available(handler, mocker, caplog):
 
 
 def test_ingestion_error(handler, mocker, upload_message):
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        uploader, "set_pipeline_status", mock_set_pipeline_status
-    )
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
         uploader, "get_current_upload_count", mocker.Mock(return_value=3)
@@ -146,19 +137,11 @@ def test_workflow_initiated(handler, mocker, upload_message, caplog):
         message
     ]
     uploader.process_upload = mocker.Mock(return_value=12345)
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        uploader, "set_pipeline_status", mock_set_pipeline_status
-    )
     handler(uploader, {})
     assert "12345 initiated" in caplog.messages[-1]
 
 
 def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        uploader, "set_pipeline_status", mock_set_pipeline_status
-    )
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
         uploader, "get_current_upload_count", mocker.Mock(return_value=3)
@@ -183,14 +166,10 @@ def test_first_ingest_mpid_from_uuid(mocker):
 
 def test_multiple_ingests_not_allowed(mocker):
     upload_data = {
-        "correlation_id": 123,
+        "zip_id": 123,
         "uuid": "mock_uuid",
         "allow_multiple_ingests": False,
     }
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        uploader, "set_pipeline_status", mock_set_pipeline_status
-    )
     upload = uploader.Upload(upload_data)
     upload.already_ingested = mocker.Mock(return_value=True)
     assert not upload.mediapackage_id
@@ -198,14 +177,10 @@ def test_multiple_ingests_not_allowed(mocker):
 
 def test_multiple_ingests_allowed(mocker):
     upload_data = {
-        "correlation_id": 123,
+        "zip_id": 123,
         "uuid": "mock_uuid",
         "allow_multiple_ingests": True,
     }
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        uploader, "set_pipeline_status", mock_set_pipeline_status
-    )
     upload = uploader.Upload(upload_data)
     upload.already_ingested = mocker.Mock(return_value=True)
     # mock already_ingested to return true

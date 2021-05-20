@@ -7,7 +7,6 @@ from pytz import timezone
 from datetime import datetime
 import os
 import json
-import requests_mock
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
@@ -62,10 +61,6 @@ def test_invalid_payload(handler):
 
 
 def test_started_event(handler, mocker, webhook_payload):
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        webhook, "set_pipeline_status", mock_set_pipeline_status
-    )
     recording_started = webhook_payload()
     recording_started["event"] = "recording.started"
     event = {"body": json.dumps(recording_started)}
@@ -127,43 +122,32 @@ def test_handler_happy_trail(
     webhook_payload,
     sqs_message_from_webhook_payload,
 ):
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        webhook, "set_pipeline_status", mock_set_pipeline_status
-    )
     event = {"body": json.dumps(webhook_payload())}
     mock_sqs_send = mocker.patch.object(webhook, "send_sqs_message")
 
     resp = handler(webhook, event)
     expected_msg = sqs_message_from_webhook_payload(
-        FROZEN_TIME, webhook_payload()
+        FROZEN_TIME,
+        webhook_payload(),
     )
     mock_sqs_send.assert_called_once_with(
-        expected_msg, webhook.DEFAULT_MESSAGE_DELAY
+        expected_msg,
+        webhook.DEFAULT_MESSAGE_DELAY,
     )
     assert resp["statusCode"] == 200
 
 
 @freeze_time(FROZEN_TIME)
 def test_no_mp4s_response(handler, mocker, webhook_payload):
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        webhook, "set_pipeline_status", mock_set_pipeline_status
-    )
-    payload = webhook_payload()
+    cases = [(False, 204), (True, 400)]
 
-    payload["event"] = "recording.completed"
-    payload["payload"]["object"]["recording_files"][0]["file_type"] = "foo"
-    event = {"body": json.dumps(payload)}
+    for on_demand, expected_status_code in cases:
+        payload = webhook_payload(on_demand=on_demand)
+        payload["payload"]["object"]["recording_files"][0]["file_type"] = "foo"
+        event = {"body": json.dumps(payload)}
 
-    resp = handler(webhook, event)
-    assert resp["statusCode"] == 204
-
-    payload["event"] = "on.demand.ingest"
-    event = {"body": json.dumps(payload)}
-
-    resp = handler(webhook, event)
-    assert resp["statusCode"] == 400
+        resp = handler(webhook, event)
+        assert resp["statusCode"] == expected_status_code
 
 
 @freeze_time(FROZEN_TIME)
@@ -173,10 +157,6 @@ def test_on_demand_no_delay(
     webhook_payload,
     sqs_message_from_webhook_payload,
 ):
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        webhook, "set_pipeline_status", mock_set_pipeline_status
-    )
     payload = webhook_payload(on_demand=True)
     event = {"body": json.dumps(payload)}
     mock_sqs_send = mocker.patch.object(webhook, "send_sqs_message")
@@ -187,10 +167,9 @@ def test_on_demand_no_delay(
     assert resp["statusCode"] == 200
 
 
-def test_update_recording_started_paused(mocker):
-    mock_set_pipeline_status = mocker.patch.object(
-        webhook, "set_pipeline_status"
-    )
+def test_update_recording_started_paused(
+    mocker, mock_webhook_set_pipeline_status
+):
     mock_payload = {
         "object": {
             "id": "12345678",
@@ -208,10 +187,10 @@ def test_update_recording_started_paused(mocker):
         webhook.update_zoom_status(
             event,
             mock_payload,
-            "mock_correlation_id",
+            "mock_zip_id",
         )
-        mock_set_pipeline_status.assert_called_with(
-            "mock_correlation_id",
+        mock_webhook_set_pipeline_status.assert_called_with(
+            "mock_zip_id",
             expected_status,
             meeting_id=mock_payload["object"]["id"],
             recording_id=mock_payload["object"]["uuid"],
@@ -221,53 +200,9 @@ def test_update_recording_started_paused(mocker):
         )
 
 
-def test_update_recording_stopped(mocker):
-    mock_correlation_id = "mock_correlation_id"
-    mock_set_pipeline_status = mocker.patch.object(
-        webhook,
-        "set_pipeline_status",
-    )
-    mock_payload = {
-        "object": {
-            "id": "12345678",
-            "uuid": "mock_uuid",
-            "start_time": "mock_start_time",
-            "topic": "mock_topic",
-        }
-    }
-
-    cases = [
-        (404, webhook.ZoomStatus.RECORDING_STOPPED),
-        (200, webhook.ZoomStatus.RECORDING_PROCESSING),
-    ]
-
-    for http_status, expected_recording_status in cases:
-        with requests_mock.mock() as req_mock:
-            req_mock.get(
-                requests_mock.ANY,
-                status_code=http_status,
-            )
-            webhook.update_zoom_status(
-                "recording.stopped",
-                mock_payload,
-                mock_correlation_id,
-            )
-            mock_set_pipeline_status.assert_called_with(
-                "mock_correlation_id",
-                expected_recording_status,
-                meeting_id=mock_payload["object"]["id"],
-                recording_id=mock_payload["object"]["uuid"],
-                recording_start_time=mock_payload["object"]["start_time"],
-                topic=mock_payload["object"]["topic"],
-                origin="webhook_notification",
-            )
-
-
-def test_update_meeting_ended(mocker):
-    mock_correlation_id = "mock_correlation_id"
-    mock_set_pipeline_status = mocker.patch.object(
-        webhook, "set_pipeline_status"
-    )
+def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
+    #    mock_webhook_set_pipeline_status.reset_mock()
+    mock_zip_id = "mock_zip_id"
     mock_payload = {
         "object": {
             "id": "12345678",
@@ -287,11 +222,11 @@ def test_update_meeting_ended(mocker):
     webhook.update_zoom_status(
         "meeting.ended",
         mock_payload,
-        mock_correlation_id,
+        mock_zip_id,
     )
 
-    mock_set_pipeline_status.assert_called_once_with(
-        mock_correlation_id,
+    mock_webhook_set_pipeline_status.assert_called_once_with(
+        mock_zip_id,
         webhook.ZoomStatus.RECORDING_PROCESSING,
         meeting_id=mock_payload["object"]["id"],
         recording_id=mock_payload["object"]["uuid"],
@@ -303,10 +238,10 @@ def test_update_meeting_ended(mocker):
     # Case 2 - Do not update a meeting that is not being tracked.
     # (If meeting.ended is sent from a non-recorded meeting then we
     # don't care about it)
-    mock_set_pipeline_status.reset_mock()
+    mock_webhook_set_pipeline_status.reset_mock()
     mocker.patch.object(
         webhook,
         "record_exists",
         mocker.Mock(return_value=False),
     )
-    mock_set_pipeline_status.assert_not_called()
+    mock_webhook_set_pipeline_status.assert_not_called()

@@ -15,7 +15,7 @@ class ZipStatus(core.Construct):
             "table",
             table_name=f"{stack_name}-{names.PIPELINE_STATUS_TABLE}",
             partition_key=dynamodb.Attribute(
-                name="correlation_id",
+                name="zip_id",
                 type=dynamodb.AttributeType.STRING,
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -31,6 +31,11 @@ class ZipStatus(core.Construct):
             ),
         )
 
+        # Add secondary index for searching for latest updates
+        # Since dynamoDB scans/filters only scan/filter on 1MB data,
+        # we need an index ("update_date") to do an exact query to narrow
+        # down the results to < 1MB before filtering
+        # (1MB is several days worth of entries)
         self.table.add_global_secondary_index(
             index_name="time_index",
             partition_key=dynamodb.Attribute(

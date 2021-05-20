@@ -70,14 +70,14 @@ def ts_to_date_and_seconds(ts):
     return date, seconds
 
 
-def record_exists(correlation_id):
+def record_exists(zip_id):
     status_table = zip_status_table()
-    r = status_table.get_item(Key={"correlation_id": correlation_id})
+    r = status_table.get_item(Key={"zip_id": zip_id})
     return "Item" in r
 
 
 def set_pipeline_status(
-    correlation_id,
+    zip_id,
     state,
     origin=None,
     reason=None,
@@ -87,7 +87,7 @@ def set_pipeline_status(
     topic=None,
     oc_series_id=None,
 ):
-    logger.info(f"Set pipeline status to {state.name} for id {correlation_id}")
+    logger.info(f"Set pipeline status to {state.name} for id {zip_id}")
 
     utcnow = datetime.utcnow()
     today, seconds = ts_to_date_and_seconds(utcnow)
@@ -143,24 +143,34 @@ def set_pipeline_status(
                 "attribute_exists(meeting_id) AND attribute_exists(origin)"
             )
         elif state == ZoomStatus.RECORDING_PROCESSING:
+            expression_attribute_values.update(
+                {
+                    ":recording_in_progress": ZoomStatus.RECORDING_IN_PROGRESS.name,
+                    ":recording_paused": ZoomStatus.RECORDING_PAUSED.name,
+                    ":recording_stopped": ZoomStatus.RECORDING_STOPPED.name,
+                }
+            )
+
             # Enforce transition to recording processing can only happen from
             # recording in progress states
             condition_expression = (
-                f":pipeline_state = {ZoomStatus.RECORDING_IN_PROGRESS.name} "
-                f"OR :pipeline_state = {ZoomStatus.RECORDING_PAUSED.name} "
-                f"OR :pipeline_state = {ZoomStatus.RECORDING_STOPPED.name} "
+                "pipeline_state = :recording_in_progress "
+                "OR pipeline_state = :recording_paused "
+                "OR pipeline_state = :recording_stopped "
             )
         elif state in ZoomStatus:
+            expression_attribute_values[
+                ":recording_processing"
+            ] = ZoomStatus.RECORDING_PROCESSING.name
+
             # Enforce cannot transition back to a recording in progress state
             # from recording processing
-            condition_expression = (
-                f":pipeline_state <> {ZoomStatus.RECORDING_PROCESSING.name}"
-            )
+            condition_expression = "pipeline_state <> :recording_processing"
 
-        logger.debug(
+        logger.info(
             {
                 "dynamo update item": {
-                    "correlation_id": correlation_id,
+                    "zip_id": zip_id,
                     "update_expression": update_expression,
                     "expression_attribute_values": expression_attribute_values,
                     "condition_expression": condition_expression,
@@ -170,7 +180,7 @@ def set_pipeline_status(
 
         update_status_table(
             status_table,
-            correlation_id,
+            zip_id,
             update_expression,
             expression_attribute_values,
             condition_expression,
@@ -179,6 +189,7 @@ def set_pipeline_status(
         error = e.response["Error"]
         if error["Code"] == "ConditionalCheckFailedException":
             # Don't treat failed conditional update as an error
+            logger.info(f"Conditional check ({condition_expression}) failed.")
             return
         logger.exception(f"{error['Code']}: {error['Message']}")
         raise
@@ -190,24 +201,20 @@ def set_pipeline_status(
 # Isolated for unit testing
 def update_status_table(
     status_table,
-    correlation_id,
+    zip_id,
     update_expression,
     expression_attribute_values,
     condition_expression=None,
 ):
+    update_args = dict(
+        Key={"zip_id": zip_id},
+        UpdateExpression=update_expression,
+        ExpressionAttributeValues=expression_attribute_values,
+    )
     if condition_expression:
-        status_table.update_item(
-            Key={"correlation_id": correlation_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_attribute_values,
-            ConditionExpression=condition_expression,
-        )
-    else:
-        status_table.update_item(
-            Key={"correlation_id": correlation_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_attribute_values,
-        )
+        update_args["ConditionExpression"] = condition_expression
+
+    status_table.update_item(**update_args)
 
 
 def status_by_mid(mid):

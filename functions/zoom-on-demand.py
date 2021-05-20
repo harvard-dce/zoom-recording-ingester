@@ -85,7 +85,8 @@ def handler(event, context):
         try:
             # zoom api can break if uuid is not double urlencoded
             double_urlencoded_uuid = quote(
-                quote(recording_uuid, safe=""), safe=""
+                quote(recording_uuid, safe=""),
+                safe="",
             )
             zoom_endpoint = f"meetings/{double_urlencoded_uuid}/recordings"
             r = zoom_api_request(zoom_endpoint)
@@ -146,8 +147,8 @@ def handler(event, context):
             "allow_multiple_ingests"
         ]
 
-    request_id = f"on-demand-{str(uuid4())}"
-    webhook_data["payload"]["on_demand_request_id"] = request_id
+    zip_id = f"on-demand-{str(uuid4())}"
+    webhook_data["payload"]["zip_id"] = zip_id
 
     logger.info({"webhook_data": webhook_data})
     try:
@@ -169,7 +170,7 @@ def handler(event, context):
         return resp(500, err_msg)
 
     set_pipeline_status(
-        request_id,
+        zip_id,
         PipelineStatus.ON_DEMAND_RECEIVED,
         meeting_id=webhook_data["payload"]["object"]["id"],
         recording_id=recording_uuid,

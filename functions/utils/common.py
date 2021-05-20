@@ -148,11 +148,11 @@ def schedule_match(schedule, local_start_time):
     if not schedule:
         return None
 
-    zoom_time = local_start_time
+    actual_time = local_start_time
     logger.info(
-        {"meeting creation time": zoom_time, "course schedule": schedule}
+        {"meeting creation time": actual_time, "course schedule": schedule}
     )
-    zoom_day_code = list(schedule_days.keys())[zoom_time.weekday()]
+    zoom_day_code = list(schedule_days.keys())[actual_time.weekday()]
 
     # events is a list of {title, day, time} dictionaries
     for event in schedule["events"]:
@@ -162,12 +162,11 @@ def schedule_match(schedule, local_start_time):
 
         # match time
         scheduled_time = datetime.strptime(event["time"], "%H:%M")
-        timedelta = abs(
-            zoom_time
-            - zoom_time.replace(
-                hour=scheduled_time.hour, minute=scheduled_time.minute
-            )
-        ).total_seconds()
+        expected_time = actual_time.replace(
+            hour=scheduled_time.hour,
+            minute=scheduled_time.minute,
+        )
+        timedelta = abs(actual_time - expected_time).total_seconds()
         if timedelta < (BUFFER_MINUTES * 60):
             return event
         else:

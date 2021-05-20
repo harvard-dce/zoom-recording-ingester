@@ -156,7 +156,19 @@ or by browsing to the release stage of your API Gateway REST api.
 Choose app type "Webhook only app."
 1. Click "Create." Fill out the rest of the required information,
 and enter the API endpoint under "Event Subscription."
-1. Make sure to subscribe to "All recordings have completed" events.
+1. Subscribe to the following events:
+
+    For automatic ingests:. 
+    * Recording - "All recordings have completed". 
+    
+    For status updates:
+
+    * Recording - "Recording Started"
+    * Recording - "Recording Paused"
+    * Recording - "Recording Resumed"
+    * Recording - "Recording Stopped"
+    * Meeting - "End Meeting"
+    * Webinar - "End Webinar"
 1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
 
 
@@ -213,7 +225,7 @@ The easiest way to find a listing of the endpoints for your stack is to run `inv
 **Description:** Update the ZIP schedule.
 
 **Endpoint:** `POST /schedule_update`  
-**ExportName:**`<stack-name>-schedule-url`  
+**ExportName:** `<stack-name>-schedule-url`  
 **Parameters:** No parameters. Retrieves schedule from stack associated google sheet.
 
 ### Status Endpoint (requests from Opencast only)

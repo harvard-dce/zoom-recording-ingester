@@ -25,7 +25,7 @@ tz = timezone(LOCAL_TIME_ZONE)
 FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 
 SAMPLE_MESSAGE_BODY = {
-    "correlation_id": "abc",
+    "zip_id": "abc",
     "duration": 30,
     "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT),
 }
@@ -57,7 +57,7 @@ class TestHandler(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def initfixtures(self, mocker):
         self.mocker = mocker
-        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.context = MockContext(aws_request_id="mock-zip_id")
         self.mock_sqs = unittest.mock.Mock()
         self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
         self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
@@ -93,12 +93,6 @@ class TestHandler(unittest.TestCase):
             "_series_id_from_schedule",
             None,
         )
-        mock_set_pipeline_status = self.mocker.Mock(return_value=None)
-        self.mocker.patch.object(
-            downloader,
-            "set_pipeline_status",
-            mock_set_pipeline_status,
-        )
 
         with self.assertLogs(level="INFO") as cm:
             resp = downloader.handler({}, self.context)
@@ -124,11 +118,6 @@ class TestHandler(unittest.TestCase):
         )
 
         match_message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
-
-        mock_set_pipeline_status = self.mocker.Mock(return_value=None)
-        self.mocker.patch.object(
-            downloader, "set_pipeline_status", mock_set_pipeline_status
-        )
 
         messages = [
             no_match_message
@@ -191,10 +180,6 @@ class TestHandler(unittest.TestCase):
             downloader.Download, "oc_series_found", return_value=True
         )
         self.mocker.patch.object(downloader, "get_admin_token")
-        mock_set_pipeline_status = self.mocker.Mock(return_value=None)
-        self.mocker.patch.object(
-            downloader, "set_pipeline_status", mock_set_pipeline_status
-        )
 
         error_msg = "Error while uploading to S3"
         self.mocker.patch.object(
@@ -232,7 +217,7 @@ class TestDownloader(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def initfixtures(self, mocker):
         self.mocker = mocker
-        self.context = MockContext(aws_request_id="mock-correlation_id")
+        self.context = MockContext(aws_request_id="mock-zip_id")
         self.mock_sqs = unittest.mock.Mock()
         self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
         self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
@@ -594,14 +579,12 @@ def test_handler_duration_check(handler, mocker):
     mocker.patch.object(
         downloader.Download, "oc_series_found", mocker.Mock(return_value=False)
     )
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        downloader, "set_pipeline_status", mock_set_pipeline_status
-    )
 
     # duration should be good
     mock_msg = mocker.Mock(
-        body=json.dumps({"duration": 10, "correlation_id": "abc"})
+        body=json.dumps(
+            {"duration": 10, "zip_id": "abc", "on_demand_ingest": False}
+        )
     )
     mocker.patch.object(
         downloader, "retrieve_message", mocker.Mock(return_value=mock_msg)
@@ -617,7 +600,9 @@ def test_handler_duration_check(handler, mocker):
 
     # duration should be too short
     mock_msg = mocker.Mock(
-        body=json.dumps({"duration": 1, "correlation_id": "abc"})
+        body=json.dumps(
+            {"duration": 1, "zip_id": "abc", "on_demand_ingest": False}
+        )
     )
     mocker.patch.object(
         downloader, "retrieve_message", mocker.Mock(return_value=mock_msg)
@@ -635,10 +620,6 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
     mocker.patch.object(
         downloader.Download, "oc_series_found", mocker.Mock(return_value=False)
     )
-    mock_set_pipeline_status = mocker.Mock(return_value=None)
-    mocker.patch.object(
-        downloader, "set_pipeline_status", mock_set_pipeline_status
-    )
 
     # duration too short
     mock_msg = mocker.Mock(
@@ -646,7 +627,8 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
             {
                 "on_demand_series_id": 1234,
                 "duration": 0,
-                "correlation_id": "abc",
+                "zip_id": "abc",
+                "on_demand_ingest": True,
             }
         )
     )

@@ -9,7 +9,7 @@ class ZipRecordingsBucket(core.Construct):
         """
         super().__init__(scope, id)
 
-        two_week_lifecycle_rule = s3.LifecycleRule(
+        one_week_lifecycle_rule = s3.LifecycleRule(
             id="DeleteAfterOneWeek",
             enabled=True,
             expiration=core.Duration.days(7),
@@ -22,6 +22,6 @@ class ZipRecordingsBucket(core.Construct):
             self,
             "bucket",
             bucket_name=f"{stack_name}-{names.RECORDINGS_BUCKET}",
-            lifecycle_rules=[two_week_lifecycle_rule],
+            lifecycle_rules=[one_week_lifecycle_rule],
             removal_policy=core.RemovalPolicy.DESTROY,
         )
