@@ -554,13 +554,13 @@ def recording_status_description(ingest_details):
     status = ingest_details["status"]
 
     if status == ZoomStatus.RECORDING_IN_PROGRESS.name:
-        status_msg = "Recording in progress"
+        status_msg = "Meeting in progress. Currently recording."
     elif status == ZoomStatus.RECORDING_PAUSED.name:
-        status_msg = "Recording paused"
+        status_msg = "Meeting in progress. Recording paused."
     elif status == ZoomStatus.RECORDING_STOPPED.name:
-        status_msg = "Recording stopped"
+        status_msg = "Meeting in progress. Recording stopped."
     elif status == ZoomStatus.RECORDING_PROCESSING.name:
-        status_msg = "Recording files processing in Zoom"
+        status_msg = "Meeting finished. Recording files processing in Zoom."
     else:
         return None
 

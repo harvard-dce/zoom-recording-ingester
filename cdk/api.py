@@ -105,7 +105,9 @@ class ZipApi(core.Construct):
             "status", status_query_function, "GET"
         )
 
-        self.slack_resource = self.resource("slack", slack_function, "POST")
+        self.slack_resource = self.create_resource(
+            "slack", slack_function, "POST"
+        )
 
         def endpoint_url(resource_name):
             return (
