@@ -292,8 +292,10 @@ def format_status_records(items):
             "status": item["pipeline_state"],
             "origin": item["origin"],
         }
-        if "reason" in item:
-            zip_ingest["reason"] = item["reason"]
+
+        for optional_field in ["reason", "ingest_request_time"]:
+            if optional_field in item:
+                zip_ingest[optional_field] = item[optional_field]
 
         meetings[mid]["recordings"][rec_id]["zip_ingests"].append(zip_ingest)
 

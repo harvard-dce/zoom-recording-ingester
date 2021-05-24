@@ -19,6 +19,7 @@ logger = logging.getLogger()
 
 STACK_NAME = env("STACK_NAME")
 PRETTY_TIMESTAMP_FORMAT = "%A, %B %d, %Y at %-I:%M%p"
+SHORT_TIMESTAMP_FORMAT = "%m/%d/%y %-I:%M%p"
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 OC_CLUSTER_NAME = env("OC_CLUSTER_NAME")
 # Slack places an upper limit of 50 UI blocks per message
@@ -182,19 +183,29 @@ def slack_results_metadata(
     return blocks
 
 
+# {
+#     "type": "section",
+#     "text": {
+#         "type": "mrkdwn",
+#         "text": "*+Zoom Ingest requested on March 26, 2021 at 1:34PM*\n
+# > Status: Received Zoom+ request. (updated at...)\n
+# >Opencast Series Id: 2021012999\n>\n\n*+Zoom Ingest*\n> Status: Received Zoom+ request.\n> Updated: March 25, 2021 at 12:22PM\n>\n\n*Automated Ingest*\n>Status: :exclamation: Failed to ingest to Opencast cluster zoom-ingester-5x-dev. \n>Reason: Unable to reach Opencast.\n>Updated: March 24, 2021 at 1:44PM\n\n"
+#     }
+
+
 def ingest_details(rec, schedule):
-    pretty_start_time = pretty_local_time(rec["start_time"])
+    pretty_start_time = formatted_local_time(rec["start_time"])
     match = schedule_match(schedule, local_time(rec["start_time"]))
-    in_zip = True
+    recordings_ready = True
 
     if len(rec["zip_ingests"]) == 1:
         recording_status_txt = recording_status_description(
             rec["zip_ingests"][0]
         )
         if recording_status_txt:
-            in_zip = False
+            recordings_ready = False
 
-    if in_zip:
+    if recordings_ready:
         ingest_details = ""
         # Sort ingests from most to least recent
         ingests = sorted(
@@ -204,15 +215,21 @@ def ingest_details(rec, schedule):
         )
 
         for ingest in ingests:
-            update_time = pretty_local_time(ingest["last_updated"])
-            on_demand = ingest["origin"] == "on_demand"
-            on_demand_text = "Yes" if on_demand else "No"
-
-            ingest_details += (
-                f"*Status:* {pipeline_status_description(ingest, on_demand, match)}\n"
-                f"*Updated:* {update_time}\n"
-                f"*+Zoom ingest?* {on_demand_text}\n\n"
+            update_time = formatted_local_time(
+                ingest["last_updated"],
+                format=SHORT_TIMESTAMP_FORMAT,
             )
+            on_demand = ingest["origin"] == "on_demand"
+
+            request_time = formatted_local_time(ingest["ingest_request_time"])
+            if on_demand:
+                ingest_details += (
+                    f"*+Zoom Ingest requested on {request_time}*\n"
+                )
+            else:
+                ingest_details += f"*Automated Ingest on {request_time}*\n"
+
+            ingest_details += f"> Status: {pipeline_status_description(ingest, on_demand, match)} (since {update_time})\n"
     else:
         ingest_details = f"*Status* : {recording_status_txt}"
 
@@ -231,7 +248,8 @@ def ingest_details(rec, schedule):
         },
     ]
 
-    if in_zip:
+    if recordings_ready:
+        # Add the link to the processed recordings
         mgmt_url = (
             "https://zoom.us/recording/management/detail?meeting_id="
             f"{quote(rec['recording_id'])}"
@@ -331,8 +349,8 @@ def local_time(ts):
     return utc.astimezone(tz)
 
 
-def pretty_local_time(ts):
-    return local_time(ts).strftime(PRETTY_TIMESTAMP_FORMAT)
+def formatted_local_time(ts, format=PRETTY_TIMESTAMP_FORMAT):
+    return local_time(ts).strftime(format)
 
 
 def format_mid(mid):

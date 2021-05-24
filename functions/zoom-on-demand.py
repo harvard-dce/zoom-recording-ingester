@@ -177,5 +177,6 @@ def handler(event, context):
         recording_start_time=webhook_data["payload"]["object"]["start_time"],
         topic=webhook_data["payload"]["object"]["topic"],
         origin="on_demand",
+        oc_series_id=body["oc_series_id"] if "oc_series_id" in body else None,
     )
     return resp(200, "Ingest accepted")
