@@ -134,6 +134,7 @@ class ZipStack(core.Stack):
                 "SLACK_API_TOKEN": slack_api_token,
                 "OC_CLUSTER_NAME": oc_cluster_name,
             },
+            handler="slack.handler.handler",
         )
         # grant slack function permissions
         pipeline_status.table.grant_read_write_data(slack.function)

@@ -910,7 +910,13 @@ def __build_function(ctx, func, upload_to_s3=False):
 
     mkdir(join(build_path, "utils"))
     modules = ["utils/" + f.split(".")[0] for f in listdir("functions/utils")]
-    modules.append(func)
+    if func == names.SLACK_FUNCTION:
+        mkdir(join(build_path, "slack"))
+        modules.extend(
+            ["slack/" + f.split(".")[0] for f in listdir("functions/slack")]
+        )
+    else:
+        modules.append(func)
     for module in modules:
         module_path = join(dirname(__file__), f"functions/{module}.py")
         module_dist_path = join(build_path, f"{module}.py")

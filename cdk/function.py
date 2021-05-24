@@ -20,6 +20,7 @@ class ZipFunction(core.Construct):
         memory_size=128,
         vpc_id=None,
         security_group_id=None,
+        handler=None,
     ):
         super().__init__(scope, id)
 
@@ -28,13 +29,16 @@ class ZipFunction(core.Construct):
             key: str(val) for key, val in environment.items() if val
         }
 
+        if not handler:
+            handler = f"{name}.handler"
+
         function_props = {
             "function_name": f"{self.stack_name}-{name}",
             "runtime": aws_lambda.Runtime.PYTHON_3_8,
             "code": aws_lambda.Code.from_bucket(
                 bucket=lambda_code_bucket, key=f"{self.stack_name}/{name}.zip"
             ),
-            "handler": f"{name}.handler",
+            "handler": handler,
             "timeout": core.Duration.seconds(timeout),
             "memory_size": memory_size,
             "environment": environment,
