@@ -293,7 +293,11 @@ def format_status_records(items):
             "origin": item["origin"],
         }
 
-        for optional_field in ["reason", "ingest_request_time"]:
+        for optional_field in [
+            "reason",
+            "ingest_request_time",
+            "oc_series_id",
+        ]:
             if optional_field in item:
                 zip_ingest[optional_field] = item[optional_field]
 

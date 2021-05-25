@@ -223,13 +223,18 @@ def ingest_details(rec, schedule):
 
             request_time = formatted_local_time(ingest["ingest_request_time"])
             if on_demand:
-                ingest_details += (
-                    f"*+Zoom Ingest requested on {request_time}*\n"
-                )
+                ingest_details += f"*+Zoom Ingest on {request_time}*\n"
             else:
-                ingest_details += f"*Automated Ingest on {request_time}*\n"
+                ingest_details += "*Automated Ingest*\n"
 
             ingest_details += f"> Status: {pipeline_status_description(ingest, on_demand, match)} (since {update_time})\n"
+
+            if "oc_series_id" in ingest:
+                ingest_details += f"> :arrow_right: Opencast Series: {ingest['oc_series_id']}\n"
+            elif on_demand:
+                ingest_details += (
+                    "> :arrow_right: Opencast Series: Use schedule match\n"
+                )
     else:
         ingest_details = f"*Status* : {recording_status_txt}"
 
@@ -283,7 +288,6 @@ def more_results_button_blocks(recordings, mid, start_time, start_index):
                     "value": json.dumps(
                         {
                             "version": 1,
-                            "action": "more results",
                             "mid": mid,
                             "newest_start_time": start_time,
                             "count": len(recordings),

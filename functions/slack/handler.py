@@ -100,10 +100,11 @@ def handler(event, context):
             "mid",
             "newest_start_time",
             "start_index",
-            "rec_count",
+            "count",
         ]
         action_value = json.loads(payload["actions"][0]["value"])
         if not all(field in action_value for field in required_action_fields):
+            logger.warning("Action missing required field.")
             return resp_204("Ignore action. Action missing required field.")
 
         meeting_id = action_value["mid"]
@@ -185,7 +186,7 @@ def handler(event, context):
                 blocks = slack_results_blocks(
                     meeting_id,
                     meeting_status,
-                    search_identifier=prev_msg["newest_start_time"],
+                    newest_start_time=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"]
                     + prev_msg["rec_count"],
                     max_results=RESULTS_PER_REQUEST,
@@ -201,7 +202,7 @@ def handler(event, context):
                 blocks = slack_results_blocks(
                     meeting_id,
                     meeting_status,
-                    search_identifier=prev_msg["newest_start_time"],
+                    newest_start_time=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"],
                     max_results=prev_msg["rec_count"] + RESULTS_PER_REQUEST,
                     interaction=True,
