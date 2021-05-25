@@ -42,30 +42,27 @@ def slack_help_menu_blocks(cmd):
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": (
-                    f">`{cmd} [Zoom meeting ID]` See the status of the latest "
-                    "ZIP ingests with the specified Zoom MID.",
-                ),
+                "text": f">`{cmd} [Zoom meeting ID]` See the status of the latest ZIP ingests with the specified Zoom MID.",
             },
         },
     ]
 
 
 def slack_results_blocks(
+    mid,
     meeting_status_data,
     newest_start_time=None,
     start_index=0,
     max_results=RESULTS_PER_REQUEST,
     interaction=False,
 ):
-    logger.warning(meeting_status_data)
     header_blocks = []
     metadata_blocks = []
     ingest_detail_blocks = []
     footer_blocks = []
 
-    mid = meeting_status_data["meeting_id"]
     schedule = retrieve_schedule(mid)
+    logger.warning(schedule)
     events, opencast_mapping = format_schedule_details(schedule, mid)
 
     # Beginning of a search, include meeting metadata header

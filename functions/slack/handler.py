@@ -53,13 +53,15 @@ def slack_error_response(msg):
 
 
 def slack_help_response(cmd):
+    help_menu_blocks = slack_help_menu_blocks(cmd)
+    logger.info({"help_menu": help_menu_blocks})
     return {
         "statusCode": 200,
         "headers": {},
         "body": json.dumps(
             {
                 "response_type": "ephemeral",
-                "blocks": slack_help_menu_blocks(cmd),
+                "blocks": help_menu_blocks,
             }
         ),
     }
@@ -163,7 +165,7 @@ def handler(event, context):
 
     try:
         if slash_command:
-            blocks = slack_results_blocks(meeting_status_data)
+            blocks = slack_results_blocks(meeting_id, meeting_status_data)
             # Response type must be "in_channel" for the "more results"
             # button to work. (Ephemeral messages cannot be updated.)
             response = {"response_type": "in_channel", "blocks": blocks}
@@ -184,6 +186,7 @@ def handler(event, context):
                 )
                 # Put new results in new message
                 blocks = slack_results_blocks(
+                    meeting_id,
                     meeting_status_data,
                     newest_start_time=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"]
@@ -199,6 +202,7 @@ def handler(event, context):
             else:
                 # Replace original message with more results
                 blocks = slack_results_blocks(
+                    meeting_id,
                     meeting_status_data,
                     newest_start_time=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"],
