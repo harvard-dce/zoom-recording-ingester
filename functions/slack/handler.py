@@ -158,12 +158,12 @@ def handler(event, context):
         meeting_id = int(mid_txt)
 
     logger.info("call status_by_mid...")
-    meeting_status = status_by_mid(meeting_id)
-    logger.info({"meeting_data": meeting_status})
+    meeting_status_data = status_by_mid(meeting_id)
+    logger.info({"meeting_data": meeting_status_data})
 
     try:
         if slash_command:
-            blocks = slack_results_blocks(meeting_id, meeting_status)
+            blocks = slack_results_blocks(meeting_status_data)
             # Response type must be "in_channel" for the "more results"
             # button to work. (Ephemeral messages cannot be updated.)
             response = {"response_type": "in_channel", "blocks": blocks}
@@ -184,8 +184,7 @@ def handler(event, context):
                 )
                 # Put new results in new message
                 blocks = slack_results_blocks(
-                    meeting_id,
-                    meeting_status,
+                    meeting_status_data,
                     newest_start_time=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"]
                     + prev_msg["rec_count"],
@@ -200,8 +199,7 @@ def handler(event, context):
             else:
                 # Replace original message with more results
                 blocks = slack_results_blocks(
-                    meeting_id,
-                    meeting_status,
+                    meeting_status_data,
                     newest_start_time=prev_msg["newest_start_time"],
                     start_index=prev_msg["start_index"],
                     max_results=prev_msg["rec_count"] + RESULTS_PER_REQUEST,

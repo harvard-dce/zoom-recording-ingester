@@ -52,25 +52,26 @@ def slack_help_menu_blocks(cmd):
 
 
 def slack_results_blocks(
-    mid,
-    meeting_status,
+    meeting_status_data,
     newest_start_time=None,
     start_index=0,
     max_results=RESULTS_PER_REQUEST,
     interaction=False,
 ):
+    logger.warning(meeting_status_data)
     header_blocks = []
     metadata_blocks = []
     ingest_detail_blocks = []
     footer_blocks = []
 
+    mid = meeting_status_data["meeting_id"]
     schedule = retrieve_schedule(mid)
     events, opencast_mapping = format_schedule_details(schedule, mid)
 
     # Beginning of a search, include meeting metadata header
     if start_index == 0:
-        if meeting_status:
-            topic = meeting_status["topic"]
+        if meeting_status_data:
+            topic = meeting_status_data["topic"]
         elif schedule:
             topic = f"{schedule['course_code']} Zoom Meeting"
         else:
@@ -78,14 +79,14 @@ def slack_results_blocks(
 
         header_blocks = slack_results_header(topic)
         metadata_blocks = slack_results_metadata(
-            meeting_status,
+            meeting_status_data,
             mid,
             schedule,
             opencast_mapping,
             events,
         )
 
-    if not meeting_status:
+    if not meeting_status_data:
         ingest_detail_blocks = [
             {"type": "divider"},
             {
@@ -99,7 +100,7 @@ def slack_results_blocks(
         return header_blocks + metadata_blocks + ingest_detail_blocks
 
     recordings = sorted_filtered_recordings(
-        meeting_status["recordings"],
+        meeting_status_data["recordings"],
         newest_start_time,
     )
 
@@ -183,16 +184,6 @@ def slack_results_metadata(
     return blocks
 
 
-# {
-#     "type": "section",
-#     "text": {
-#         "type": "mrkdwn",
-#         "text": "*+Zoom Ingest requested on March 26, 2021 at 1:34PM*\n
-# > Status: Received Zoom+ request. (updated at...)\n
-# >Opencast Series Id: 2021012999\n>\n\n*+Zoom Ingest*\n> Status: Received Zoom+ request.\n> Updated: March 25, 2021 at 12:22PM\n>\n\n*Automated Ingest*\n>Status: :exclamation: Failed to ingest to Opencast cluster zoom-ingester-5x-dev. \n>Reason: Unable to reach Opencast.\n>Updated: March 24, 2021 at 1:44PM\n\n"
-#     }
-
-
 def ingest_details(rec, schedule):
     pretty_start_time = formatted_local_time(rec["start_time"])
     match = schedule_match(schedule, local_time(rec["start_time"]))
@@ -229,7 +220,7 @@ def ingest_details(rec, schedule):
 
             ingest_details += f"> Status: {pipeline_status_description(ingest, on_demand, match)} (since {update_time})\n"
 
-            if "oc_series_id" in ingest:
+            if "oc_series_id" in ingest and on_demand:
                 ingest_details += f"> :arrow_right: Opencast Series: {ingest['oc_series_id']}\n"
 
     else:
