@@ -231,10 +231,7 @@ def ingest_details(rec, schedule):
 
             if "oc_series_id" in ingest:
                 ingest_details += f"> :arrow_right: Opencast Series: {ingest['oc_series_id']}\n"
-            elif on_demand:
-                ingest_details += (
-                    "> :arrow_right: Opencast Series: Use schedule match\n"
-                )
+
     else:
         ingest_details = f"*Status* : {recording_status_txt}"
 
