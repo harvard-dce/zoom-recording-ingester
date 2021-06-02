@@ -13,48 +13,46 @@ attrs==20.3.0
     #   cattrs
     #   jsii
     #   pytest
-aws-cdk.assets==1.95.1
+aws-cdk.assets==1.107.0
     # via
+    #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-ecr-assets
     #   aws-cdk.aws-s3-assets
-aws-cdk.aws-apigateway==1.95.1
+aws-cdk.aws-apigateway==1.107.0
     # via
     #   -r requirements/base.in
+    #   aws-cdk.aws-events-targets
     #   aws-cdk.aws-route53-targets
-aws-cdk.aws-apigatewayv2==1.95.1
-    # via aws-cdk.aws-route53-targets
-aws-cdk.aws-applicationautoscaling==1.95.1
+aws-cdk.aws-applicationautoscaling==1.107.0
     # via
     #   aws-cdk.aws-cloudwatch-actions
     #   aws-cdk.aws-dynamodb
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-lambda
-aws-cdk.aws-autoscaling-common==1.95.1
+aws-cdk.aws-autoscaling-common==1.107.0
     # via
     #   aws-cdk.aws-applicationautoscaling
     #   aws-cdk.aws-autoscaling
-aws-cdk.aws-autoscaling-hooktargets==1.95.1
+aws-cdk.aws-autoscaling-hooktargets==1.107.0
     # via aws-cdk.aws-ecs
-aws-cdk.aws-autoscaling==1.95.1
+aws-cdk.aws-autoscaling==1.107.0
     # via
     #   aws-cdk.aws-autoscaling-hooktargets
     #   aws-cdk.aws-cloudwatch-actions
     #   aws-cdk.aws-ecs
-aws-cdk.aws-batch==1.95.1
-    # via aws-cdk.aws-events-targets
-aws-cdk.aws-certificatemanager==1.95.1
+aws-cdk.aws-certificatemanager==1.107.0
     # via
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-cognito
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-elasticloadbalancingv2
-aws-cdk.aws-cloudformation==1.95.1
+aws-cdk.aws-cloudformation==1.107.0
     # via aws-cdk.custom-resources
-aws-cdk.aws-cloudfront==1.95.1
+aws-cdk.aws-cloudfront==1.107.0
     # via aws-cdk.aws-route53-targets
-aws-cdk.aws-cloudwatch-actions==1.95.1
+aws-cdk.aws-cloudwatch-actions==1.107.0
     # via -r requirements/base.in
-aws-cdk.aws-cloudwatch==1.95.1
+aws-cdk.aws-cloudwatch==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-apigateway
@@ -66,33 +64,33 @@ aws-cdk.aws-cloudwatch==1.95.1
     #   aws-cdk.aws-ec2
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-elasticloadbalancingv2
+    #   aws-cdk.aws-kinesis
     #   aws-cdk.aws-lambda
     #   aws-cdk.aws-logs
     #   aws-cdk.aws-sns
     #   aws-cdk.aws-sqs
     #   aws-cdk.aws-stepfunctions
-aws-cdk.aws-codebuild==1.95.1
+aws-cdk.aws-codebuild==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-events-targets
-aws-cdk.aws-codecommit==1.95.1
+aws-cdk.aws-codecommit==1.107.0
     # via aws-cdk.aws-codebuild
-aws-cdk.aws-codeguruprofiler==1.95.1
+aws-cdk.aws-codeguruprofiler==1.107.0
     # via aws-cdk.aws-lambda
-aws-cdk.aws-codepipeline==1.95.1
+aws-cdk.aws-codepipeline==1.107.0
     # via aws-cdk.aws-events-targets
-aws-cdk.aws-cognito==1.95.1
+aws-cdk.aws-cognito==1.107.0
     # via
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-route53-targets
-aws-cdk.aws-dynamodb==1.95.1
+aws-cdk.aws-dynamodb==1.107.0
     # via -r requirements/base.in
-aws-cdk.aws-ec2==1.95.1
+aws-cdk.aws-ec2==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-autoscaling
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-efs
@@ -105,39 +103,36 @@ aws-cdk.aws-ec2==1.95.1
     #   aws-cdk.aws-secretsmanager
     #   aws-cdk.aws-servicediscovery
     #   aws-cdk.custom-resources
-aws-cdk.aws-ecr-assets==1.95.1
+aws-cdk.aws-ecr-assets==1.107.0
     # via
     #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-lambda
-aws-cdk.aws-ecr==1.95.1
+aws-cdk.aws-ecr==1.107.0
     # via
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-ecr-assets
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-lambda
-aws-cdk.aws-ecs==1.95.1
-    # via
-    #   aws-cdk.aws-batch
-    #   aws-cdk.aws-events-targets
-aws-cdk.aws-efs==1.95.1
+aws-cdk.aws-ecs==1.107.0
+    # via aws-cdk.aws-events-targets
+aws-cdk.aws-efs==1.107.0
     # via aws-cdk.aws-lambda
-aws-cdk.aws-elasticloadbalancing==1.95.1
+aws-cdk.aws-elasticloadbalancing==1.107.0
     # via
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-route53-targets
-aws-cdk.aws-elasticloadbalancingv2==1.95.1
+aws-cdk.aws-elasticloadbalancingv2==1.107.0
     # via
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-route53-targets
     #   aws-cdk.aws-servicediscovery
-aws-cdk.aws-events-targets==1.95.1
+aws-cdk.aws-events-targets==1.107.0
     # via -r requirements/base.in
-aws-cdk.aws-events==1.95.1
+aws-cdk.aws-events==1.107.0
     # via
     #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-codecommit
@@ -148,9 +143,9 @@ aws-cdk.aws-events==1.95.1
     #   aws-cdk.aws-s3
     #   aws-cdk.aws-sns
     #   aws-cdk.aws-stepfunctions
-aws-cdk.aws-globalaccelerator==1.95.1
+aws-cdk.aws-globalaccelerator==1.107.0
     # via aws-cdk.aws-route53-targets
-aws-cdk.aws-iam==1.95.1
+aws-cdk.aws-iam==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-apigateway
@@ -158,7 +153,6 @@ aws-cdk.aws-iam==1.95.1
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-autoscaling-common
     #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-certificatemanager
     #   aws-cdk.aws-cloudformation
     #   aws-cdk.aws-cloudwatch
@@ -191,11 +185,11 @@ aws-cdk.aws-iam==1.95.1
     #   aws-cdk.aws-ssm
     #   aws-cdk.aws-stepfunctions
     #   aws-cdk.custom-resources
-aws-cdk.aws-kinesis==1.95.1
+aws-cdk.aws-kinesis==1.107.0
     # via aws-cdk.aws-events-targets
-aws-cdk.aws-kinesisfirehose==1.95.1
+aws-cdk.aws-kinesisfirehose==1.107.0
     # via aws-cdk.aws-events-targets
-aws-cdk.aws-kms==1.95.1
+aws-cdk.aws-kms==1.107.0
     # via
     #   aws-cdk.aws-autoscaling-hooktargets
     #   aws-cdk.aws-codebuild
@@ -204,6 +198,7 @@ aws-cdk.aws-kms==1.95.1
     #   aws-cdk.aws-ec2
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-efs
+    #   aws-cdk.aws-events-targets
     #   aws-cdk.aws-kinesis
     #   aws-cdk.aws-lambda
     #   aws-cdk.aws-logs
@@ -213,7 +208,7 @@ aws-cdk.aws-kms==1.95.1
     #   aws-cdk.aws-sns
     #   aws-cdk.aws-sqs
     #   aws-cdk.aws-ssm
-aws-cdk.aws-lambda==1.95.1
+aws-cdk.aws-lambda==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-apigateway
@@ -228,7 +223,7 @@ aws-cdk.aws-lambda==1.95.1
     #   aws-cdk.aws-secretsmanager
     #   aws-cdk.aws-sns-subscriptions
     #   aws-cdk.custom-resources
-aws-cdk.aws-logs==1.95.1
+aws-cdk.aws-logs==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-apigateway
@@ -241,15 +236,15 @@ aws-cdk.aws-logs==1.95.1
     #   aws-cdk.aws-route53
     #   aws-cdk.aws-stepfunctions
     #   aws-cdk.custom-resources
-aws-cdk.aws-route53-targets==1.95.1
+aws-cdk.aws-route53-targets==1.107.0
     # via aws-cdk.aws-ecs
-aws-cdk.aws-route53==1.95.1
+aws-cdk.aws-route53==1.107.0
     # via
     #   aws-cdk.aws-certificatemanager
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-route53-targets
     #   aws-cdk.aws-servicediscovery
-aws-cdk.aws-s3-assets==1.95.1
+aws-cdk.aws-s3-assets==1.107.0
     # via
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-codebuild
@@ -257,7 +252,7 @@ aws-cdk.aws-s3-assets==1.95.1
     #   aws-cdk.aws-ecs
     #   aws-cdk.aws-lambda
     #   aws-cdk.aws-logs
-aws-cdk.aws-s3==1.95.1
+aws-cdk.aws-s3==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-apigateway
@@ -272,22 +267,21 @@ aws-cdk.aws-s3==1.95.1
     #   aws-cdk.aws-route53-targets
     #   aws-cdk.aws-s3-assets
     #   aws-cdk.aws-stepfunctions
-aws-cdk.aws-sam==1.95.1
+aws-cdk.aws-sam==1.107.0
     # via aws-cdk.aws-secretsmanager
-aws-cdk.aws-secretsmanager==1.95.1
+aws-cdk.aws-secretsmanager==1.107.0
     # via
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-ecs
-aws-cdk.aws-servicediscovery==1.95.1
+aws-cdk.aws-servicediscovery==1.107.0
     # via aws-cdk.aws-ecs
-aws-cdk.aws-signer==1.95.1
+aws-cdk.aws-signer==1.107.0
     # via aws-cdk.aws-lambda
-aws-cdk.aws-sns-subscriptions==1.95.1
+aws-cdk.aws-sns-subscriptions==1.107.0
     # via
     #   aws-cdk.aws-autoscaling-hooktargets
     #   aws-cdk.aws-events-targets
-aws-cdk.aws-sns==1.95.1
+aws-cdk.aws-sns==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.aws-autoscaling
@@ -298,7 +292,7 @@ aws-cdk.aws-sns==1.95.1
     #   aws-cdk.aws-events-targets
     #   aws-cdk.aws-sns-subscriptions
     #   aws-cdk.custom-resources
-aws-cdk.aws-sqs==1.95.1
+aws-cdk.aws-sqs==1.107.0
     # via
     #   aws-cdk.aws-autoscaling-hooktargets
     #   aws-cdk.aws-ecs
@@ -306,14 +300,13 @@ aws-cdk.aws-sqs==1.95.1
     #   aws-cdk.aws-lambda
     #   aws-cdk.aws-sns
     #   aws-cdk.aws-sns-subscriptions
-aws-cdk.aws-ssm==1.95.1
+aws-cdk.aws-ssm==1.107.0
     # via
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-ec2
     #   aws-cdk.aws-ecs
-aws-cdk.aws-stepfunctions==1.95.1
+aws-cdk.aws-stepfunctions==1.107.0
     # via aws-cdk.aws-events-targets
-aws-cdk.cloud-assembly-schema==1.95.1
+aws-cdk.cloud-assembly-schema==1.107.0
     # via
     #   aws-cdk.aws-ec2
     #   aws-cdk.aws-efs
@@ -322,7 +315,7 @@ aws-cdk.cloud-assembly-schema==1.95.1
     #   aws-cdk.aws-ssm
     #   aws-cdk.core
     #   aws-cdk.cx-api
-aws-cdk.core==1.95.1
+aws-cdk.core==1.107.0
     # via
     #   -r requirements/base.in
     #   aws-cdk.assets
@@ -331,7 +324,6 @@ aws-cdk.core==1.95.1
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-autoscaling-common
     #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-certificatemanager
     #   aws-cdk.aws-cloudformation
     #   aws-cdk.aws-cloudwatch
@@ -371,13 +363,13 @@ aws-cdk.core==1.95.1
     #   aws-cdk.aws-ssm
     #   aws-cdk.aws-stepfunctions
     #   aws-cdk.custom-resources
-aws-cdk.custom-resources==1.95.1
+aws-cdk.custom-resources==1.107.0
     # via
     #   aws-cdk.aws-cognito
     #   aws-cdk.aws-dynamodb
     #   aws-cdk.aws-events-targets
     #   aws-cdk.aws-route53
-aws-cdk.cx-api==1.95.1
+aws-cdk.cx-api==1.107.0
     # via
     #   aws-cdk.assets
     #   aws-cdk.aws-apigateway
@@ -393,7 +385,7 @@ aws-cdk.cx-api==1.95.1
     #   aws-cdk.aws-s3-assets
     #   aws-cdk.aws-secretsmanager
     #   aws-cdk.core
-aws-cdk.region-info==1.95.1
+aws-cdk.region-info==1.107.0
     # via
     #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-ec2
@@ -401,41 +393,39 @@ aws-cdk.region-info==1.95.1
     #   aws-cdk.aws-iam
     #   aws-cdk.aws-route53-targets
     #   aws-cdk.core
-aws-cdk.yaml-cfn==1.95.1
-    # via aws-cdk.aws-codebuild
 aws-lambda-logging==0.1.1
     # via -r requirements/../function_requirements/common-requirements.in
-awscli==1.19.43
+awscli==1.19.86
     # via -r requirements/base.in
 awslogs==0.14.0
     # via -r requirements/base.in
-black==20.8b1
+black==21.5b2
     # via -r requirements/dev.in
-boto3==1.17.40
+boto3==1.17.86
     # via
     #   -r requirements/../function_requirements/common-requirements.in
     #   -r requirements/base.in
     #   awslogs
-botocore==1.20.43
+botocore==1.20.86
     # via
     #   awscli
     #   boto3
     #   s3transfer
-cachetools==4.2.1
+cachetools==4.2.2
     # via google-auth
-cattrs==1.3.0
+cattrs==1.5.0
     # via jsii
-certifi==2020.12.5
+certifi==2021.5.30
     # via requests
-cfgv==3.2.0
+cfgv==3.3.0
     # via pre-commit
 chardet==4.0.0
     # via requests
-click==7.1.2
+click==8.0.1
     # via black
 colorama==0.4.3
     # via awscli
-constructs==3.3.71
+constructs==3.3.75
     # via
     #   aws-cdk.assets
     #   aws-cdk.aws-apigateway
@@ -443,7 +433,6 @@ constructs==3.3.71
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-autoscaling-common
     #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-certificatemanager
     #   aws-cdk.aws-cloudformation
     #   aws-cdk.aws-cloudwatch
@@ -486,7 +475,7 @@ constructs==3.3.71
     #   aws-cdk.custom-resources
 coverage==5.5
     # via pytest-cov
-distlib==0.3.1
+distlib==0.3.2
     # via virtualenv
 docutils==0.15.2
     # via awscli
@@ -494,19 +483,19 @@ filelock==3.0.12
     # via
     #   tox
     #   virtualenv
-flake8==3.9.0
+flake8==3.9.2
     # via -r requirements/dev.in
 freezegun==1.1.0
     # via -r requirements/dev.in
-google-api-core==1.26.3
+google-api-core==1.28.0
     # via google-api-python-client
-google-api-python-client==2.0.2
+google-api-python-client==2.7.0
     # via -r requirements/../function_requirements/common-requirements.in
 google-auth-httplib2==0.1.0
     # via google-api-python-client
 google-auth-oauthlib==0.4.4
     # via -r requirements/../function_requirements/common-requirements.in
-google-auth==1.28.0
+google-auth==1.30.1
     # via
     #   -r requirements/../function_requirements/common-requirements.in
     #   google-api-core
@@ -519,7 +508,7 @@ httplib2==0.19.1
     # via
     #   google-api-python-client
     #   google-auth-httplib2
-identify==2.2.2
+identify==2.2.7
     # via pre-commit
 idna==2.10
     # via requests
@@ -532,7 +521,7 @@ jmespath==0.10.0
     #   awslogs
     #   boto3
     #   botocore
-jsii==1.26.0
+jsii==1.30.0
     # via
     #   aws-cdk.assets
     #   aws-cdk.aws-apigateway
@@ -540,7 +529,6 @@ jsii==1.26.0
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-autoscaling-common
     #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-certificatemanager
     #   aws-cdk.aws-cloudformation
     #   aws-cdk.aws-cloudwatch
@@ -584,7 +572,6 @@ jsii==1.26.0
     #   aws-cdk.custom-resources
     #   aws-cdk.cx-api
     #   aws-cdk.region-info
-    #   aws-cdk.yaml-cfn
     #   constructs
 mccabe==0.6.1
     # via flake8
@@ -592,11 +579,11 @@ mock==4.0.3
     # via -r requirements/dev.in
 mypy-extensions==0.4.3
     # via black
-mysql-connector-python==8.0.23
+mysql-connector-python==8.0.25
     # via -r requirements/../function_requirements/opencast-op-counts.in
-nodeenv==1.5.0
+nodeenv==1.6.0
     # via pre-commit
-oauthlib==3.1.0
+oauthlib==3.1.1
     # via requests-oauthlib
 packaging==20.9
     # via
@@ -609,9 +596,9 @@ pluggy==0.13.1
     # via
     #   pytest
     #   tox
-pre-commit==2.11.1
+pre-commit==2.13.0
     # via -r requirements/dev.in
-protobuf==3.15.6
+protobuf==3.17.2
     # via
     #   google-api-core
     #   googleapis-common-protos
@@ -624,7 +611,6 @@ publication==0.0.3
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-autoscaling-common
     #   aws-cdk.aws-autoscaling-hooktargets
-    #   aws-cdk.aws-batch
     #   aws-cdk.aws-certificatemanager
     #   aws-cdk.aws-cloudformation
     #   aws-cdk.aws-cloudwatch
@@ -668,7 +654,6 @@ publication==0.0.3
     #   aws-cdk.custom-resources
     #   aws-cdk.cx-api
     #   aws-cdk.region-info
-    #   aws-cdk.yaml-cfn
     #   constructs
 py==1.10.0
     # via
@@ -684,19 +669,19 @@ pycodestyle==2.7.0
     # via flake8
 pyflakes==2.3.1
     # via flake8
-pyjwt==2.0.1
+pyjwt==2.1.0
     # via -r requirements/../function_requirements/common-requirements.in
 pyparsing==2.4.7
     # via
     #   httplib2
     #   packaging
-pytest-cov==2.11.1
+pytest-cov==2.12.1
     # via -r requirements/dev.in
 pytest-env==0.6.2
     # via -r requirements/dev.in
-pytest-mock==3.5.1
+pytest-mock==3.6.1
     # via -r requirements/dev.in
-pytest==6.2.2
+pytest==6.2.4
     # via
     #   -r requirements/dev.in
     #   pytest-cov
@@ -708,7 +693,7 @@ python-dateutil==2.8.1
     #   botocore
     #   freezegun
     #   jsii
-python-dotenv==0.16.0
+python-dotenv==0.17.1
     # via
     #   -r requirements/../function_requirements/common-requirements.in
     #   -r requirements/base.in
@@ -720,9 +705,9 @@ pyyaml==5.4.1
     # via
     #   awscli
     #   pre-commit
-regex==2021.3.17
+regex==2021.4.4
     # via black
-requests-mock==1.8.0
+requests-mock==1.9.3
     # via -r requirements/dev.in
 requests-oauthlib==1.3.0
     # via google-auth-oauthlib
@@ -737,11 +722,11 @@ rsa==4.7.2
     # via
     #   awscli
     #   google-auth
-s3transfer==0.3.6
+s3transfer==0.4.2
     # via
     #   awscli
     #   boto3
-six==1.15.0
+six==1.16.0
     # via
     #   google-api-core
     #   google-api-python-client
@@ -761,22 +746,19 @@ toml==0.10.2
     #   black
     #   pre-commit
     #   pytest
+    #   pytest-cov
     #   tox
-tox==3.23.0
+tox==3.23.1
     # via -r requirements/dev.in
-typed-ast==1.4.2
-    # via black
-typing-extensions==3.7.4.3
-    # via
-    #   black
-    #   jsii
+typing-extensions==3.10.0.0
+    # via jsii
 uritemplate==3.0.1
     # via google-api-python-client
-urllib3==1.26.4
+urllib3==1.26.5
     # via
     #   botocore
     #   requests
-virtualenv==20.4.3
+virtualenv==20.4.7
     # via
     #   pre-commit
     #   tox

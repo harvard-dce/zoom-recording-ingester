@@ -303,7 +303,6 @@ class Download:
             s3_files = {}
             segment_durations = {}
             for file in self.downloaded_files:
-                logger.warning(file)
                 segment = {
                     "filename": file.s3_filename,
                     "segment_num": file.segment_num,
