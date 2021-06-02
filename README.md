@@ -141,7 +141,21 @@ function updateZoomIngester() {
 
 ```
 
-### Slack integration setup
+### Slack integration setup (Optional)
+
+1. Go to <https://api.slack.com/apps>, log in if necessary, go to "Build" then "Your Apps", and click "Create New App". 
+1. Select "From scratch", give the app a name, and pick the Slack workspace to develop your app in. Then click "Create App" to create the app.
+1. You should now be on the "Settings" > "Basic Information" page for your app. Open "Add features and functionality".
+1. Click on "Interactive Components", then toggle "Interactivity" on. Paste the slack endpoint url into the "Request URL" filed. (This can be found in the CDK stack outputs and should end with `/slack`.) Save changes.
+1. Go to "Slash Commands" for the app and click "Create New Command". Enter `/zip` for the Command or an alternative of your choice. Paste the slack endpoint into the "Request URL" field and enter a short description and then save the new command.
+1. Go to "Permissions". Scroll down to "Scopes". Add the OAuth Scope "usergroups:read". (The "commands" scope should already be there.)
+1. Install the app in the workspace.
+1. Add the following environment variables to your `.env` file:
+
+	* In your apps "Basic Information", under "App Credentials", show the "Signing Secret", and copy/paste this into the ZIP .env file `SLACK_SIGNING_SECRET`.
+	* On the Permissons page. Copy/paste the "Bot User OAuth Token" into your .env file `SLACK_API_TOKEN`.
+	* Set `SLACK_ZIP_CHANNEL` to the name of the Slack channel in which you would like to allow usage of the Slack integration.
+	* Set `SLACK_ALLOWED_GROUPS` to a comma delimited list of Slack groups whose members will be allowed to use the integration.
 
 
 ### Setup Zoom webhook notifications (Optional)

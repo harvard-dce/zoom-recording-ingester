@@ -303,6 +303,7 @@ class Download:
             s3_files = {}
             segment_durations = {}
             for file in self.downloaded_files:
+                logger.warning(file)
                 segment = {
                     "filename": file.s3_filename,
                     "segment_num": file.segment_num,
@@ -462,7 +463,12 @@ class ZoomFile:
         self.recording_type = self.__standardized_recording_type(
             file_data["recording_type"]
         )
-        self.s3 = boto3.client("s3")
+
+    @property
+    def s3(self):
+        if not hasattr("_s3"):
+            self._s3 = boto3.client("s3")
+        return self._s3
 
     def __standardized_recording_type(self, name):
         """
@@ -611,7 +617,9 @@ class ZoomFile:
         )
         parts = []
         mpu = self.s3.create_multipart_upload(
-            Bucket=ZOOM_VIDEOS_BUCKET, Key=self.s3_filename, Metadata=metadata
+            Bucket=ZOOM_VIDEOS_BUCKET,
+            Key=self.s3_filename,
+            Metadata=metadata,
         )
 
         try:

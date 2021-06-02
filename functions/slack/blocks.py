@@ -219,7 +219,6 @@ def ingest_details(rec, schedule):
 
             if "oc_series_id" in ingest and on_demand:
                 ingest_details += f"> :arrow_right: Opencast Series: {ingest['oc_series_id']}\n"
-
     else:
         ingest_details = f"*Status* : {recording_status_txt}"
 
