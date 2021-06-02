@@ -19,7 +19,7 @@ aws-cdk.assets==1.95.1
     #   aws-cdk.aws-s3-assets
 aws-cdk.aws-apigateway==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-route53-targets
 aws-cdk.aws-apigatewayv2==1.95.1
     # via aws-cdk.aws-route53-targets
@@ -53,10 +53,10 @@ aws-cdk.aws-cloudformation==1.95.1
 aws-cdk.aws-cloudfront==1.95.1
     # via aws-cdk.aws-route53-targets
 aws-cdk.aws-cloudwatch-actions==1.95.1
-    # via -r requirements/base.in
+    # via -r base.in
 aws-cdk.aws-cloudwatch==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-applicationautoscaling
     #   aws-cdk.aws-autoscaling
@@ -73,7 +73,7 @@ aws-cdk.aws-cloudwatch==1.95.1
     #   aws-cdk.aws-stepfunctions
 aws-cdk.aws-codebuild==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-events-targets
 aws-cdk.aws-codecommit==1.95.1
     # via aws-cdk.aws-codebuild
@@ -86,10 +86,10 @@ aws-cdk.aws-cognito==1.95.1
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-route53-targets
 aws-cdk.aws-dynamodb==1.95.1
-    # via -r requirements/base.in
+    # via -r base.in
 aws-cdk.aws-ec2==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-batch
@@ -136,7 +136,7 @@ aws-cdk.aws-elasticloadbalancingv2==1.95.1
     #   aws-cdk.aws-route53-targets
     #   aws-cdk.aws-servicediscovery
 aws-cdk.aws-events-targets==1.95.1
-    # via -r requirements/base.in
+    # via -r base.in
 aws-cdk.aws-events==1.95.1
     # via
     #   aws-cdk.aws-codebuild
@@ -152,7 +152,7 @@ aws-cdk.aws-globalaccelerator==1.95.1
     # via aws-cdk.aws-route53-targets
 aws-cdk.aws-iam==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-applicationautoscaling
     #   aws-cdk.aws-autoscaling
@@ -215,7 +215,7 @@ aws-cdk.aws-kms==1.95.1
     #   aws-cdk.aws-ssm
 aws-cdk.aws-lambda==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-autoscaling-hooktargets
     #   aws-cdk.aws-certificatemanager
@@ -230,7 +230,7 @@ aws-cdk.aws-lambda==1.95.1
     #   aws-cdk.custom-resources
 aws-cdk.aws-logs==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-codebuild
     #   aws-cdk.aws-ec2
@@ -259,7 +259,7 @@ aws-cdk.aws-s3-assets==1.95.1
     #   aws-cdk.aws-logs
 aws-cdk.aws-s3==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-cloudformation
     #   aws-cdk.aws-codebuild
@@ -289,7 +289,7 @@ aws-cdk.aws-sns-subscriptions==1.95.1
     #   aws-cdk.aws-events-targets
 aws-cdk.aws-sns==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.aws-autoscaling
     #   aws-cdk.aws-autoscaling-hooktargets
     #   aws-cdk.aws-cloudformation
@@ -324,7 +324,7 @@ aws-cdk.cloud-assembly-schema==1.95.1
     #   aws-cdk.cx-api
 aws-cdk.core==1.95.1
     # via
-    #   -r requirements/base.in
+    #   -r base.in
     #   aws-cdk.assets
     #   aws-cdk.aws-apigateway
     #   aws-cdk.aws-applicationautoscaling
@@ -404,17 +404,17 @@ aws-cdk.region-info==1.95.1
 aws-cdk.yaml-cfn==1.95.1
     # via aws-cdk.aws-codebuild
 aws-lambda-logging==0.1.1
-    # via -r requirements/../function_requirements/common-requirements.in
+    # via -r ../function_requirements/common-requirements.in
 awscli==1.19.43
-    # via -r requirements/base.in
+    # via -r base.in
 awslogs==0.14.0
-    # via -r requirements/base.in
+    # via -r base.in
 black==20.8b1
-    # via -r requirements/dev.in
+    # via -r dev.in
 boto3==1.17.40
     # via
-    #   -r requirements/../function_requirements/common-requirements.in
-    #   -r requirements/base.in
+    #   -r ../function_requirements/common-requirements.in
+    #   -r base.in
     #   awslogs
 botocore==1.20.43
     # via
@@ -495,20 +495,20 @@ filelock==3.0.12
     #   tox
     #   virtualenv
 flake8==3.9.0
-    # via -r requirements/dev.in
+    # via -r dev.in
 freezegun==1.1.0
-    # via -r requirements/dev.in
+    # via -r dev.in
 google-api-core==1.26.3
     # via google-api-python-client
 google-api-python-client==2.0.2
-    # via -r requirements/../function_requirements/common-requirements.in
+    # via -r ../function_requirements/common-requirements.in
 google-auth-httplib2==0.1.0
     # via google-api-python-client
 google-auth-oauthlib==0.4.4
-    # via -r requirements/../function_requirements/common-requirements.in
+    # via -r ../function_requirements/common-requirements.in
 google-auth==1.28.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.in
+    #   -r ../function_requirements/common-requirements.in
     #   google-api-core
     #   google-api-python-client
     #   google-auth-httplib2
@@ -526,7 +526,7 @@ idna==2.10
 iniconfig==1.1.1
     # via pytest
 invoke==1.5.0
-    # via -r requirements/base.in
+    # via -r base.in
 jmespath==0.10.0
     # via
     #   awslogs
@@ -589,11 +589,11 @@ jsii==1.26.0
 mccabe==0.6.1
     # via flake8
 mock==4.0.3
-    # via -r requirements/dev.in
+    # via -r dev.in
 mypy-extensions==0.4.3
     # via black
 mysql-connector-python==8.0.23
-    # via -r requirements/../function_requirements/opencast-op-counts.in
+    # via -r ../function_requirements/opencast-op-counts.in
 nodeenv==1.5.0
     # via pre-commit
 oauthlib==3.1.0
@@ -610,7 +610,7 @@ pluggy==0.13.1
     #   pytest
     #   tox
 pre-commit==2.11.1
-    # via -r requirements/dev.in
+    # via -r dev.in
 protobuf==3.15.6
     # via
     #   google-api-core
@@ -685,20 +685,20 @@ pycodestyle==2.7.0
 pyflakes==2.3.1
     # via flake8
 pyjwt==2.0.1
-    # via -r requirements/../function_requirements/common-requirements.in
+    # via -r ../function_requirements/common-requirements.in
 pyparsing==2.4.7
     # via
     #   httplib2
     #   packaging
 pytest-cov==2.11.1
-    # via -r requirements/dev.in
+    # via -r dev.in
 pytest-env==0.6.2
-    # via -r requirements/dev.in
+    # via -r dev.in
 pytest-mock==3.5.1
-    # via -r requirements/dev.in
+    # via -r dev.in
 pytest==6.2.2
     # via
-    #   -r requirements/dev.in
+    #   -r dev.in
     #   pytest-cov
     #   pytest-env
     #   pytest-mock
@@ -710,11 +710,11 @@ python-dateutil==2.8.1
     #   jsii
 python-dotenv==0.16.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.in
-    #   -r requirements/base.in
+    #   -r ../function_requirements/common-requirements.in
+    #   -r base.in
 pytz==2021.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.in
+    #   -r ../function_requirements/common-requirements.in
     #   google-api-core
 pyyaml==5.4.1
     # via
@@ -723,13 +723,13 @@ pyyaml==5.4.1
 regex==2021.3.17
     # via black
 requests-mock==1.8.0
-    # via -r requirements/dev.in
+    # via -r dev.in
 requests-oauthlib==1.3.0
     # via google-auth-oauthlib
 requests==2.25.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.in
-    #   -r requirements/base.in
+    #   -r ../function_requirements/common-requirements.in
+    #   -r base.in
     #   google-api-core
     #   requests-mock
     #   requests-oauthlib
@@ -753,7 +753,7 @@ six==1.15.0
     #   tox
     #   virtualenv
 tabulate==0.8.9
-    # via -r requirements/base.in
+    # via -r base.in
 termcolor==1.1.0
     # via awslogs
 toml==0.10.2
@@ -763,7 +763,7 @@ toml==0.10.2
     #   pytest
     #   tox
 tox==3.23.0
-    # via -r requirements/dev.in
+    # via -r dev.in
 typed-ast==1.4.2
     # via black
 typing-extensions==3.7.4.3
@@ -772,7 +772,7 @@ typing-extensions==3.7.4.3
     #   jsii
 uritemplate==3.0.1
     # via google-api-python-client
-urllib3==1.26.4
+urllib3==1.26.5
     # via
     #   botocore
     #   requests
