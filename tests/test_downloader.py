@@ -5,7 +5,7 @@ from os.path import dirname, join
 import pytest
 from importlib import import_module
 import requests_mock
-from datetime import datetime
+from datetime import datetime, timedelta
 from pytz import timezone
 from mock import patch
 import unittest
@@ -22,7 +22,9 @@ LOCAL_TIME_ZONE = os.getenv("LOCAL_TIME_ZONE")
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 
 tz = timezone(LOCAL_TIME_ZONE)
-FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
+utc_now = datetime.utcnow().replace(tzinfo=timezone("UTC"))
+FROZEN_TIME_UTC = datetime.strftime(utc_now, TIMESTAMP_FORMAT)
+FROZEN_TIME = datetime.strftime(utc_now.astimezone(tz), TIMESTAMP_FORMAT)
 
 SAMPLE_MESSAGE_BODY = {
     "zip_id": "abc",
@@ -209,11 +211,11 @@ class TestHandler(unittest.TestCase):
 
 
 """
-Tests for class Downloader
+Tests for class Download
 """
 
 
-class TestDownloader(unittest.TestCase):
+class TestDownload(unittest.TestCase):
     @pytest.fixture(autouse=True)
     def initfixtures(self, mocker):
         self.mocker = mocker
@@ -451,6 +453,78 @@ class TestDownloader(unittest.TestCase):
 
                 log_message = cm.output[-1].split(":")[-1]
                 assert log_message == expected_msg
+
+    @freeze_time(FROZEN_TIME_UTC)
+    def test_upload_message(self):
+        file_info = {
+            "recording_type": "active_speaker",
+            "recording_start": "start",
+            "recording_end": "end",
+            "ffprobe_bytes": 100,
+            "ffprobe_seconds": 5,
+        }
+
+        self.mocker.patch.object(
+            downloader.ZoomFile,
+            "s3_filename",
+            "mock_s3_filename",
+        )
+
+        self.mocker.patch.object(
+            downloader.Download,
+            "host_name",
+            "instructor",
+        )
+
+        received_time = (
+            datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT)
+            - timedelta(minutes=1)
+        ).strftime(TIMESTAMP_FORMAT)
+        data = {
+            "uuid": "mock_uuid",
+            "zoom_series_id": 123,
+            "topic": "Statistics",
+            "start_time": FROZEN_TIME_UTC,
+            "received_time": received_time,
+            "zip_id": "tracking_id",
+        }
+
+        dl = downloader.Download(None, data)
+        dl.downloaded_files = [downloader.ZoomFile(file_info, 1)]
+        dl.opencast_series_id = "mock_series_id"
+        msg = dl.upload_message
+
+        assert msg == {
+            "uuid": "mock_uuid",
+            "zoom_series_id": 123,
+            "opencast_series_id": "mock_series_id",
+            "oc_title": "Lecture",
+            "host_name": "instructor",
+            "topic": "Statistics",
+            "created": FROZEN_TIME_UTC,
+            "created_local": FROZEN_TIME,
+            "webhook_received_time": received_time,
+            "zip_id": "tracking_id",
+            "s3_files": {
+                "active_speaker": {
+                    "segments": [
+                        {
+                            "ffprobe_bytes": 100,
+                            "ffprobe_seconds": 5,
+                            "filename": "mock_s3_filename",
+                            "recording_end": "end",
+                            "recording_start": "start",
+                            "segment_num": 1,
+                        }
+                    ],
+                    "view_bytes": 100,
+                    "view_seconds": 5,
+                }
+            },
+            "total_file_bytes": 100,
+            "total_file_seconds": 5,
+            "total_segment_seconds": 5,
+        }
 
     def test_upload_to_s3(self):
 

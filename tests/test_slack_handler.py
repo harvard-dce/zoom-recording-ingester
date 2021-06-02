@@ -397,10 +397,8 @@ def test_valid_slack_request(mocker):
 
     cases = [
         # Reject requests older than 5 minutes
-        (301, "signature=", False),
-        # Invalid signature
+        (301, "placeholder", False),
         (0, "invalid_signature", False),
-        # Valid secret
         (0, valid_signature, True),
     ]
 

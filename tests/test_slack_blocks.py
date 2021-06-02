@@ -97,6 +97,9 @@ def test_slack_results_blocks(mocker):
         },
     ]
 
+    results_blocks = blocks.slack_results_blocks(mock_id, {})
+    assert results_blocks[-1]["text"]["text"] == "No recent recordings found."
+
 
 def test_results_schedule_block(mocker):
     mock_id = 1234567890
