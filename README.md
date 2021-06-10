@@ -228,7 +228,7 @@ The easiest way to find a listing of the endpoints for your stack is to run `inv
 
 	{
 	    "uuid": "ajXp112QmuoKj4854875==",
-	    "oc-series-id": "20210299999",
+	    "oc_series_id": "20210299999",
 	    "allow_multiple_ingests": false
 	}
 	
