@@ -159,6 +159,14 @@ def handler(event, context):
 
 
 def update_zoom_status(zoom_event, payload, zip_id):
+
+    try:
+        validate_payload(payload, recording_completed=False)
+    except BadWebhookData:
+        return resp_204(
+            f"Ignore {zoom_event}. Payload missing required field."
+        )
+
     mid = payload["object"]["id"]
     uuid = payload["object"]["uuid"]
 
@@ -187,8 +195,8 @@ def update_zoom_status(zoom_event, payload, zip_id):
         status,
         meeting_id=payload["object"]["id"],
         recording_id=payload["object"]["uuid"],
-        recording_start_time=payload["object"].get("start_time"),
-        topic=payload["object"].get("topic"),
+        recording_start_time=payload["object"]["start_time"],
+        topic=payload["object"]["topic"],
         origin="webhook_notification",
     )
 
@@ -200,17 +208,20 @@ def update_zoom_status(zoom_event, payload, zip_id):
     return resp_204(msg)
 
 
-def validate_payload(payload):
+def validate_payload(payload, recording_completed=True):
     required_payload_fields = ["object"]
+
     required_object_fields = [
         "id",  # zoom series id
-        "uuid",  # unique id of the meeting instance,
-        "host_id",
+        "uuid",  # unique id of the meeting instance
         "topic",
         "start_time",
-        "duration",  # duration in minutes
-        "recording_files",
     ]
+
+    if recording_completed:
+        required_object_fields.extend(
+            ["host_id", "duration", "recording_files"]
+        )
 
     try:
         for field in required_payload_fields:
