@@ -82,7 +82,9 @@ class ZipApi(core.Construct):
         self.api.add_api_key("ZoomIngesterApiKey")
 
         self.new_recording_resource = self.create_resource(
-            "new_recording", webhook_function, "POST"
+            "new_recording",
+            webhook_function,
+            "POST",
         )
 
         self.ingest_resource = self.create_resource(
@@ -98,11 +100,15 @@ class ZipApi(core.Construct):
         )
 
         self.schedule_update_resource = self.create_resource(
-            "schedule_update", schedule_update_function, "POST"
+            "schedule_update",
+            schedule_update_function,
+            "POST",
         )
 
         self.status_query_resource = self.create_resource(
-            "status", status_query_function, "GET"
+            "status",
+            status_query_function,
+            "GET",
         )
 
         self.slack_resource = self.create_resource(
@@ -119,7 +125,8 @@ class ZipApi(core.Construct):
             )
 
         on_demand_function.add_environment(
-            "WEBHOOK_ENDPOINT_URL", endpoint_url("new_recording")
+            "WEBHOOK_ENDPOINT_URL",
+            endpoint_url("new_recording"),
         )
 
         core.CfnOutput(
@@ -203,7 +210,8 @@ class ZipApi(core.Construct):
         self, resource_name, lambda_function, http_method, cors_options=None
     ):
         resource = self.api.root.add_resource(
-            resource_name, default_cors_preflight_options=cors_options
+            resource_name,
+            default_cors_preflight_options=cors_options,
         )
         resource.add_method(
             http_method,

@@ -62,7 +62,7 @@ class TestHandler(unittest.TestCase):
         self.context = MockContext(aws_request_id="mock-zip_id")
         self.mock_sqs = unittest.mock.Mock()
         self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
-        self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
+        self.mocker.patch.object(downloader, "sqs", self.mock_sqs)
 
     def test_no_messages_available(self):
         self.mocker.patch.object(
@@ -222,7 +222,7 @@ class TestDownload(unittest.TestCase):
         self.context = MockContext(aws_request_id="mock-zip_id")
         self.mock_sqs = unittest.mock.Mock()
         self.mock_sqs().get_queue_by_name.return_value = "mock_queue_name"
-        self.mocker.patch.object(downloader, "sqs_resource", self.mock_sqs)
+        self.mocker.patch.object(downloader, "sqs", self.mock_sqs)
 
     def local_hour(self, timestamp):
         hour = (
@@ -456,6 +456,8 @@ class TestDownload(unittest.TestCase):
 
     @freeze_time(FROZEN_TIME_UTC)
     def test_upload_message(self):
+        self.mocker.patch.object(downloader, "s3")
+
         file_info = {
             "recording_type": "active_speaker",
             "recording_start": "start",
@@ -649,7 +651,7 @@ def test_zoom_filename(mocker):
 
 def test_handler_duration_check(handler, mocker):
     downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 1
-    mocker.patch.object(downloader, "sqs_resource", mocker.Mock())
+    mocker.patch.object(downloader, "sqs", mocker.Mock())
     mocker.patch.object(
         downloader.Download, "oc_series_found", mocker.Mock(return_value=False)
     )
@@ -690,7 +692,7 @@ def test_handler_duration_check(handler, mocker):
 
 def test_ignore_duration_check_for_on_demand(handler, mocker):
     downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 1
-    mocker.patch.object(downloader, "sqs_resource", mocker.Mock())
+    mocker.patch.object(downloader, "sqs", mocker.Mock())
     mocker.patch.object(
         downloader.Download, "oc_series_found", mocker.Mock(return_value=False)
     )
