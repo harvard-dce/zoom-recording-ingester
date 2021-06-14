@@ -21,11 +21,19 @@ import logging
 
 logger = logging.getLogger()
 
-SLACK_SIGNING_SECRET = env("SLACK_SIGNING_SECRET")
-STACK_NAME = env("STACK_NAME")
-SLACK_ZIP_CHANNEL = env("SLACK_ZIP_CHANNEL")
-SLACK_API_TOKEN = env("SLACK_API_TOKEN")
-SLACK_ALLOWED_GROUPS = env("SLACK_ALLOWED_GROUPS").split(",")
+
+def getenv(var, required=True):
+    val = env(var)
+    if not val and required:
+        raise Exception(f"Missing required environment variable {val}")
+    return val
+
+
+SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET")
+STACK_NAME = getenv("STACK_NAME")
+SLACK_ZIP_CHANNEL = getenv("SLACK_ZIP_CHANNEL", required=False)
+SLACK_API_TOKEN = getenv("SLACK_API_TOKEN")
+SLACK_ALLOWED_GROUPS = getenv("SLACK_ALLOWED_GROUPS").split(",")
 ZOOM_MID_LENGTHS = [10, 11]
 
 
@@ -69,7 +77,6 @@ def slack_help_response(cmd):
 
 @setup_logging
 def handler(event, context):
-
     logger.info(event)
     try:
         if not valid_slack_request(event):
@@ -128,7 +135,11 @@ def handler(event, context):
         )
 
     # Channel validation
-    if channel_name != "directmessage" and channel_name != SLACK_ZIP_CHANNEL:
+    dm = channel_name == "directmessage"
+    authorized_channel = SLACK_ZIP_CHANNEL and (
+        channel_name == SLACK_ZIP_CHANNEL
+    )
+    if not dm and not authorized_channel:
         logger.warning(
             f"Channel name {channel_name} not in authorized slack channels."
         )

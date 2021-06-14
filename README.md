@@ -157,6 +157,8 @@ function updateZoomIngester() {
 	* Set `SLACK_ZIP_CHANNEL` to the name of the Slack channel in which you would like to allow usage of the Slack integration.
 	* Set `SLACK_ALLOWED_GROUPS` to a comma delimited list of Slack groups whose members will be allowed to use the integration.
 
+1. Run `invoke stack.update` and `invoke deploy.slack --do-release` to release new values of the environment variables.
+
 
 ### Setup Zoom webhook notifications (Optional)
 
