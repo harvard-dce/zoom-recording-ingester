@@ -220,6 +220,11 @@ def deploy_status(ctx, do_release=False):
 
 
 @task(pre=[production_failsafe])
+def deploy_slack(ctx, do_release=False):
+    deploy(ctx, names.SLACK_FUNCTION, do_release)
+
+
+@task(pre=[production_failsafe])
 def deploy_on_demand(ctx, do_release=False):
     deploy(ctx, names.ON_DEMAND_FUNCTION, do_release)
 
@@ -750,6 +755,7 @@ deploy_ns.add_task(deploy_uploader, "uploader")
 deploy_ns.add_task(deploy_opencast_op_counts, "opencast-op-counts")
 deploy_ns.add_task(deploy_on_demand, "on-demand")
 deploy_ns.add_task(deploy_status, "status-query")
+deploy_ns.add_task(deploy_slack, "slack")
 ns.add_collection(deploy_ns)
 
 exec_ns = Collection("exec")
@@ -904,7 +910,13 @@ def __build_function(ctx, func, upload_to_s3=False):
 
     mkdir(join(build_path, "utils"))
     modules = ["utils/" + f.split(".")[0] for f in listdir("functions/utils")]
-    modules.append(func)
+    if func == names.SLACK_FUNCTION:
+        mkdir(join(build_path, "slack"))
+        modules.extend(
+            ["slack/" + f.split(".")[0] for f in listdir("functions/slack")]
+        )
+    else:
+        modules.append(func)
     for module in modules:
         module_path = join(dirname(__file__), f"functions/{module}.py")
         module_dist_path = join(build_path, f"{module}.py")

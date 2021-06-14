@@ -23,9 +23,7 @@ FROZEN_UPDATE_DATE, FROZEN_UPDATE_TIME = status.ts_to_date_and_seconds(
 
 @freeze_time(FROZEN_TIME)
 def test_set_pipeline_status_webhook_received(mocker):
-    mocker.patch.object(
-        status, "zip_status_table", mocker.Mock(return_value="status_table")
-    )
+    mocker.patch.object(status, "status_table", "mock_status_table")
     mock_update_status_table = mocker.patch.object(
         status,
         "update_status_table",
@@ -43,7 +41,7 @@ def test_set_pipeline_status_webhook_received(mocker):
     )
 
     mock_update_status_table.assert_called_with(
-        "status_table",
+        "mock_status_table",
         "zip_id",
         (
             "set update_date=:update_date, "
@@ -77,9 +75,7 @@ def test_set_pipeline_status_webhook_received(mocker):
 
 @freeze_time(FROZEN_TIME)
 def test_set_pipeline_status_update_status(mocker):
-    mocker.patch.object(
-        status, "zip_status_table", mocker.Mock(return_value="status_table")
-    )
+    mocker.patch.object(status, "status_table", "mock_status_table")
     mock_update_status_table = mocker.patch.object(
         status,
         "update_status_table",
@@ -91,7 +87,7 @@ def test_set_pipeline_status_update_status(mocker):
     )
 
     mock_update_status_table.assert_called_with(
-        "status_table",
+        "mock_status_table",
         "zip_id",
         (
             "set update_date=:update_date, "
@@ -210,14 +206,13 @@ def test_conditional_update_failed(mocker):
     mock_table = dynamo.Table("MOCK_TABLE")
     stubber = Stubber(mock_table.meta.client)
     stubber.add_client_error(
-        "update_item", service_error_code="ConditionalCheckFailedException"
+        "update_item",
+        service_error_code="ConditionalCheckFailedException",
     )
     stubber.add_client_error("update_item", service_error_code="AnyOtherError")
     stubber.activate()
 
-    mocker.patch.object(
-        status, "zip_status_table", mocker.Mock(return_value=mock_table)
-    )
+    mocker.patch.object(status, "status_table", mock_table)
 
     # Expect no exception for ClientError code
     # ConditionalCheckFailedException
@@ -235,11 +230,7 @@ def test_conditional_update_failed(mocker):
 
 
 def test_status_by_seconds_invalid(mocker):
-    mocker.patch.object(
-        status,
-        "zip_status_table",
-        mocker.Mock(return_value="status_table"),
-    )
+    mocker.patch.object(status, "status_table", "mock_status_table")
 
     # Must be an hour or less
     with pytest.raises(status.InvalidStatusQuery):
@@ -251,11 +242,7 @@ def test_status_by_seconds_invalid(mocker):
 )
 def test_status_by_seconds_day_overlap(mocker):
 
-    mocker.patch.object(
-        status,
-        "zip_status_table",
-        mocker.Mock(return_value="status_table"),
-    )
+    mocker.patch.object(status, "status_table", "mock_status_table")
 
     mock_recent_items = mocker.patch.object(status, "request_recent_items")
     mocker.patch.object(status, "format_status_records", mocker.Mock())
@@ -264,9 +251,11 @@ def test_status_by_seconds_day_overlap(mocker):
 
     mock_recent_items.assert_has_calls(
         calls=[
-            mocker.call("status_table", "2021-02-14", 0),
+            mocker.call("mock_status_table", "2021-02-14", 0),
             mocker.call(
-                "status_table", "2021-02-13", status.SECONDS_PER_DAY - 9
+                "mock_status_table",
+                "2021-02-13",
+                status.SECONDS_PER_DAY - 9,
             ),
         ]
     )
@@ -277,11 +266,7 @@ def test_status_by_seconds_day_overlap(mocker):
 )
 def test_status_by_seconds_no_overlap(mocker):
 
-    mocker.patch.object(
-        status,
-        "zip_status_table",
-        mocker.Mock(return_value="status_table"),
-    )
+    mocker.patch.object(status, "status_table", "mock_status_table")
 
     mock_recent_items = mocker.patch.object(status, "request_recent_items")
     mocker.patch.object(status, "format_status_records", mocker.Mock())
@@ -290,7 +275,7 @@ def test_status_by_seconds_no_overlap(mocker):
 
     mock_recent_items.assert_has_calls(
         calls=[
-            mocker.call("status_table", "2021-02-14", 49),
+            mocker.call("mock_status_table", "2021-02-14", 49),
         ]
     )
 

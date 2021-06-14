@@ -49,9 +49,8 @@ class ZoomDownloadLinkError(Exception):
     pass
 
 
-# abstraction for unit testing
-def sqs_resource():
-    return boto3.resource("sqs")
+sqs = boto3.resource("sqs")
+s3 = boto3.resource("s3")
 
 
 @setup_logging
@@ -63,7 +62,6 @@ def handler(event, context):
 
     ignore_schedule = event.get("ignore_schedule", False)
     override_series_id = event.get("override_series_id")
-    sqs = sqs_resource()
 
     # try DOWNLOAD_MESSAGES_PER_INVOCATION number of times to retrieve
     # a recording that matches the class schedule
@@ -462,7 +460,6 @@ class ZoomFile:
         self.recording_type = self.__standardized_recording_type(
             file_data["recording_type"]
         )
-        self.s3 = boto3.client("s3")
 
     def __standardized_recording_type(self, name):
         """
@@ -532,7 +529,7 @@ class ZoomFile:
 
     def valid_mp4_file(self):
         # TODO: if file not found, add appropriate error
-        url = self.s3.generate_presigned_url(
+        url = s3.generate_presigned_url(
             "get_object",
             Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": self.s3_filename},
         )
@@ -588,7 +585,7 @@ class ZoomFile:
         return Path(self.zoom_filename).suffix[1:]
 
     def upload_part(self, upload_id, part_number, chunk):
-        part = self.s3.upload_part(
+        part = s3.upload_part(
             Body=chunk,
             Bucket=ZOOM_VIDEOS_BUCKET,
             Key=self.s3_filename,
@@ -610,8 +607,10 @@ class ZoomFile:
             {"uploading file to S3": self.s3_filename, "metadata": metadata}
         )
         parts = []
-        mpu = self.s3.create_multipart_upload(
-            Bucket=ZOOM_VIDEOS_BUCKET, Key=self.s3_filename, Metadata=metadata
+        mpu = s3.create_multipart_upload(
+            Bucket=ZOOM_VIDEOS_BUCKET,
+            Key=self.s3_filename,
+            Metadata=metadata,
         )
 
         try:
@@ -636,7 +635,7 @@ class ZoomFile:
             # complete_multipart_upload requires parts in order by part number
             parts = sorted(parts, key=lambda i: i["PartNumber"])
 
-            self.s3.complete_multipart_upload(
+            s3.complete_multipart_upload(
                 Bucket=ZOOM_VIDEOS_BUCKET,
                 Key=self.s3_filename,
                 UploadId=mpu["UploadId"],
@@ -649,7 +648,7 @@ class ZoomFile:
                     self.s3_filename, e
                 )
             )
-            self.s3.abort_multipart_upload(
+            s3.abort_multipart_upload(
                 Bucket=ZOOM_VIDEOS_BUCKET,
                 Key=self.s3_filename,
                 UploadId=mpu["UploadId"],

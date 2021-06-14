@@ -18,6 +18,7 @@ class ZipApi(core.Construct):
         on_demand_function,
         schedule_update_function,
         status_query_function,
+        slack_function,
         ingest_allowed_ips,
     ):
         super().__init__(scope, id)
@@ -81,7 +82,9 @@ class ZipApi(core.Construct):
         self.api.add_api_key("ZoomIngesterApiKey")
 
         self.new_recording_resource = self.create_resource(
-            "new_recording", webhook_function, "POST"
+            "new_recording",
+            webhook_function,
+            "POST",
         )
 
         self.ingest_resource = self.create_resource(
@@ -97,11 +100,21 @@ class ZipApi(core.Construct):
         )
 
         self.schedule_update_resource = self.create_resource(
-            "schedule_update", schedule_update_function, "POST"
+            "schedule_update",
+            schedule_update_function,
+            "POST",
         )
 
         self.status_query_resource = self.create_resource(
-            "status", status_query_function, "GET"
+            "status",
+            status_query_function,
+            "GET",
+        )
+
+        self.slack_resource = self.create_resource(
+            "slack",
+            slack_function,
+            "POST",
         )
 
         def endpoint_url(resource_name):
@@ -112,7 +125,8 @@ class ZipApi(core.Construct):
             )
 
         on_demand_function.add_environment(
-            "WEBHOOK_ENDPOINT_URL", endpoint_url("new_recording")
+            "WEBHOOK_ENDPOINT_URL",
+            endpoint_url("new_recording"),
         )
 
         core.CfnOutput(
@@ -145,6 +159,13 @@ class ZipApi(core.Construct):
 
         core.CfnOutput(
             self,
+            "SlackEndpoint",
+            export_name=f"{stack_name}-{names.SLACK_ENDPOINT}-url",
+            value=endpoint_url("slack"),
+        )
+
+        core.CfnOutput(
+            self,
             "WebhookResourceId",
             export_name=f"{stack_name}-{names.WEBHOOK_ENDPOINT}-resource-id",
             value=self.new_recording_resource.resource_id,
@@ -173,6 +194,13 @@ class ZipApi(core.Construct):
 
         core.CfnOutput(
             self,
+            "SlackResourceId",
+            export_name=f"{stack_name}-{names.SLACK_ENDPOINT}-resource-id",
+            value=self.slack_resource.resource_id,
+        )
+
+        core.CfnOutput(
+            self,
             "RestApiId",
             export_name=f"{stack_name}-{names.REST_API}-id",
             value=self.api.rest_api_id,
@@ -182,7 +210,8 @@ class ZipApi(core.Construct):
         self, resource_name, lambda_function, http_method, cors_options=None
     ):
         resource = self.api.root.add_resource(
-            resource_name, default_cors_preflight_options=cors_options
+            resource_name,
+            default_cors_preflight_options=cors_options,
         )
         resource.add_method(
             http_method,

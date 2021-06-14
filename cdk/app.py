@@ -62,6 +62,7 @@ stack_props = {
     "default_publisher": default_publisher,
     "override_publisher": getenv("OVERRIDE_PUBLISHER", required=False),
     "override_contributor": getenv("OVERRIDE_CONTRIBUTOR", required=False),
+    "oc_cluster_name": getenv("OC_CLUSTER_NAME"),
     "oc_workflow": getenv("OC_WORKFLOW"),
     "oc_flavor": getenv("OC_FLAVOR"),
     "oc_track_upload_max": getenv("OC_TRACK_UPLOAD_MAX"),
@@ -78,6 +79,10 @@ stack_props = {
     ),
     "gsheets_doc_id": getenv("GSHEETS_DOC_ID"),
     "gsheets_sheet_name": getenv("GSHEETS_SHEET_NAME"),
+    "slack_signing_secret": getenv("SLACK_SIGNING_SECRET"),
+    "slack_zip_channel": getenv("SLACK_ZIP_CHANNEL"),
+    "slack_api_token": getenv("SLACK_API_TOKEN"),
+    "slack_allowed_groups": getenv("SLACK_ALLOWED_GROUPS"),
 }
 
 app = core.App()

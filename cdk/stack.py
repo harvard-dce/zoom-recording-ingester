@@ -7,6 +7,7 @@ from .status_table import ZipStatus
 from .function import (
     ZipDownloaderFunction,
     ZipOnDemandFunction,
+    ZipSlackQueryFunction,
     ZipUploaderFunction,
     ZipOpCountsFunction,
     ZipWebhookFunction,
@@ -40,6 +41,7 @@ class ZipStack(core.Stack):
         default_publisher,
         override_publisher,
         override_contributor,
+        oc_cluster_name,
         oc_workflow,
         oc_flavor,
         oc_track_upload_max,
@@ -54,6 +56,10 @@ class ZipStack(core.Stack):
         project_git_url,
         gsheets_doc_id,
         gsheets_sheet_name,
+        slack_signing_secret,
+        slack_zip_channel,
+        slack_allowed_groups,
+        slack_api_token,
         **kwargs
     ) -> None:
 
@@ -103,6 +109,7 @@ class ZipStack(core.Stack):
             "StatusFunction",
             name=names.STATUS_FUNCTION,
             lambda_code_bucket=lambda_code_bucket,
+            memory_size=500,
             environment={
                 "STACK_NAME": self.stack_name,
                 "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
@@ -110,6 +117,28 @@ class ZipStack(core.Stack):
         )
         # grant status query function permissions
         pipeline_status.table.grant_read_write_data(status_query.function)
+
+        slack = ZipSlackQueryFunction(
+            self,
+            "SlackFunction",
+            name=names.SLACK_FUNCTION,
+            lambda_code_bucket=lambda_code_bucket,
+            environment={
+                "STACK_NAME": self.stack_name,
+                "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
+                "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
+                "SLACK_SIGNING_SECRET": slack_signing_secret,
+                "LOCAL_TIME_ZONE": local_time_zone,
+                "SLACK_ZIP_CHANNEL": slack_zip_channel,
+                "SLACK_ALLOWED_GROUPS": slack_allowed_groups,
+                "SLACK_API_TOKEN": slack_api_token,
+                "OC_CLUSTER_NAME": oc_cluster_name,
+            },
+            handler="slack.handler.handler",
+        )
+        # grant slack function permissions
+        pipeline_status.table.grant_read_write_data(slack.function)
+        schedule.table.grant_read_write_data(slack.function)
 
         on_demand = ZipOnDemandFunction(
             self,
@@ -251,6 +280,7 @@ class ZipStack(core.Stack):
             webhook_function=webhook.function,
             schedule_update_function=schedule_update.function,
             status_query_function=status_query.function,
+            slack_function=slack.function,
             ingest_allowed_ips=ingest_allowed_ips,
         )
 

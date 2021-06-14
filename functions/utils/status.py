@@ -20,6 +20,15 @@ SECONDS_PER_DAY = 86400
 SECONDS_PER_HOUR = 3600
 
 
+# If PIPELINE_STATUS_TABLE is not set we assume the status table
+# is not being used. (For example tasks.py imports utils but doesn't
+# use the status table)
+status_table = None
+if PIPELINE_STATUS_TABLE:
+    dynamodb = boto3.resource("dynamodb")
+    status_table = dynamodb.Table(PIPELINE_STATUS_TABLE)
+
+
 class InvalidStatusQuery(Exception):
     pass
 
@@ -45,13 +54,6 @@ class PipelineStatus(Enum):
     UPLOADER_FAILED = auto()
 
 
-def zip_status_table():
-    if PIPELINE_STATUS_TABLE:
-        dynamodb = boto3.resource("dynamodb")
-        return dynamodb.Table(PIPELINE_STATUS_TABLE)
-    return None
-
-
 def ts_to_date_and_seconds(ts):
     date = ts.strftime(DATE_FORMAT)
     t = ts.time()
@@ -64,7 +66,6 @@ def ts_to_date_and_seconds(ts):
 
 
 def record_exists(zip_id):
-    status_table = zip_status_table()
     r = status_table.get_item(Key={"zip_id": zip_id})
     return "Item" in r
 
@@ -85,7 +86,6 @@ def set_pipeline_status(
     utcnow = datetime.utcnow()
     today, seconds = ts_to_date_and_seconds(utcnow)
     try:
-        status_table = zip_status_table()
         update_expression = (
             "set update_date=:update_date, "
             "update_time=:update_time, "
@@ -126,7 +126,7 @@ def set_pipeline_status(
             # When a recording enters the ZIP pipeline, for simplicity,
             # only the first status tracking update includes additional metadata
             # such as the meeting_id or origin. Subsequent status updates report
-            # status using a unique correlation id.
+            # status using a unique zip_id.
             # Prevent adding records to dynamo status table for recordings
             # that haven't been tracked since the beginning of the pipeline and
             # therefore don't contain enough useful metadata. (This happens when
@@ -211,7 +211,6 @@ def update_status_table(
 
 
 def status_by_mid(mid):
-    status_table = zip_status_table()
     r = status_table.query(
         IndexName="mid_index",
         KeyConditionExpression=Key("meeting_id").eq(mid),
@@ -226,7 +225,6 @@ def status_by_mid(mid):
 
 
 def status_by_seconds(request_seconds):
-    status_table = zip_status_table()
     now = datetime.utcnow()
     logger.info(
         f"Retrieving records updated within the last {request_seconds} seconds"
@@ -294,8 +292,14 @@ def format_status_records(items):
             "status": item["pipeline_state"],
             "origin": item["origin"],
         }
-        if "reason" in item:
-            zip_ingest["reason"] = item["reason"]
+
+        for optional_field in [
+            "reason",
+            "ingest_request_time",
+            "oc_series_id",
+        ]:
+            if optional_field in item:
+                zip_ingest[optional_field] = item[optional_field]
 
         meetings[mid]["recordings"][rec_id]["zip_ingests"].append(zip_ingest)
 
