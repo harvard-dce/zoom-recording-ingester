@@ -162,10 +162,8 @@ def update_zoom_status(zoom_event, payload, zip_id):
 
     try:
         validate_payload(payload, recording_completed=False)
-    except BadWebhookData:
-        return resp_204(
-            f"Ignore {zoom_event}. Payload missing required field."
-        )
+    except BadWebhookData as e:
+        return resp_204(f"Ignore {zoom_event}. {e}")
 
     mid = payload["object"]["id"]
     uuid = payload["object"]["uuid"]
