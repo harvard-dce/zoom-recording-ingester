@@ -182,19 +182,22 @@ def update_zoom_status(zoom_event, payload, zip_id):
     if not status:
         return resp_204(f"Unhandled zoom event {zoom_event}")
 
-    set_pipeline_status(
+    updated = set_pipeline_status(
         zip_id,
         status,
         meeting_id=payload["object"]["id"],
         recording_id=payload["object"]["uuid"],
-        recording_start_time=payload["object"]["start_time"],
-        topic=payload["object"]["topic"],
+        recording_start_time=payload["object"].get("start_time"),
+        topic=payload["object"].get("topic"),
         origin="webhook_notification",
     )
 
-    return resp_204(
-        f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {status.name}"
-    )
+    if updated:
+        msg = f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {status.name}"
+    else:
+        msg = f"Ignored status update for Zoom MID {mid} meeting uuid {uuid}"
+
+    return resp_204(msg)
 
 
 def validate_payload(payload):

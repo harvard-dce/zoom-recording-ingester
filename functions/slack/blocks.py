@@ -215,7 +215,7 @@ def ingest_details(rec, schedule):
             else:
                 ingest_details += "*Automated Ingest*\n"
 
-            ingest_details += f"> Status: {pipeline_status_description(ingest, on_demand, match)} (since {update_time})\n"
+            ingest_details += f"> Status: {pipeline_status_description(ingest, on_demand, match)} (updated {update_time})\n"
 
             if "oc_series_id" in ingest and on_demand:
                 ingest_details += f"> :arrow_right: Opencast Series: {ingest['oc_series_id']}\n"

@@ -183,12 +183,14 @@ def set_pipeline_status(
         if error["Code"] == "ConditionalCheckFailedException":
             # Don't treat failed conditional update as an error
             logger.info(f"Conditional check ({condition_expression}) failed.")
-            return
+            return False
         logger.exception(f"{error['Code']}: {error['Message']}")
         raise
     except Exception as e:
         logger.exception(f"Something went wrong updating pipeline status: {e}")
         raise
+
+    return True
 
 
 # Isolated for unit testing
