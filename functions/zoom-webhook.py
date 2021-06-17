@@ -107,30 +107,37 @@ def handler(event, context):
         origin = "webhook_notification"
         zip_id = f"auto-ingest-{payload['object']['uuid']}"
 
-    if zoom_event in STATUS_EVENT_TYPES:
-        return update_zoom_status(zoom_event, payload, zip_id)
-
     try:
-        validate_payload(payload)
-        # after payload validation, can be sure required object fields exist
+        validate_payload(payload, zoom_event)
+        status = event_status(zoom_event, zip_id)
+        if not status:
+            return resp_204("Recording status ignored.")
+
         set_pipeline_status(
             zip_id,
-            PipelineStatus.WEBHOOK_RECEIVED,
+            status,
             meeting_id=payload["object"]["id"],
             recording_id=payload["object"]["uuid"],
             recording_start_time=payload["object"]["start_time"],
             topic=payload["object"]["topic"],
             origin=origin,
         )
-        validate_recording_files(payload["object"]["recording_files"])
+
+        if zoom_event in INGEST_EVENT_TYPES:
+            validate_recording_files(payload["object"]["recording_files"])
+        else:
+            return resp_204("Recording status updated.")
     except BadWebhookData as e:
-        set_pipeline_status(
-            zip_id,
-            PipelineStatus.WEBHOOK_FAILED,
-            reason="Bad webhook data",
-            origin=origin,
-        )
-        return resp_400(f"Bad data: {str(e)}")
+        if zoom_event in INGEST_EVENT_TYPES:
+            set_pipeline_status(
+                zip_id,
+                PipelineStatus.WEBHOOK_FAILED,
+                reason="Bad webhook data",
+                origin=origin,
+            )
+            return resp_400(f"Bad data: {str(e)}")
+        else:
+            return resp_204(f"Ignore {zoom_event}. {e}")
     except NoMp4Files as e:
         set_pipeline_status(
             zip_id,
@@ -158,55 +165,23 @@ def handler(event, context):
     }
 
 
-def update_zoom_status(zoom_event, payload, zip_id):
-
-    try:
-        validate_payload(payload, recording_completed=False)
-    except BadWebhookData as e:
-        return resp_204(f"Ignore {zoom_event}. {e}")
-
-    mid = payload["object"]["id"]
-    uuid = payload["object"]["uuid"]
-
-    status = None
+def event_status(zoom_event, zip_id):
+    if zoom_event in INGEST_EVENT_TYPES:
+        return PipelineStatus.WEBHOOK_RECEIVED
     if zoom_event == "recording.started" or zoom_event == "recording.resumed":
-        status = ZoomStatus.RECORDING_IN_PROGRESS
+        return ZoomStatus.RECORDING_IN_PROGRESS
     elif zoom_event == "recording.paused":
-        status = ZoomStatus.RECORDING_PAUSED
+        return ZoomStatus.RECORDING_PAUSED
     elif zoom_event == "recording.stopped":
-        status = ZoomStatus.RECORDING_STOPPED
+        return ZoomStatus.RECORDING_STOPPED
     elif zoom_event == "meeting.ended" or zoom_event == "webinar.ended":
         if record_exists(zip_id):
-            status = ZoomStatus.RECORDING_PROCESSING
-        else:
-            return resp_204(
-                f"Ignore {zoom_event} for meeting id {mid} uuid {uuid} "
-                "not recorded"
-            )
+            return ZoomStatus.RECORDING_PROCESSING
 
-    # This should not happen
-    if not status:
-        return resp_204(f"Unhandled zoom event {zoom_event}")
-
-    updated = set_pipeline_status(
-        zip_id,
-        status,
-        meeting_id=payload["object"]["id"],
-        recording_id=payload["object"]["uuid"],
-        recording_start_time=payload["object"]["start_time"],
-        topic=payload["object"]["topic"],
-        origin="webhook_notification",
-    )
-
-    if updated:
-        msg = f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {status.name}"
-    else:
-        msg = f"Ignored status update for Zoom MID {mid} meeting uuid {uuid}"
-
-    return resp_204(msg)
+    return None
 
 
-def validate_payload(payload, recording_completed=True):
+def validate_payload(payload, zoom_event):
     required_payload_fields = ["object"]
 
     required_object_fields = [
@@ -216,7 +191,7 @@ def validate_payload(payload, recording_completed=True):
         "start_time",
     ]
 
-    if recording_completed:
+    if zoom_event in INGEST_EVENT_TYPES:
         required_object_fields.extend(
             ["host_id", "duration", "recording_files"]
         )
