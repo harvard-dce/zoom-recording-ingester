@@ -9,6 +9,7 @@ from importlib import import_module
 from datetime import datetime
 from uuid import UUID
 from hashlib import md5
+from utils import PipelineStatus
 
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 
@@ -144,7 +145,9 @@ def test_workflow_initiated(handler, mocker, upload_message, caplog):
 def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=3)
+        uploader,
+        "get_current_upload_count",
+        mocker.Mock(return_value=3),
     )
     message = upload_message()
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
@@ -153,6 +156,34 @@ def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
     uploader.process_upload = mocker.Mock(return_value=None)
     handler(uploader, {})
     assert "No workflow initiated." == caplog.messages[-1]
+
+
+def test_invalid_oc_series_id(
+    handler, mocker, upload_message, mock_uploader_set_pipeline_status
+):
+    mocker.patch.object(uploader, "sqs", mocker.Mock())
+    mocker.patch.object(
+        uploader,
+        "get_current_upload_count",
+        mocker.Mock(return_value=3),
+    )
+    message = upload_message({"zip_id": "mock_zip_id"})
+    uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
+        message
+    ]
+
+    uploader.process_upload = mocker.Mock(
+        side_effect=uploader.InvalidOpencastSeriesId
+    )
+
+    with pytest.raises(uploader.InvalidOpencastSeriesId):
+        handler(uploader, {})
+
+    mock_uploader_set_pipeline_status.assert_called_with(
+        "mock_zip_id",
+        PipelineStatus.UPLOADER_FAILED,
+        reason="Invalid Opencast series id.",
+    )
 
 
 def test_first_ingest_mpid_from_uuid(mocker):
