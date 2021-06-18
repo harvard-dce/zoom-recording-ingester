@@ -706,6 +706,36 @@ def test_file_param_generator_multi_set():
                 ("mediaUri", (None, "signed-screen-001.mp4")),
             ],
         ],
+        # Make sure having 3 segments doesn't break the file param generator!
+        [
+            {
+                "active_speaker": [
+                    "speaker-000.mp4",
+                    "speaker-001.mp4",
+                    "speaker-002.mp4",
+                ],
+                "shared_screen_with_speaker_view": [
+                    "screen-000.mp4",
+                    "screen-001.mp4",
+                    "screen-002.mp4",
+                ],
+            },
+            # params should include both files for both views
+            [
+                ("flavor", (None, "multipart/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-000.mp4")),
+                ("flavor", (None, "multipart/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-001.mp4")),
+                ("flavor", (None, "multipart/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-002.mp4")),
+                ("flavor", (None, "presentation/chunked+source")),
+                ("mediaUri", (None, "signed-screen-000.mp4")),
+                ("flavor", (None, "presentation/chunked+source")),
+                ("mediaUri", (None, "signed-screen-001.mp4")),
+                ("flavor", (None, "presentation/chunked+source")),
+                ("mediaUri", (None, "signed-screen-002.mp4")),
+            ],
+        ],
     ]
     for incoming, expected in cases:
         fpg = uploader.FileParamGenerator(s3_filenames=incoming)

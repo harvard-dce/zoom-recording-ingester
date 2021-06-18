@@ -445,7 +445,7 @@ class FileParamGenerator(object):
 
     def __init__(self, s3_filenames):
         self.s3_filenames = s3_filenames
-        self._used_views = []
+        self._used_views = set()
         self._params = []
         # whatever the max length of any view's list of files is the number
         # of sets of files we're dealing with. When hosts stop/start a meeting
@@ -522,7 +522,7 @@ class FileParamGenerator(object):
                     ),
                 ]
             )
-            self._used_views.append(view)
+        self._used_views.add(view)
 
     def _generate_presigned_url(self, s3_filename):
         logger.info(
