@@ -114,6 +114,9 @@ def handler(event, context):
     global ADMIN_TOKEN
     ADMIN_TOKEN = get_admin_token()
 
+    global DOWNLOAD_TOKEN
+    DOWNLOAD_TOKEN = dl_data["download_token"]
+
     try:
         # upload matched recording to S3 and verify MP4 integrity
         dl.upload_to_s3()
@@ -486,9 +489,9 @@ class ZoomFile:
     def zoom_filename(self):
         if not hasattr(self, "_zoom_filename"):
             # First request is for retrieving the filename
-            url = f"{self.file_data['download_url']}?zak={ADMIN_TOKEN}"
+            url = f"{self.file_data['download_url']}?access_token={DOWNLOAD_TOKEN}"
             r = requests.get(url, allow_redirects=False)
-            r.raise_for_status
+            r.raise_for_status()
 
             # If the file has been deleted or if the request is not authorized,
             # Zoom will return 200 and an HTML error page.
@@ -571,11 +574,11 @@ class ZoomFile:
     def stream(self):
         if not hasattr(self, "_stream"):
             logger.info("requesting {}".format(self.file_data["download_url"]))
-            url = "{}?zak={}".format(
-                self.file_data["download_url"], ADMIN_TOKEN
+            url = "{}?access_token={}".format(
+                self.file_data["download_url"], DOWNLOAD_TOKEN
             )
             r = requests.get(url, stream=True)
-            r.raise_for_status
+            r.raise_for_status()
 
             self._stream = r
 

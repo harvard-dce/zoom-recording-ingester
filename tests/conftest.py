@@ -93,6 +93,7 @@ def webhook_payload(aws_request_id):
                 "allow_multiple_ingests": False,
             },
             "event": "recording.completed",
+            "download_token": "mock_download_token",
         }
         if on_demand:
             payload["event"] = "on.demand.ingest"
@@ -109,6 +110,7 @@ def webhook_payload(aws_request_id):
 def sqs_message_from_webhook_payload():
     def _message_maker(frozen_time, payload):
         zoom_event = payload["event"]
+        payload = webhook_payload()["payload"]
         payload_obj = payload["payload"]["object"]
         if zoom_event == "on.demand.ingest":
             zip_id = payload["payload"]["zip_id"]
@@ -125,9 +127,10 @@ def sqs_message_from_webhook_payload():
             "received_time": frozen_time,
             "zip_id": zip_id,
             "allow_multiple_ingests": False,
-            "on_demand_ingest": True
-            if zoom_event == "on.demand.ingest"
-            else False,
+            "on_demand_ingest": (
+                True if zoom_event == "on.demand.ingest" else False
+            ),
+            "download_token": payload["download_token"],
         }
 
         if zoom_event == "recording.completed":
