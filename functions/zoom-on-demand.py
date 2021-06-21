@@ -88,7 +88,10 @@ def handler(event, context):
                 quote(recording_uuid, safe=""),
                 safe="",
             )
-            zoom_endpoint = f"meetings/{double_urlencoded_uuid}/recordings"
+            zoom_endpoint = (
+                f"meetings/{double_urlencoded_uuid}/recordings"
+                "?include_fields=download_access_token&ttl=3600"
+            )
             r = zoom_api_request(zoom_endpoint)
             recording_data = r.json()
         except requests.HTTPError as e:
@@ -131,9 +134,8 @@ def handler(event, context):
 
     webhook_data = {
         "event": "on.demand.ingest",
-        "payload": {
-            "object": recording_data,
-        },
+        "payload": {"object": recording_data},
+        "download_token": recording_data["download_access_token"],
     }
 
     # series id is an optional param. if not present the download function will
