@@ -134,7 +134,9 @@ def handler(event, context):
 
     webhook_data = {
         "event": "on.demand.ingest",
-        "payload": {"object": recording_data},
+        "payload": {
+            "object": recording_data,
+        },
         "download_token": recording_data["download_access_token"],
     }
 
