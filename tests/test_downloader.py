@@ -633,7 +633,7 @@ def test_zoom_filename(mocker):
     for http_resp, expected, msg in cases:
         header = http_resp["header"] if "header" in http_resp else {}
         content = http_resp["content"] if "content" in http_resp else b""
-        downloader.DOWNLOAD_TOKEN = "super-secret-admin-token"
+        downloader.DOWNLOAD_TOKEN = "mock_download_token"
         with requests_mock.mock() as req_mock:
             req_mock.get(
                 requests_mock.ANY,
