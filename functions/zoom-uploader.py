@@ -397,7 +397,7 @@ class Upload:
             ("created", (None, self.created)),
             ("language", (None, "en")),
             ("seriesDCCatalog", (None, self.series_catalog)),
-            ("source", (None, "Zoom Ingester Pipeline")),
+            ("source", (None, escape(f"ZIP-{self.meeting_uuid}"))),
             ("spatial", (None, f"Zoom {self.zoom_series_id}")),
         ]
 
