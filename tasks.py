@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
+from uuid import uuid4
 from functions.utils import (
     getenv,
     zoom_api_request,
@@ -392,6 +393,7 @@ def exec_webhook(ctx, uuid, oc_series_id=None):
         event_body = {
             "event": "on.demand.ingest",
             "payload": {
+                "zip_id": f"on-demand-{str(uuid4())}",
                 "on_demand_series_id": oc_series_id.strip(),
                 "object": data,
             },

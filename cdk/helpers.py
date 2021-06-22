@@ -1,18 +1,11 @@
 import boto3
 import jmespath
 from os import getenv as env
-from functions.utils import zoom_api_request
 from functions.utils import getenv
 
 AWS_PROFILE = env("AWS_PROFILE")
 if AWS_PROFILE:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
-
-
-def zoom_admin_id():
-    # get admin user id from admin email
-    r = zoom_api_request(f"users/{getenv('ZOOM_ADMIN_EMAIL')}")
-    return r.json()["id"]
 
 
 def vpc_components():
