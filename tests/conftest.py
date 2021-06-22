@@ -46,7 +46,7 @@ def upload_message(mocker):
             "webhook_received_time": "2020-03-10T01:58:03Z",
             "zip_id": "1234",
         }
-        if message_data is not None:
+        if message_data:
             msg.update(message_data)
         return mocker.Mock(body=json.dumps(msg))
 

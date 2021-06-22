@@ -107,23 +107,31 @@ def handler(event, context):
         origin = "webhook_notification"
         zip_id = f"auto-ingest-{payload['object']['uuid']}"
 
-    if zoom_event in STATUS_EVENT_TYPES:
-        return update_zoom_status(zoom_event, payload, zip_id)
-
     try:
-        validate_payload(payload)
-        # after payload validation, can be sure required object fields exist
+        validate_payload(payload, zoom_event)
+        status = event_status(zoom_event, zip_id)
+        if not status:
+            return resp_204("Recording status ignored.")
+
         set_pipeline_status(
             zip_id,
-            PipelineStatus.WEBHOOK_RECEIVED,
+            status,
             meeting_id=payload["object"]["id"],
             recording_id=payload["object"]["uuid"],
             recording_start_time=payload["object"]["start_time"],
             topic=payload["object"]["topic"],
             origin=origin,
         )
+
+        if zoom_event not in INGEST_EVENT_TYPES:
+            return resp_204("Recording status updated.")
+
         validate_recording_files(payload["object"]["recording_files"])
+
     except BadWebhookData as e:
+        if zoom_event not in INGEST_EVENT_TYPES:
+            return resp_204(f"Ignore {zoom_event}. {e}")
+
         set_pipeline_status(
             zip_id,
             PipelineStatus.WEBHOOK_FAILED,
@@ -158,56 +166,36 @@ def handler(event, context):
     }
 
 
-def update_zoom_status(zoom_event, payload, zip_id):
-    mid = payload["object"]["id"]
-    uuid = payload["object"]["uuid"]
-
-    status = None
+def event_status(zoom_event, zip_id):
+    if zoom_event in INGEST_EVENT_TYPES:
+        return PipelineStatus.WEBHOOK_RECEIVED
     if zoom_event == "recording.started" or zoom_event == "recording.resumed":
-        status = ZoomStatus.RECORDING_IN_PROGRESS
+        return ZoomStatus.RECORDING_IN_PROGRESS
     elif zoom_event == "recording.paused":
-        status = ZoomStatus.RECORDING_PAUSED
+        return ZoomStatus.RECORDING_PAUSED
     elif zoom_event == "recording.stopped":
-        status = ZoomStatus.RECORDING_STOPPED
+        return ZoomStatus.RECORDING_STOPPED
     elif zoom_event == "meeting.ended" or zoom_event == "webinar.ended":
         if record_exists(zip_id):
-            status = ZoomStatus.RECORDING_PROCESSING
-        else:
-            return resp_204(
-                f"Ignore {zoom_event} for meeting id {mid} uuid {uuid} "
-                "not recorded"
-            )
+            return ZoomStatus.RECORDING_PROCESSING
 
-    # This should not happen
-    if not status:
-        return resp_204(f"Unhandled zoom event {zoom_event}")
-
-    set_pipeline_status(
-        zip_id,
-        status,
-        meeting_id=payload["object"]["id"],
-        recording_id=payload["object"]["uuid"],
-        recording_start_time=payload["object"]["start_time"],
-        topic=payload["object"]["topic"],
-        origin="webhook_notification",
-    )
-
-    return resp_204(
-        f"Updated status of Zoom MID {mid} meeting uuid {uuid} to {status.name}"
-    )
+    return None
 
 
-def validate_payload(payload):
+def validate_payload(payload, zoom_event):
     required_payload_fields = ["object"]
+
     required_object_fields = [
         "id",  # zoom series id
-        "uuid",  # unique id of the meeting instance,
-        "host_id",
+        "uuid",  # unique id of the meeting instance
         "topic",
         "start_time",
-        "duration",  # duration in minutes
-        "recording_files",
     ]
+
+    if zoom_event in INGEST_EVENT_TYPES:
+        required_object_fields.extend(
+            ["host_id", "duration", "recording_files"]
+        )
 
     try:
         for field in required_payload_fields:

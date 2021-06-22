@@ -14,6 +14,7 @@ from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
 from functions.utils import (
+    getenv,
     zoom_api_request,
     GSheetsAuth,
     schedule_json_to_dynamo,
@@ -795,15 +796,6 @@ ns.add_collection(logs_ns)
 
 
 ###############################################################################
-
-
-def getenv(var, required=True):
-    val = env(var)
-    if val is not None and val.strip() == "":
-        val = None
-    if required and val is None:
-        raise Exit("{} not defined".format(var))
-    return val
 
 
 def profile_arg():

@@ -152,10 +152,12 @@ function updateZoomIngester() {
 1. Install the app in the workspace.
 1. Add the following environment variables to your `.env` file:
 
+    * On the Permissions page. Copy/paste the "Bot User OAuth Token" into your .env file `SLACK_API_TOKEN`.
 	* In your apps "Basic Information", under "App Credentials", show the "Signing Secret", and copy/paste this into the ZIP .env file `SLACK_SIGNING_SECRET`.
-	* On the Permissons page. Copy/paste the "Bot User OAuth Token" into your .env file `SLACK_API_TOKEN`.
 	* Set `SLACK_ZIP_CHANNEL` to the name of the Slack channel in which you would like to allow usage of the Slack integration.
 	* Set `SLACK_ALLOWED_GROUPS` to a comma delimited list of Slack groups whose members will be allowed to use the integration.
+
+1. Run `invoke stack.update` and `invoke deploy.slack --do-release` to release new values of the environment variables.
 
 
 ### Setup Zoom webhook notifications (Optional)

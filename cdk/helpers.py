@@ -1,19 +1,12 @@
 import boto3
 import jmespath
-from os import getenv as _getenv
+from os import getenv as env
 from functions.utils import zoom_api_request
+from functions.utils import getenv
 
-AWS_PROFILE = _getenv("AWS_PROFILE")
+AWS_PROFILE = env("AWS_PROFILE")
 if AWS_PROFILE:
     boto3.setup_default_session(profile_name=AWS_PROFILE)
-
-
-# wrap the default getenv so we can enforce required vars
-def getenv(param_name, required=True):
-    val = _getenv(param_name)
-    if required and (val is None or val.strip() == ""):
-        raise Exception(f"Missing environment variable {param_name}")
-    return val
 
 
 def zoom_admin_id():

@@ -85,7 +85,7 @@ def test_slack_results_blocks(mocker):
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": "*Automated Ingest*\n> Status: Ignored by ZIP. No opencast series match (since 05/19/21 9:10AM)\n",
+                "text": "*Automated Ingest*\n> Status: Ignored by ZIP. No opencast series match (updated 05/19/21 9:10AM)\n",
             },
         },
         {

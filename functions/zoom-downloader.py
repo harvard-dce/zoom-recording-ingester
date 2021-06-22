@@ -125,7 +125,6 @@ def handler(event, context):
             reason=f"permanent failure: {e}",
         )
         message = dl.send_to_deadletter_queue(e)
-        set_pipeline_status(dl.data["zip_id"], PipelineStatus.SENT_TO_UPLOADER)
         download_message.delete()
         logger.error({"Error": e, "Sent to deadletter": message})
         raise
@@ -139,13 +138,15 @@ def handler(event, context):
 
     # send a message to the opencast uploader
     message = dl.send_to_uploader_queue()
+    set_pipeline_status(dl.data["zip_id"], PipelineStatus.SENT_TO_UPLOADER)
     download_message.delete()
     logger.info({"sqs_message": message})
 
 
 def retrieve_message(queue):
     messages = queue.receive_messages(
-        MaxNumberOfMessages=1, VisibilityTimeout=700
+        MaxNumberOfMessages=1,
+        VisibilityTimeout=700,
     )
     if not messages:
         return None

@@ -73,7 +73,7 @@ def test_validate_payload(webhook_payload):
 
     # should not raise an exception
     minimum_valid_payload = webhook_payload()["payload"]
-    webhook.validate_payload(minimum_valid_payload)
+    webhook.validate_payload(minimum_valid_payload, "recording_completed")
 
     missing_recording_files = webhook_payload()["payload"]
     del missing_recording_files["object"]["recording_files"]
@@ -91,7 +91,7 @@ def test_validate_payload(webhook_payload):
 
     for payload, msg in payloads:
         with pytest.raises(webhook.BadWebhookData) as exc_info:
-            webhook.validate_payload(payload)
+            webhook.validate_payload(payload, "recording.completed")
         assert exc_info.match(msg), msg
 
 
@@ -168,7 +168,9 @@ def test_on_demand_no_delay(
 
 
 def test_update_recording_started_paused(
-    mocker, mock_webhook_set_pipeline_status
+    handler,
+    mocker,
+    mock_webhook_set_pipeline_status,
 ):
     mock_payload = {
         "object": {
@@ -184,13 +186,13 @@ def test_update_recording_started_paused(
         ("recording.paused", webhook.ZoomStatus.RECORDING_PAUSED),
     ]
     for event, expected_status in cases:
-        webhook.update_zoom_status(
-            event,
-            mock_payload,
-            "mock_zip_id",
+        handler(
+            webhook,
+            {"body": json.dumps({"event": event, "payload": mock_payload})},
         )
+
         mock_webhook_set_pipeline_status.assert_called_with(
-            "mock_zip_id",
+            "auto-ingest-mock_uuid",
             expected_status,
             meeting_id=mock_payload["object"]["id"],
             recording_id=mock_payload["object"]["uuid"],
@@ -200,9 +202,11 @@ def test_update_recording_started_paused(
         )
 
 
-def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
+def test_update_meeting_ended(
+    handler, mocker, mock_webhook_set_pipeline_status
+):
     #    mock_webhook_set_pipeline_status.reset_mock()
-    mock_zip_id = "mock_zip_id"
+    mock_zip_id = "auto-ingest-mock_uuid"
     mock_payload = {
         "object": {
             "id": "12345678",
@@ -212,6 +216,10 @@ def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
         }
     }
 
+    event = {
+        "body": json.dumps({"event": "meeting.ended", "payload": mock_payload})
+    }
+
     # Case 1 - Update a tracked meeting.
     mocker.patch.object(
         webhook,
@@ -219,11 +227,7 @@ def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
         mocker.Mock(return_value=True),
     )
 
-    webhook.update_zoom_status(
-        "meeting.ended",
-        mock_payload,
-        mock_zip_id,
-    )
+    handler(webhook, event)
 
     mock_webhook_set_pipeline_status.assert_called_once_with(
         mock_zip_id,
@@ -244,4 +248,6 @@ def test_update_meeting_ended(mocker, mock_webhook_set_pipeline_status):
         "record_exists",
         mocker.Mock(return_value=False),
     )
+
+    handler(webhook, event)
     mock_webhook_set_pipeline_status.assert_not_called()

@@ -1,3 +1,4 @@
+import sys
 import json
 import boto3
 import requests
@@ -60,6 +61,10 @@ class OpencastConnectionError(Exception):
     pass
 
 
+class InvalidOpencastSeriesId(Exception):
+    pass
+
+
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
     logger.info({"url": url, "kwargs": kwargs})
@@ -107,11 +112,14 @@ def handler(event, context):
     )
 
     upload_data = None
+    final_status = None
+    reason = None
     try:
         upload_data = json.loads(upload_message.body)
         logger.debug({"processing": upload_data})
         set_pipeline_status(
-            upload_data["zip_id"], PipelineStatus.UPLOADER_RECEIVED
+            upload_data["zip_id"],
+            PipelineStatus.UPLOADER_RECEIVED,
         )
 
         wf_id = process_upload(upload_data)
@@ -119,27 +127,25 @@ def handler(event, context):
         if wf_id:
             logger.info(f"Workflow id {wf_id} initiated.")
             # only ingest one per invocation
-            set_pipeline_status(
-                upload_data["zip_id"], PipelineStatus.SENT_TO_OPENCAST
-            )
+            final_status = PipelineStatus.SENT_TO_OPENCAST
         else:
+            final_status = PipelineStatus.IGNORED
             logger.info("No workflow initiated.")
-    except OpencastConnectionError as e:
-        logger.exception(e)
-        if upload_data and "zip_id" in upload_data:
-            set_pipeline_status(
-                upload_data["zip_id"],
-                PipelineStatus.UPLOADER_FAILED,
-                reason="Unable to reach Opencast.",
-            )
-        raise
     except Exception as e:
         logger.exception(e)
-        if upload_data and "zip_id" in upload_data:
-            set_pipeline_status(
-                upload_data["zip_id"], PipelineStatus.UPLOADER_FAILED
-            )
+        final_status = PipelineStatus.UPLOADER_FAILED
+        if sys.exc_info()[0] == OpencastConnectionError:
+            reason = "Unable to reach Opencast."
+        elif sys.exc_info()[0] == InvalidOpencastSeriesId:
+            reason = "Invalid Opencast series id."
         raise
+    finally:
+        if upload_data and "zip_id" in upload_data and final_status:
+            set_pipeline_status(
+                upload_data["zip_id"],
+                final_status,
+                reason=reason,
+            )
 
 
 def minutes_in_pipeline(webhook_received_time):
@@ -201,7 +207,6 @@ class Upload:
                     )
                     set_pipeline_status(
                         self.data["zip_id"],
-                        self.meeting_uuid,
                         PipelineStatus.IGNORED,
                         reason="Already in opencast",
                     )
@@ -364,7 +369,12 @@ class Upload:
         )
 
         endpoint = f"/series/{self.opencast_series_id}.json"
-        resp = oc_api_request("GET", endpoint)
+
+        try:
+            resp = oc_api_request("GET", endpoint)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == "404":
+                raise InvalidOpencastSeriesId
 
         logger.debug({"series_catalog": resp.text})
 
@@ -494,7 +504,7 @@ class FileParamGenerator(object):
         :param view:
         :return:
         """
-
+        logger.info(f"Selected {view} as {flavor}")
         if view in self._used_views:
             # we already got this view
             return
@@ -557,5 +567,8 @@ class FileParamGenerator(object):
 
         if not self._has_presenter():
             raise RuntimeError("Unable to find a presenter view")
+
+        if not self._has_presentation():
+            logger.info("Unable to find a secondary view")
 
         return self._params

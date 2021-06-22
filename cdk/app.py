@@ -79,10 +79,10 @@ stack_props = {
     ),
     "gsheets_doc_id": getenv("GSHEETS_DOC_ID"),
     "gsheets_sheet_name": getenv("GSHEETS_SHEET_NAME"),
-    "slack_signing_secret": getenv("SLACK_SIGNING_SECRET"),
-    "slack_zip_channel": getenv("SLACK_ZIP_CHANNEL"),
-    "slack_api_token": getenv("SLACK_API_TOKEN"),
-    "slack_allowed_groups": getenv("SLACK_ALLOWED_GROUPS"),
+    "slack_signing_secret": getenv("SLACK_SIGNING_SECRET", required=False),
+    "slack_zip_channel": getenv("SLACK_ZIP_CHANNEL", required=False),
+    "slack_api_token": getenv("SLACK_API_TOKEN", required=False),
+    "slack_allowed_groups": getenv("SLACK_ALLOWED_GROUPS", required=False),
 }
 
 app = core.App()
