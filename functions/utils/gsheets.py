@@ -130,7 +130,9 @@ class GSheet:
 
 
 def schedule_json_to_dynamo(
-    dynamo_table_name, json_file=None, schedule_data=None
+    dynamo_table_name,
+    json_file=None,
+    schedule_data=None,
 ):
     if json_file is not None:
         with open(json_file, "r") as file:
@@ -141,9 +143,8 @@ def schedule_json_to_dynamo(
                 return
     elif schedule_data is None:
         raise Exception(
-            "{} called with no json_file or schedule_data args".format(
-                sys._getframe().f_code.co_name
-            )
+            f"{sys._getframe().f_code.co_name} called with "
+            "no json_file or schedule_data args"
         )
 
     try:
@@ -237,13 +238,7 @@ def schedule_csv_to_dynamo(dynamo_table_name, filepath):
 
         # value might look like "MW", "TR" or "MWF"
         days_value = row["day"].strip()
-        if len(days_value) > 1 and " " not in days_value:
-            days = list(days_value)
-        else:
-            split_by = " "
-            if "," in days_value:
-                split_by = ","
-            days = [day.strip() for day in days_value.split(split_by)]
+        days = list(days_value.replace(",", "").replace(" ", ""))
 
         for day in days:
             if day not in valid_days:

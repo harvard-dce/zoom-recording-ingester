@@ -40,6 +40,16 @@ def test_schedule_successful_parsing(mocker):
             "opencast_series_id": "20210161616",
             "zoom_series_id": "555555555",
         },
+        "876876876": {
+            "course_code": "ECON E-10A",
+            "events": [
+                {"day": "M", "time": "11:00", "title": "Lecture"},
+                {"day": "T", "time": "11:00", "title": "Lecture"},
+                {"day": "R", "time": "11:00", "title": "Lecture"},
+            ],
+            "opencast_series_id": "20210187678",
+            "zoom_series_id": "876876876",
+        },
         "123123123": {
             "course_code": "MATH E-55",
             "events": [
