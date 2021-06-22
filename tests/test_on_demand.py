@@ -91,6 +91,7 @@ def test_on_demand_happy_trail(handler, mocker):
         "topic": "test topic",
         "start_time": datetime.now().strftime(TIMESTAMP_FORMAT),
         "recording_files": [{"status": "completed"}, {"status": "completed"}],
+        "download_access_token": "mock_download_token",
     }
     mock_zoom_api_request = mocker.Mock(return_value=mock_zoom_resp)
     mocker.patch.object(on_demand, "zoom_api_request", mock_zoom_api_request)
@@ -116,7 +117,8 @@ def test_on_demand_ingest_not_accepted(handler, mocker):
         "recording_files": [
             {"status": "completed"},
             {"status": "completed"},
-        ]
+        ],
+        "download_access_token": "mock_download_token",
     }
     mock_zoom_api_request = mocker.Mock(return_value=mock_zoom_resp)
     mocker.patch.object(on_demand, "zoom_api_request", mock_zoom_api_request)
