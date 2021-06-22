@@ -123,21 +123,22 @@ def handler(event, context):
             origin=origin,
         )
 
-        if zoom_event in INGEST_EVENT_TYPES:
-            validate_recording_files(payload["object"]["recording_files"])
-        else:
+        if zoom_event not in INGEST_EVENT_TYPES:
             return resp_204("Recording status updated.")
+
+        validate_recording_files(payload["object"]["recording_files"])
+
     except BadWebhookData as e:
-        if zoom_event in INGEST_EVENT_TYPES:
-            set_pipeline_status(
-                zip_id,
-                PipelineStatus.WEBHOOK_FAILED,
-                reason="Bad webhook data",
-                origin=origin,
-            )
-            return resp_400(f"Bad data: {str(e)}")
-        else:
+        if zoom_event not in INGEST_EVENT_TYPES:
             return resp_204(f"Ignore {zoom_event}. {e}")
+
+        set_pipeline_status(
+            zip_id,
+            PipelineStatus.WEBHOOK_FAILED,
+            reason="Bad webhook data",
+            origin=origin,
+        )
+        return resp_400(f"Bad data: {str(e)}")
     except NoMp4Files as e:
         set_pipeline_status(
             zip_id,

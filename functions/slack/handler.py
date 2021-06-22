@@ -1,9 +1,9 @@
 from utils import (
     setup_logging,
     status_by_mid,
+    getenv,
 )
 import json
-from os import getenv as env
 from urllib.parse import parse_qs
 import time
 import hmac
@@ -20,14 +20,6 @@ from .blocks import (
 import logging
 
 logger = logging.getLogger()
-
-
-def getenv(var, required=True):
-    val = env(var)
-    if not val and required:
-        raise Exception(f"Missing required environment variable {val}")
-    return val
-
 
 SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET")
 STACK_NAME = getenv("STACK_NAME")

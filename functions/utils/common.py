@@ -46,6 +46,14 @@ class ZoomApiRequestError(Exception):
     pass
 
 
+# wrap the default getenv so we can enforce required vars
+def getenv(var, required=True):
+    val = env(var)
+    if required and not val:
+        raise Exception(f"Missing environment variable {val}")
+    return val
+
+
 def setup_logging(handler_func):
     @wraps(handler_func)
     def wrapped_func(event, context):
