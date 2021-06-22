@@ -111,9 +111,6 @@ def handler(event, context):
         logger.info("No available recordings match the class schedule.")
         return
 
-    global ADMIN_TOKEN
-    ADMIN_TOKEN = get_admin_token()
-
     global DOWNLOAD_TOKEN
     DOWNLOAD_TOKEN = dl_data["download_token"]
 
@@ -155,12 +152,6 @@ def retrieve_message(queue):
         return None
 
     return messages[0]
-
-
-def get_admin_token():
-    # get admin level zak token from admin id
-    r = zoom_api_request(f"users/{ZOOM_ADMIN_ID}/token?type=zak")
-    return r.json()["token"]
 
 
 class Download:
@@ -573,10 +564,8 @@ class ZoomFile:
     @property
     def stream(self):
         if not hasattr(self, "_stream"):
-            logger.info("requesting {}".format(self.file_data["download_url"]))
-            url = "{}?access_token={}".format(
-                self.file_data["download_url"], DOWNLOAD_TOKEN
-            )
+            logger.info(f"requesting {self.file_data['download_url']}")
+            url = f"{self.file_data['download_url']}?access_token={DOWNLOAD_TOKEN}"
             r = requests.get(url, stream=True)
             r.raise_for_status()
 
