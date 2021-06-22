@@ -30,6 +30,7 @@ SAMPLE_MESSAGE_BODY = {
     "zip_id": "abc",
     "duration": 30,
     "start_time": datetime.strftime(datetime.now(), TIMESTAMP_FORMAT),
+    "download_token": "mock_download_token",
 }
 
 DAYS = ["M", "T", "W", "R", "F", "S", "U"]
@@ -130,7 +131,9 @@ class TestHandler(unittest.TestCase):
             return messages.pop(0)
 
         self.mocker.patch.object(
-            downloader, "retrieve_message", side_effect=mock_messages
+            downloader,
+            "retrieve_message",
+            side_effect=mock_messages,
         )
 
         series_found = [False] * downloader.DOWNLOAD_MESSAGES_PER_INVOCATION
@@ -143,10 +146,6 @@ class TestHandler(unittest.TestCase):
             downloader.Download,
             "oc_series_found",
             side_effect=mock_series_found,
-        )
-
-        self.mocker.patch.object(
-            downloader, "get_admin_token", return_value="mock-admin-token"
         )
 
         self.mocker.patch.object(downloader.Download, "upload_to_s3")
@@ -176,12 +175,15 @@ class TestHandler(unittest.TestCase):
 
         message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
         self.mocker.patch.object(
-            downloader, "retrieve_message", return_value=message
+            downloader,
+            "retrieve_message",
+            return_value=message,
         )
         self.mocker.patch.object(
-            downloader.Download, "oc_series_found", return_value=True
+            downloader.Download,
+            "oc_series_found",
+            return_value=True,
         )
-        self.mocker.patch.object(downloader, "get_admin_token")
 
         error_msg = "Error while uploading to S3"
         self.mocker.patch.object(
@@ -631,7 +633,7 @@ def test_zoom_filename(mocker):
     for http_resp, expected, msg in cases:
         header = http_resp["header"] if "header" in http_resp else {}
         content = http_resp["content"] if "content" in http_resp else b""
-        downloader.ADMIN_TOKEN = "super-secret-admin-token"
+        downloader.DOWNLOAD_TOKEN = "super-secret-admin-token"
         with requests_mock.mock() as req_mock:
             req_mock.get(
                 requests_mock.ANY,

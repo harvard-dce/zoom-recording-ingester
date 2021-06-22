@@ -110,12 +110,13 @@ def webhook_payload(aws_request_id):
 def sqs_message_from_webhook_payload():
     def _message_maker(frozen_time, payload):
         zoom_event = payload["event"]
-        payload = webhook_payload()["payload"]
         payload_obj = payload["payload"]["object"]
         if zoom_event == "on.demand.ingest":
             zip_id = payload["payload"]["zip_id"]
         else:
             zip_id = f"auto-ingest-{payload_obj['uuid']}"
+
+        on_demand_ingest = True if zoom_event == "on.demand.ingest" else False
         msg = {
             "uuid": payload_obj["uuid"],
             "zoom_series_id": payload_obj["id"],
@@ -127,9 +128,7 @@ def sqs_message_from_webhook_payload():
             "received_time": frozen_time,
             "zip_id": zip_id,
             "allow_multiple_ingests": False,
-            "on_demand_ingest": (
-                True if zoom_event == "on.demand.ingest" else False
-            ),
+            "on_demand_ingest": on_demand_ingest,
             "download_token": payload["download_token"],
         }
 
