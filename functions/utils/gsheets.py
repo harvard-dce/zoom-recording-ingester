@@ -91,7 +91,7 @@ class GSheetsAuth:
 
 
 class GSheet:
-    def __init__(self, spreadsheet_id, in_lambda=False):
+    def __init__(self, spreadsheet_id):
         self.spreadsheet_id = spreadsheet_id
         auth = GSheetsAuth()
         auth.load_from_ssm()

@@ -100,7 +100,7 @@ state of the CloudFormation stack and the Lambda functions run `invoke stack.sta
 
 #### Google Sheets API Auth
 
-1. Fill in Google Sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAME`
+1. Fill in Google Sheets environment variables `GSHEETS_DOC_ID` and `GSHEETS_SHEET_NAMES`
 
 Since these credentials are shared within an AWS account, the following setup
 only needs to be done once per AWS account:

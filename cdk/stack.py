@@ -54,7 +54,7 @@ class ZipStack(core.Stack):
         uploader_event_rate,
         project_git_url,
         gsheets_doc_id,
-        gsheets_sheet_name,
+        gsheets_sheet_names,
         slack_signing_secret,
         slack_zip_channel,
         slack_allowed_groups,
@@ -91,7 +91,7 @@ class ZipStack(core.Stack):
             environment={
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
                 "GSHEETS_DOC_ID": gsheets_doc_id,
-                "GSHEETS_SHEET_NAME": gsheets_sheet_name,
+                "GSHEETS_SHEET_NAMES": gsheets_sheet_names,
             },
         )
         schedule_update.function.add_to_role_policy(

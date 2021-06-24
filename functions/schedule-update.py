@@ -4,7 +4,7 @@ from utils import setup_logging, GSheet
 
 
 GSHEETS_DOC_ID = env("GSHEETS_DOC_ID")
-GSHEETS_SHEET_NAME = env("GSHEETS_SHEET_NAME")
+GSHEETS_SHEET_NAMES = env("GSHEETS_SHEET_NAMES")
 
 logger = logging.getLogger()
 
@@ -15,8 +15,11 @@ def handler(event, context):
     Load google sheet, parse, and import into dynamoDB.
     """
     logger.info(f"Get Google Sheet doc ID '{GSHEETS_DOC_ID}'")
-    sheet = GSheet(GSHEETS_DOC_ID)
-    logger.info(f"Import data from '{GSHEETS_SHEET_NAME}' sheet")
-    sheet.import_to_dynamo(GSHEETS_SHEET_NAME)
+    doc = GSheet(GSHEETS_DOC_ID)
+
+    sheets = GSHEETS_SHEET_NAMES.split(",")
+    for sheet in sheets:
+        logger.info(f"Import data from '{sheet}' sheet")
+        doc.import_to_dynamo(sheet)
 
     return {"statusCode": 200, "headers": {}, "body": "Success"}

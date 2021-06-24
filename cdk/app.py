@@ -76,7 +76,7 @@ stack_props = {
         "https://github.com/harvard-dce/zoom-recording-ingester.git"
     ),
     "gsheets_doc_id": getenv("GSHEETS_DOC_ID"),
-    "gsheets_sheet_name": getenv("GSHEETS_SHEET_NAME"),
+    "gsheets_sheet_names": getenv("GSHEETS_SHEET_NAMES"),
     "slack_signing_secret": getenv("SLACK_SIGNING_SECRET", required=False),
     "slack_zip_channel": getenv("SLACK_ZIP_CHANNEL", required=False),
     "slack_api_token": getenv("SLACK_API_TOKEN", required=False),
