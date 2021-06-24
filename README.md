@@ -488,3 +488,16 @@ then
 
 	invoke stack.update
 	invoke codebuild --revision=release-vX.X.X
+
+
+### Common Dev "How To" recipes ####
+
+1) To change the oc cluster that the ingester points to or OC parameters
+    a) Update OC_CLUSTER_NAME and OC_DB_PASSWORD in .env
+    b) Run "invoke stack.update"
+    c) Run "invoke deploy.all --do-release"
+
+2) To change the S3 bucket or switch to a new branch with code change
+    a) invoke package -u
+    b) Run "invoke stack.update"
+    c) Run "invoke deploy.all --do-release"
