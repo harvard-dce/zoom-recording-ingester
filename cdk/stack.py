@@ -309,6 +309,8 @@ class ZipStack(core.Stack):
                 op_counts.function.function_arn,
                 log_notify.function.function_arn,
                 schedule_update.function.function_arn,
+                status_query.function.function_arn,
+                slack.function.function_arn,
             ],
         )
 
