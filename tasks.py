@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from os.path import join, dirname, exists, relpath
 from tabulate import tabulate
 from pprint import pprint
+from uuid import uuid4
 from functions.utils import (
     getenv,
     zoom_api_request,
@@ -373,7 +374,8 @@ def exec_webhook(ctx, uuid, oc_series_id=None):
 
     double_urlencoded_uuid = quote(quote(uuid, safe=""), safe="")
     data = zoom_api_request(
-        "meetings/{}/recordings".format(double_urlencoded_uuid)
+        f"meetings/{double_urlencoded_uuid}/recordings"
+        "?include_fields=download_access_token&ttl=3600"
     ).json()
 
     required_fields = ["host_id", "recording_files"]
@@ -392,6 +394,7 @@ def exec_webhook(ctx, uuid, oc_series_id=None):
         event_body = {
             "event": "on.demand.ingest",
             "payload": {
+                "zip_id": f"on-demand-{str(uuid4())}",
                 "on_demand_series_id": oc_series_id.strip(),
                 "object": data,
             },
@@ -401,6 +404,8 @@ def exec_webhook(ctx, uuid, oc_series_id=None):
             "event": "recording.completed",
             "payload": {"object": data, "delay_seconds": 0},
         }
+
+    event_body["download_token"] = data["download_access_token"]
 
     resp = __invoke_api(webhook_resource_id(), event_body)
 

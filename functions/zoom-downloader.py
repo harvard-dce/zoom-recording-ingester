@@ -28,7 +28,6 @@ DEADLETTER_QUEUE_NAME = env("DEADLETTER_QUEUE_NAME")
 MIN_CHUNK_SIZE = 5242880
 MEETING_LOOKUP_RETRIES = 2
 MEETING_LOOKUP_RETRY_DELAY = 60
-ZOOM_ADMIN_ID = env("ZOOM_ADMIN_ID")
 DEFAULT_SERIES_ID = env("DEFAULT_SERIES_ID")
 CLASS_SCHEDULE_TABLE = env("CLASS_SCHEDULE_TABLE")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
@@ -111,8 +110,8 @@ def handler(event, context):
         logger.info("No available recordings match the class schedule.")
         return
 
-    global ADMIN_TOKEN
-    ADMIN_TOKEN = get_admin_token()
+    global DOWNLOAD_TOKEN
+    DOWNLOAD_TOKEN = dl_data["download_token"]
 
     try:
         # upload matched recording to S3 and verify MP4 integrity
@@ -152,12 +151,6 @@ def retrieve_message(queue):
         return None
 
     return messages[0]
-
-
-def get_admin_token():
-    # get admin level zak token from admin id
-    r = zoom_api_request(f"users/{ZOOM_ADMIN_ID}/token?type=zak")
-    return r.json()["token"]
 
 
 class Download:
@@ -486,9 +479,9 @@ class ZoomFile:
     def zoom_filename(self):
         if not hasattr(self, "_zoom_filename"):
             # First request is for retrieving the filename
-            url = f"{self.file_data['download_url']}?zak={ADMIN_TOKEN}"
+            url = f"{self.file_data['download_url']}?access_token={DOWNLOAD_TOKEN}"
             r = requests.get(url, allow_redirects=False)
-            r.raise_for_status
+            r.raise_for_status()
 
             # If the file has been deleted or if the request is not authorized,
             # Zoom will return 200 and an HTML error page.
@@ -570,12 +563,10 @@ class ZoomFile:
     @property
     def stream(self):
         if not hasattr(self, "_stream"):
-            logger.info("requesting {}".format(self.file_data["download_url"]))
-            url = "{}?zak={}".format(
-                self.file_data["download_url"], ADMIN_TOKEN
-            )
+            logger.info(f"requesting {self.file_data['download_url']}")
+            url = f"{self.file_data['download_url']}?access_token={DOWNLOAD_TOKEN}"
             r = requests.get(url, stream=True)
-            r.raise_for_status
+            r.raise_for_status()
 
             self._stream = r
 

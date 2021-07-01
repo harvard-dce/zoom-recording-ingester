@@ -373,8 +373,9 @@ class Upload:
         try:
             resp = oc_api_request("GET", endpoint)
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == "404":
+            if e.response.status_code == 404:
                 raise InvalidOpencastSeriesId
+            raise OpencastConnectionError
 
         logger.debug({"series_catalog": resp.text})
 

@@ -107,6 +107,10 @@ def handler(event, context):
         origin = "webhook_notification"
         zip_id = f"auto-ingest-{payload['object']['uuid']}"
 
+    download_token = body.get("download_token")
+    if zoom_event in INGEST_EVENT_TYPES and not download_token:
+        return resp_400("Missing download token")
+
     try:
         validate_payload(payload, zoom_event)
         status = event_status(zoom_event, zip_id)
@@ -149,7 +153,12 @@ def handler(event, context):
         resp_callback = INGEST_EVENT_TYPES[zoom_event]
         return resp_callback(str(e))
 
-    sqs_message = construct_sqs_message(payload, zip_id, zoom_event)
+    sqs_message = construct_sqs_message(
+        payload,
+        zip_id,
+        zoom_event,
+        download_token,
+    )
     logger.info({"sqs_message": sqs_message})
 
     if zoom_event == "on.demand.ingest":
@@ -255,7 +264,7 @@ def validate_recording_files(files):
         raise BadWebhookData(f"Unrecognized payload format. {str(e)}")
 
 
-def construct_sqs_message(payload, zip_id, zoom_event):
+def construct_sqs_message(payload, zip_id, zoom_event, download_token):
     now = datetime.strftime(
         timezone(LOCAL_TIME_ZONE).localize(datetime.today()),
         TIMESTAMP_FORMAT,
@@ -292,6 +301,7 @@ def construct_sqs_message(payload, zip_id, zoom_event):
         "on_demand_ingest": zoom_event == "on.demand.ingest",
         "zip_id": zip_id,
         "received_time": now,
+        "download_token": download_token,
     }
 
     if "on_demand_series_id" in payload:

@@ -263,7 +263,7 @@ def slack_api_request(endpoint):
         f"https://slack.com/api/{endpoint}",
         headers={"Authorization": f"Bearer {SLACK_API_TOKEN}"},
     )
-    r.raise_for_status
+    r.raise_for_status()
 
     data = r.json()
     if "error" in data:
