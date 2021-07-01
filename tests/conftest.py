@@ -116,7 +116,7 @@ def sqs_message_from_webhook_payload():
         else:
             zip_id = f"auto-ingest-{payload_obj['uuid']}"
 
-        on_demand_ingest = True if zoom_event == "on.demand.ingest" else False
+        on_demand_ingest = zoom_event == "on.demand.ingest"
         msg = {
             "uuid": payload_obj["uuid"],
             "zoom_series_id": payload_obj["id"],
