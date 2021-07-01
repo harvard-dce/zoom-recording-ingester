@@ -17,7 +17,7 @@ def handler(event, context):
     logger.info(f"Get Google Sheet doc ID '{GSHEETS_DOC_ID}'")
     doc = GSheet(GSHEETS_DOC_ID)
 
-    sheets = GSHEETS_SHEET_NAMES.split(",")
+    sheets = [x.strip() for x in GSHEETS_SHEET_NAMES.split(",") if x]
     for sheet in sheets:
         logger.info(f"Import data from '{sheet}' sheet")
         doc.import_to_dynamo(sheet)

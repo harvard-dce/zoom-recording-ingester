@@ -14,6 +14,7 @@ def test_handler(mocker, handler):
     cases = [
         ("ZIP", ["ZIP"]),
         ("Sheet1,Sheet2", ["Sheet1", "Sheet2"]),
+        ("foo , bar,, baz", ["foo", "bar", "baz"]),
     ]
 
     for sheet_names, expected in cases:
