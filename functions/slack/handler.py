@@ -267,9 +267,7 @@ def slack_api_request(endpoint):
 
     data = r.json()
     if "error" in data:
-        raise SlackApiRequestError(
-            f"Slack API request error: {r.content['error']}"
-        )
+        raise SlackApiRequestError(f"Slack API request error: {data['error']}")
 
     return data
 
