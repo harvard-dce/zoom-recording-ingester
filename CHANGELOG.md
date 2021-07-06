@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [3.0.0] - 2021-07-07
+
 ### Added
 - Slack tool for querying recording status from recording start to ingest
 - New endpoint /slack for receiving notifications from the Slack tool
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Github action: automated lint and unit test checks
 
 ### Changed
+- Change "Source" in Opencast from "Zoom Ingester Pipeline" to "ZIP-[uuid]"
 - Dependency version updates
 - Switch from using zak token to download token
 
