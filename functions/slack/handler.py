@@ -127,19 +127,24 @@ def handler(event, context):
         )
 
     # Channel validation
-    dm = channel_name == "directmessage"
-    authorized_channel = SLACK_ZIP_CHANNEL and (
-        channel_name == SLACK_ZIP_CHANNEL
-    )
-    if not dm and not authorized_channel:
+    # DMs are Slackbot, or one-on-one DMs
+    # group DMs are called "private groups"
+    authorized_channels = ["directmessage"]
+    if SLACK_ZIP_CHANNEL:
+        authorized_channels.append(SLACK_ZIP_CHANNEL)
+
+    if channel_name not in authorized_channels:
         logger.warning(
             f"Channel name {channel_name} not in authorized slack channels."
         )
         if slash_command:
-            return slack_error_response(
-                f"The command {slash_command} can only be used in DM"
-                f" or in the #{SLACK_ZIP_CHANNEL} channel"
-            )
+            msg = f"The command {slash_command} can only be used in direct messages"
+            if SLACK_ZIP_CHANNEL:
+                return slack_error_response(
+                    msg + f" or in the #{SLACK_ZIP_CHANNEL} channel"
+                )
+            else:
+                return slack_error_response(msg)
         else:
             return slack_error_response(
                 f"Requests from channel {channel_name} not authorized."

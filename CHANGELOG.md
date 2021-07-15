@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [3.0.1] - 2021-07-15
+
+### Changed
+- Fix error message indicating in which channel / DM the tool can be use to not
+mention any channel if `SLACK_ZIP_CHANNEL` is not specified.
+
 ## [3.0.0] - 2021-07-07
 
 ### Added

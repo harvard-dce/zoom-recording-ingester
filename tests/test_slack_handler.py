@@ -100,12 +100,6 @@ def test_unauthorized_user(handler, mocker):
 def test_unauthorized_channel(handler, mocker):
     mocker.patch.object(
         slack_handler,
-        "SLACK_ZIP_CHANNEL",
-        "authorized_channel",
-    )
-
-    mocker.patch.object(
-        slack_handler,
         "valid_slack_request",
         mocker.Mock(return_value=True),
     )
@@ -126,12 +120,25 @@ def test_unauthorized_channel(handler, mocker):
 
     event = {"body": urlencode(query)}
 
-    r = handler(slack_handler, event)
-    assert r["statusCode"] == 200
-    assert (
-        "The command /zip can only be used in DM or in the #authorized_channel channel"
-        in r["body"]
-    )
+    cases = [
+        (
+            "authorized_channel",
+            "The command /zip can only be used in direct messages "
+            "or in the #authorized_channel channel",
+        ),
+        (None, "The command /zip can only be used in direct messages"),
+    ]
+
+    for slack_zip_channel, expected in cases:
+        mocker.patch.object(
+            slack_handler,
+            "SLACK_ZIP_CHANNEL",
+            slack_zip_channel,
+        )
+
+        r = handler(slack_handler, event)
+        assert r["statusCode"] == 200
+        assert json.loads(r["body"])["text"] == expected
 
 
 def setup_valid_request(mocker):
