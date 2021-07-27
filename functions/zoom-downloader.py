@@ -348,7 +348,12 @@ class Download:
                 "total_segment_seconds": recording_seconds,
             }
 
-            for field in ["allow_multiple_ingests", "zoom_processing_minutes"]:
+            for field in [
+                "allow_multiple_ingests",
+                "zoom_processing_minutes",
+                "ingest_all_mp4",
+                "oc_workflow",
+            ]:
                 if field in self.data:
                     self._upload_message[field] = self.data[field]
 

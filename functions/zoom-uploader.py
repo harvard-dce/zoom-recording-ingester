@@ -262,7 +262,10 @@ class Upload:
 
     @property
     def workflow_definition_id(self):
-        return DEFAULT_OC_WORKFLOW
+        if "oc_workflow" in self.data:
+            return self.data["oc_workflow"]
+        else:
+            return DEFAULT_OC_WORKFLOW
 
     @property
     def s3_filenames(self):
@@ -401,7 +404,10 @@ class Upload:
             ("spatial", (None, f"Zoom {self.zoom_series_id}")),
         ]
 
-        fpg = FileParamGenerator(self.s3_filenames)
+        if self.data.get("ingest_all_mp4"):
+            fpg = ArchiveFileParamGenerator(self.s3_filenames)
+        else:
+            fpg = PublishFileParamGenerator(self.s3_filenames)
         try:
             file_params = fpg.generate()
         except Exception as e:
@@ -415,6 +421,69 @@ class Upload:
 
 
 class FileParamGenerator(object):
+    def __init__(self, s3_filenames):
+        self.s3_filenames = s3_filenames
+        self._params = []
+
+    def _add_view(self, flavor, view):
+        for s3_file in self.s3_filenames[view]:
+            logger.info(
+                {
+                    "adding": {
+                        "s3_file": s3_file,
+                        "view": view,
+                        "flavor": flavor,
+                    }
+                }
+            )
+            self._params.extend(
+                [
+                    ("flavor", (None, escape(flavor))),
+                    (
+                        "mediaUri",
+                        (None, self._generate_presigned_url(s3_file)),
+                    ),
+                ]
+            )
+
+    def _generate_presigned_url(self, s3_filename):
+        logger.info(
+            f"Generate presigned url bucket {ZOOM_VIDEOS_BUCKET} "
+            f"key {s3_filename}"
+        )
+        url = s3.meta.client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": s3_filename},
+        )
+        logger.info(f"Got presigned url {url}")
+        return url
+
+    def generate(self) -> list:
+        pass
+
+
+class ArchiveFileParamGenerator(FileParamGenerator):
+
+    FLAVORS = {
+        "active_speaker": "speaker/chunked+source",
+        "shared_screen": "shared-screen/chunked+source",
+        "gallery_view": "gallery/chunked+source",
+        "shared_screen_with_gallery_view": "shared-screen-gallery/chunked+source",
+        "shared_screen_with_speaker_view": "shared-screen-speaker/chunked+source",
+    }
+
+    def __init__(self, s3_filenames):
+        super().__init__(s3_filenames)
+
+    def generate(self):
+        for view, flavor in self.FLAVORS.items():
+            if view in self.s3_filenames:
+                super()._add_view(flavor, view)
+
+        return self._params
+
+
+class PublishFileParamGenerator(FileParamGenerator):
 
     FLAVORS = {
         # The workflow requires at least one of the files have this flavor
@@ -454,14 +523,14 @@ class FileParamGenerator(object):
     ]
 
     def __init__(self, s3_filenames):
-        self.s3_filenames = s3_filenames
+        super().__init__(s3_filenames)
         self._used_views = set()
-        self._params = []
         # whatever the max length of any view's list of files is the number
         # of sets of files we're dealing with. When hosts stop/start a meeting
         # it results in multiple file sets being generated
         self._file_sets = max(
-            (len(x) for x in s3_filenames.values()), default=0
+            (len(x) for x in s3_filenames.values()),
+            default=0,
         )
 
     @property
@@ -513,38 +582,12 @@ class FileParamGenerator(object):
             # we already got all the flavors
             return
 
-        for s3_file in self.s3_filenames[view]:
-            logger.info(
-                {
-                    "adding": {
-                        "s3_file": s3_file,
-                        "view": view,
-                        "flavor": flavor,
-                    }
-                }
-            )
-            self._params.extend(
-                [
-                    ("flavor", (None, escape(flavor))),
-                    (
-                        "mediaUri",
-                        (None, self._generate_presigned_url(s3_file)),
-                    ),
-                ]
-            )
+        super()._add_view(flavor, view)
+
         self._used_views.add(view)
 
     def _generate_presigned_url(self, s3_filename):
-        logger.info(
-            f"Generate presigned url bucket {ZOOM_VIDEOS_BUCKET} "
-            f"key {s3_filename}"
-        )
-        url = s3.meta.client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": s3_filename},
-        )
-        logger.info(f"Got presigned url {url}")
-        return url
+        return super()._generate_presigned_url(s3_filename)
 
     def generate(self):
         for primary_view, secondary_views in self.VIEW_PRIORITIES.items():

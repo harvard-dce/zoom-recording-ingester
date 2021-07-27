@@ -290,18 +290,29 @@ def update_requirements(ctx):
         ),
     }
 )
-def exec_on_demand(ctx, uuid, oc_series_id=None, allow_multiple_ingests=False):
+def exec_on_demand(
+    ctx,
+    uuid,
+    oc_series_id=None,
+    oc_workflow=None,
+    ingest_all_mp4=False,
+    allow_multiple_ingests=False,
+):
     """
     Manually trigger an on demand ingest.
     """
 
-    event_body = {"uuid": uuid.strip()}
+    event_body = {
+        "uuid": uuid.strip(),
+        "ingest_all_mp4": ingest_all_mp4,
+        "allow_multiple_ingests": allow_multiple_ingests,
+    }
 
     if oc_series_id:
         event_body["oc_series_id"] = oc_series_id.strip()
 
-    if allow_multiple_ingests:
-        event_body["allow_multiple_ingests"] = allow_multiple_ingests
+    if oc_workflow:
+        event_body["oc_workflow"] = oc_workflow.strip()
 
     print(event_body)
 

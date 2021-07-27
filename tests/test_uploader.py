@@ -683,7 +683,7 @@ def test_file_param_generator():
     ]
 
     for (incoming, expected, case_no) in cases:
-        fpg = uploader.FileParamGenerator(
+        fpg = uploader.PublishFileParamGenerator(
             s3_filenames={x: ["{}.MP4".format(x)] for x in incoming}
         )
         fpg._generate_presigned_url = lambda f: "signed-{}".format(f)
@@ -769,7 +769,7 @@ def test_file_param_generator_multi_set():
         ],
     ]
     for incoming, expected in cases:
-        fpg = uploader.FileParamGenerator(s3_filenames=incoming)
+        fpg = uploader.PublishFileParamGenerator(s3_filenames=incoming)
         fpg._generate_presigned_url = lambda f: "signed-{}".format(f)
         upload_params = fpg.generate()
         assert upload_params == expected

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Added
+- New optional parameters for on demand ingest (`/ingest` endpoint): `ingest_all_mp4` (boolean),
+and `oc_workflow` (string).
+- Added `ArchiveFileParamGenerator` to uploader lambda. When `ingest_all_mp4` is
+true then the `ArchiveFileParamGenerator` generates file parameters for all files
+using the view to flavor mapping:
+```
+{
+        "active_speaker": "speaker/chunked+source",
+        "shared_screen": "shared-screen/chunked+source",
+        "gallery_view": "gallery/chunked+source",
+        "shared_screen_with_gallery_view": "shared-screen-gallery/chunked+source",
+        "shared_screen_with_speaker_view": "shared-screen-speaker/chunked+source",
+}
+```
+
+### Changed
+- Removed unused env var OC_FLAVOR.
+
 ## [3.0.1] - 2021-07-15
 
 ### Changed

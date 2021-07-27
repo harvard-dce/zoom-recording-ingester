@@ -169,7 +169,6 @@ def test_on_demand_no_delay(
 
 def test_update_recording_started_paused(
     handler,
-    mocker,
     mock_webhook_set_pipeline_status,
 ):
     mock_payload = {
