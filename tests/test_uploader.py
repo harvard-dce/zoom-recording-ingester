@@ -115,7 +115,9 @@ def test_ingestion_error(handler, mocker, upload_message):
 def test_bad_message_body(handler, mocker):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=3)
+        uploader,
+        "get_current_upload_count",
+        mocker.Mock(return_value=3),
     )
     message = mocker.Mock(body="this is definitely not json")
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
@@ -128,49 +130,38 @@ def test_bad_message_body(handler, mocker):
     assert message.delete.call_count == 0
 
 
-def test_workflow_initiated(handler, mocker, upload_message, caplog):
+def setup_upload(mocker, upload_message):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
         uploader, "get_current_upload_count", mocker.Mock(return_value=3)
     )
-    message = upload_message()
+    message = upload_message({"zip_id": "mock_zip_id"})
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
         message
     ]
+
+
+def test_workflow_initiated(handler, mocker, upload_message, caplog):
+    setup_upload(mocker, upload_message)
     uploader.process_upload = mocker.Mock(return_value=12345)
     handler(uploader, {})
     assert "12345 initiated" in caplog.messages[-1]
 
 
 def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
-    mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader,
-        "get_current_upload_count",
-        mocker.Mock(return_value=3),
-    )
-    message = upload_message()
-    uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
-        message
-    ]
+    setup_upload(mocker, upload_message)
     uploader.process_upload = mocker.Mock(return_value=None)
     handler(uploader, {})
     assert "No workflow initiated." == caplog.messages[-1]
 
 
 def test_invalid_oc_series_id(
-    handler, mocker, upload_message, mock_uploader_set_pipeline_status
+    handler,
+    mocker,
+    upload_message,
+    mock_uploader_set_pipeline_status,
 ):
-    mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader,
-        "get_current_upload_count",
-        mocker.Mock(return_value=3),
-    )
-    message = upload_message({"zip_id": "mock_zip_id"})
-    uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
-        message
-    ]
+    setup_upload(mocker, upload_message)
 
     uploader.process_upload = mocker.Mock(
         side_effect=uploader.InvalidOpencastSeriesId
@@ -183,6 +174,28 @@ def test_invalid_oc_series_id(
         "mock_zip_id",
         PipelineStatus.UPLOADER_FAILED,
         reason="Invalid Opencast series id.",
+    )
+
+
+def test_opencast_unreachable(
+    handler,
+    mocker,
+    upload_message,
+    mock_uploader_set_pipeline_status,
+):
+    setup_upload(mocker, upload_message)
+
+    uploader.process_upload = mocker.Mock(
+        side_effect=uploader.OpencastConnectionError
+    )
+
+    with pytest.raises(uploader.OpencastConnectionError):
+        handler(uploader, {})
+
+    mock_uploader_set_pipeline_status.assert_called_with(
+        "mock_zip_id",
+        PipelineStatus.UPLOADER_FAILED,
+        reason="Unable to reach Opencast.",
     )
 
 
