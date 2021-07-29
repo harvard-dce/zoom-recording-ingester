@@ -24,6 +24,7 @@ using the view to flavor mapping:
 ```
 
 ### Changed
+- Changed env var OC_WORKFLOW to DEFAULT_OC_WORKFLOW.
 - Removed unused env var OC_FLAVOR.
 
 ## [3.0.1] - 2021-07-15
