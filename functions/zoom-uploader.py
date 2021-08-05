@@ -102,7 +102,7 @@ def handler(event, context):
         logger.info(f"Opencast upload count looks good: {current_uploads}")
 
     upload_message = messages[0]
-    logger.debug(
+    logger.info(
         {
             "queue_message": {
                 "body": upload_message.body,
