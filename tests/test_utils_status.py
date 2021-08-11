@@ -51,6 +51,7 @@ def test_set_pipeline_status_webhook_received(mocker):
             "ingest_request_time=:ingest_request_time, "
             "meeting_id=:meeting_id, "
             "recording_id=:recording_id, "
+            "reason=:reason, "
             "origin=:origin, "
             "recording_start_time=:recording_start_time, "
             "topic=:topic, "
@@ -68,6 +69,7 @@ def test_set_pipeline_status_webhook_received(mocker):
             ":recording_start_time": "test_recording_start",
             ":topic": "test_topic",
             ":oc_series_id": "20210199999",
+            ":reason": "",
         },
         None,
     )
@@ -93,13 +95,15 @@ def test_set_pipeline_status_update_status(mocker):
             "set update_date=:update_date, "
             "update_time=:update_time, "
             "expiration=:expiration, "
-            "pipeline_state=:pipeline_state"
+            "pipeline_state=:pipeline_state, "
+            "reason=:reason"
         ),
         {
             ":update_date": FROZEN_UPDATE_DATE,
             ":update_time": FROZEN_UPDATE_TIME,
             ":expiration": FROZEN_EXPIRATION,
             ":pipeline_state": "UPLOADER_RECEIVED",
+            ":reason": "",
         },
         "attribute_exists(meeting_id) AND attribute_exists(origin)",
     )

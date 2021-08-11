@@ -59,7 +59,9 @@ def ts_to_date_and_seconds(ts):
     t = ts.time()
     seconds = int(
         timedelta(
-            hours=t.hour, minutes=t.minute, seconds=t.second
+            hours=t.hour,
+            minutes=t.minute,
+            seconds=t.second,
         ).total_seconds()
     )
     return date, seconds
@@ -74,7 +76,7 @@ def set_pipeline_status(
     zip_id,
     state,
     origin=None,
-    reason=None,
+    reason="",
     meeting_id=None,
     recording_id=None,
     recording_start_time=None,
@@ -117,7 +119,7 @@ def set_pipeline_status(
             "oc_series_id": oc_series_id,
         }
         for key, val in optional_attributes.items():
-            if val:
+            if val is not None:
                 update_expression += f", {key}=:{key}"
                 expression_attribute_values[f":{key}"] = val
 
