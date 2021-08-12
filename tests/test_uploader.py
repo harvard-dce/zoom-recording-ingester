@@ -115,7 +115,9 @@ def test_ingestion_error(handler, mocker, upload_message):
 def test_bad_message_body(handler, mocker):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=3)
+        uploader,
+        "get_current_upload_count",
+        mocker.Mock(return_value=3),
     )
     message = mocker.Mock(body="this is definitely not json")
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
@@ -128,49 +130,38 @@ def test_bad_message_body(handler, mocker):
     assert message.delete.call_count == 0
 
 
-def test_workflow_initiated(handler, mocker, upload_message, caplog):
+def setup_upload(mocker, upload_message):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
     mocker.patch.object(
         uploader, "get_current_upload_count", mocker.Mock(return_value=3)
     )
-    message = upload_message()
+    message = upload_message({"zip_id": "mock_zip_id"})
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
         message
     ]
+
+
+def test_workflow_initiated(handler, mocker, upload_message, caplog):
+    setup_upload(mocker, upload_message)
     uploader.process_upload = mocker.Mock(return_value=12345)
     handler(uploader, {})
     assert "12345 initiated" in caplog.messages[-1]
 
 
 def test_workflow_not_initiated(handler, mocker, upload_message, caplog):
-    mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader,
-        "get_current_upload_count",
-        mocker.Mock(return_value=3),
-    )
-    message = upload_message()
-    uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
-        message
-    ]
+    setup_upload(mocker, upload_message)
     uploader.process_upload = mocker.Mock(return_value=None)
     handler(uploader, {})
     assert "No workflow initiated." == caplog.messages[-1]
 
 
 def test_invalid_oc_series_id(
-    handler, mocker, upload_message, mock_uploader_set_pipeline_status
+    handler,
+    mocker,
+    upload_message,
+    mock_uploader_set_pipeline_status,
 ):
-    mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader,
-        "get_current_upload_count",
-        mocker.Mock(return_value=3),
-    )
-    message = upload_message({"zip_id": "mock_zip_id"})
-    uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
-        message
-    ]
+    setup_upload(mocker, upload_message)
 
     uploader.process_upload = mocker.Mock(
         side_effect=uploader.InvalidOpencastSeriesId
@@ -183,6 +174,28 @@ def test_invalid_oc_series_id(
         "mock_zip_id",
         PipelineStatus.UPLOADER_FAILED,
         reason="Invalid Opencast series id.",
+    )
+
+
+def test_opencast_unreachable(
+    handler,
+    mocker,
+    upload_message,
+    mock_uploader_set_pipeline_status,
+):
+    setup_upload(mocker, upload_message)
+
+    uploader.process_upload = mocker.Mock(
+        side_effect=uploader.OpencastConnectionError
+    )
+
+    with pytest.raises(uploader.OpencastConnectionError):
+        handler(uploader, {})
+
+    mock_uploader_set_pipeline_status.assert_called_with(
+        "mock_zip_id",
+        PipelineStatus.UPLOADER_FAILED,
+        reason="Unable to reach Opencast.",
     )
 
 
@@ -383,7 +396,7 @@ def test_s3_filename_filter_false_start():
         )
 
 
-def test_file_param_generator():
+def test_publish_file_param_generator():
     # each `cases` item is a list containing two iterables
     # - first element in list gets turned into the s3_filenames data
     # - 2nd element is the expected params that get generated
@@ -683,7 +696,7 @@ def test_file_param_generator():
     ]
 
     for (incoming, expected, case_no) in cases:
-        fpg = uploader.FileParamGenerator(
+        fpg = uploader.PublishFileParamGenerator(
             s3_filenames={x: ["{}.MP4".format(x)] for x in incoming}
         )
         fpg._generate_presigned_url = lambda f: "signed-{}".format(f)
@@ -703,7 +716,7 @@ def test_file_param_generator():
             assert upload_params == expected_params, "case {}".format(case_no)
 
 
-def test_file_param_generator_multi_set():
+def test_publish_file_param_generator_multi_set():
     cases = [
         # this one has 2 x speaker but only 1 shared screen
         [
@@ -769,7 +782,65 @@ def test_file_param_generator_multi_set():
         ],
     ]
     for incoming, expected in cases:
-        fpg = uploader.FileParamGenerator(s3_filenames=incoming)
+        fpg = uploader.PublishFileParamGenerator(s3_filenames=incoming)
         fpg._generate_presigned_url = lambda f: "signed-{}".format(f)
+        upload_params = fpg.generate()
+        assert upload_params == expected
+
+
+def test_archive_file_param_generator():
+    cases = [
+        [
+            {
+                "active_speaker": [
+                    "speaker-000.mp4",
+                    "speaker-001.mp4",
+                    "speaker-002.mp4",
+                ],
+                "shared_screen": ["screen-001.mp4"],
+            },
+            [
+                ("flavor", (None, "speaker/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-000.mp4")),
+                ("flavor", (None, "speaker/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-001.mp4")),
+                ("flavor", (None, "speaker/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-002.mp4")),
+                ("flavor", (None, "shared-screen/chunked+source")),
+                ("mediaUri", (None, "signed-screen-001.mp4")),
+            ],
+        ],
+        [
+            {
+                "active_speaker": ["speaker-000.mp4", "speaker-001.mp4"],
+                "shared_screen": ["screen-000.mp4"],
+                "gallery_view": ["gallery-000.mp4"],
+                "shared_screen_with_gallery_view": [
+                    "shared-screen-gallery-000.mp4"
+                ],
+                "shared_screen_with_speaker_view": [
+                    "shared-screen-speaker-000.mp4"
+                ],
+            },
+            [
+                ("flavor", (None, "speaker/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-000.mp4")),
+                ("flavor", (None, "speaker/chunked+source")),
+                ("mediaUri", (None, "signed-speaker-001.mp4")),
+                ("flavor", (None, "shared-screen/chunked+source")),
+                ("mediaUri", (None, "signed-screen-000.mp4")),
+                ("flavor", (None, "gallery/chunked+source")),
+                ("mediaUri", (None, "signed-gallery-000.mp4")),
+                ("flavor", (None, "shared-screen-gallery/chunked+source")),
+                ("mediaUri", (None, "signed-shared-screen-gallery-000.mp4")),
+                ("flavor", (None, "shared-screen-speaker/chunked+source")),
+                ("mediaUri", (None, "signed-shared-screen-speaker-000.mp4")),
+            ],
+        ],
+    ]
+
+    for incoming, expected in cases:
+        fpg = uploader.ArchiveFileParamGenerator(s3_filenames=incoming)
+        fpg._generate_presigned_url = lambda f: f"signed-{f}"
         upload_params = fpg.generate()
         assert upload_params == expected

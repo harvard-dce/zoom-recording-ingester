@@ -270,11 +270,6 @@ def construct_sqs_message(payload, zip_id, zoom_event, download_token):
         TIMESTAMP_FORMAT,
     )
 
-    if "allow_multiple_ingests" in payload:
-        allow_multiple_ingests = payload["allow_multiple_ingests"]
-    else:
-        allow_multiple_ingests = False
-
     recording_files = []
     for file in payload["object"]["recording_files"]:
         if file["file_type"].lower() == "mp4":
@@ -297,15 +292,24 @@ def construct_sqs_message(payload, zip_id, zoom_event, download_token):
         "duration": payload["object"]["duration"],
         "host_id": payload["object"]["host_id"],
         "recording_files": recording_files,
-        "allow_multiple_ingests": allow_multiple_ingests,
         "on_demand_ingest": zoom_event == "on.demand.ingest",
         "zip_id": zip_id,
         "received_time": now,
         "download_token": download_token,
     }
 
-    if "on_demand_series_id" in payload:
-        sqs_message["on_demand_series_id"] = payload["on_demand_series_id"]
+    for optional_param in [
+        "allow_multiple_ingests",
+        "ingest_all_mp4",
+        "on_demand_series_id",
+        "oc_workflow",
+    ]:
+        if optional_param in payload:
+            sqs_message[optional_param] = payload[optional_param]
+
+    for flag in ["allow_multiple_ingests", "ingest_all_mp4"]:
+        if flag not in sqs_message:
+            sqs_message[flag] = False
 
     # not used in downloader or uploader but useful for cloudwatch dashboard
     if "total_size" in payload["object"]:

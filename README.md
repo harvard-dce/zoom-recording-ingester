@@ -224,14 +224,18 @@ The easiest way to find a listing of the endpoints for your stack is to run `inv
 | -------------  | ------------- |-------------  |-------------  |
 | uuid           | Yes           | string        | Either the recording uuid or the link to the recording files. Recording files link example: `https://zoom.us/recording/management/detail?meeting_id=ajXp112QmuoKj4854875%3D%3D`  |
 | oc\_series_id  | No            | string        | Opencast series id to ingest this recording to. Default: Recording only ingested if it matches the existing ZIP schedule.   |
+| oc\_workflow  | No            | string        | Override the default Opencast workflow. |
 | allow\_multiple_ingests  | No  | boolean       | Whether to allow the same Zoom recording to be ingested multiple times into Opencast. Default false. |
+| ingest\_all_mp4  | No  | boolean       | Whether to ingest (and archive) all mp4 files. Default false. |
 
 **Request Body Example**
 
 	{
 	    "uuid": "ajXp112QmuoKj4854875==",
 	    "oc_series_id": "20210299999",
-	    "allow_multiple_ingests": false
+	    "oc_workflow": "workflow_name",
+	    "allow_multiple_ingests": false,
+	    "ingest_all_mp4": false
 	}
 	
 
@@ -298,11 +302,17 @@ uploader functions to run and reports success or error for each.
 
 ##### `invoke exec.on_demand [uuid]`
 
-Options: `--oc-series-id=XXX --allow-multiple-ingests`
+Options: `--oc-series-id=XX --oc_workflow=XX --allow-multiple-ingests --ingest-all-mp4`
 
-This task will manually invoke the `/ingest` endpoint. This is the endpoint used
-by the Opencast "Zoom+" tool. Specify an opencast series id with `--oc-series-id=XX`.
-Allow multiple ingests of the same recordiing (for testing purposes) with `--allow-multiple-ingests`.
+This task will manually invoke the `/ingest` endpoint. This is the endpoint used by the Opencast "+Zoom" tool. 
+
+`--oc-series-id=XX` - Specify an opencast series id.
+
+`--oc_workflow=XX` - Select an Opencast workflow other than the default.
+
+`--allow-multiple-ingests` - Allow multiple ingests of the same recordiing (for testing purposes).
+
+`--ingest-all-mp4` - Ingest (for archival purposes) all mp4 files associated with the requested recording
 
 
 ### Schedule DB

@@ -151,6 +151,12 @@ def handler(event, context):
             "allow_multiple_ingests"
         ]
 
+    if "oc_workflow" in body:
+        webhook_data["payload"]["oc_workflow"] = body["oc_workflow"]
+
+    if "ingest_all_mp4" in body:
+        webhook_data["payload"]["ingest_all_mp4"] = body["ingest_all_mp4"]
+
     zip_id = f"on-demand-{str(uuid4())}"
     webhook_data["payload"]["zip_id"] = zip_id
 

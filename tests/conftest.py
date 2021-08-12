@@ -128,6 +128,7 @@ def sqs_message_from_webhook_payload():
             "received_time": frozen_time,
             "zip_id": zip_id,
             "allow_multiple_ingests": False,
+            "ingest_all_mp4": False,
             "on_demand_ingest": on_demand_ingest,
             "download_token": payload["download_token"],
         }
