@@ -300,12 +300,17 @@ class Download:
                     "segment_num": file.segment_num,
                     "recording_start": file.file_data["recording_start"],
                     "recording_end": file.file_data["recording_end"],
-                    "ffprobe_bytes": file.file_data["ffprobe_bytes"],
-                    "ffprobe_seconds": file.file_data["ffprobe_seconds"],
+                    "ffprobe_bytes": file.file_data.get(
+                        "ffprobe_bytes", 0
+                    ),  # 0 for non-mp4 files
+                    "ffprobe_seconds": file.file_data.get(
+                        "ffprobe_seconds", 0
+                    ),  # 0 for non-mp4 files
                 }
-                segment_durations[segment["recording_start"]] = segment[
-                    "ffprobe_seconds"
-                ]
+                if segment["ffprobe_seconds"] > 0:
+                    segment_durations[segment["recording_start"]] = segment[
+                        "ffprobe_seconds"
+                    ]
                 if file.recording_type in s3_files:
                     s3_files[file.recording_type]["segments"].append(segment)
                 else:
@@ -478,6 +483,8 @@ class ZoomFile:
             return "active_speaker"
         elif "gallery" in name.lower():
             return "gallery_view"
+        elif "chat" in name.lower():
+            return "chat_file"
         return f"unrecognized_type_{name}"
 
     @property
@@ -530,7 +537,10 @@ class ZoomFile:
         # TODO: if file not found, add appropriate error
         url = s3.generate_presigned_url(
             "get_object",
-            Params={"Bucket": ZOOM_VIDEOS_BUCKET, "Key": self.s3_filename},
+            Params={
+                "Bucket": ZOOM_VIDEOS_BUCKET,
+                "Key": self.s3_filename,
+            },
         )
 
         cmd = f"/var/task/ffprobe -of json -show_format {url}"
@@ -601,7 +611,10 @@ class ZoomFile:
         }
 
         logger.info(
-            {"uploading file to S3": self.s3_filename, "metadata": metadata}
+            {
+                "uploading file to S3": self.s3_filename,
+                "metadata": metadata,
+            }
         )
         parts = []
         mpu = s3.create_multipart_upload(
@@ -618,7 +631,10 @@ class ZoomFile:
                 future_map = {}
                 for part_number, chunk in chunks:
                     f = executor.submit(
-                        self.upload_part, mpu["UploadId"], part_number, chunk
+                        self.upload_part,
+                        mpu["UploadId"],
+                        part_number,
+                        chunk,
                     )
                     future_map[f] = part_number
 
@@ -626,7 +642,10 @@ class ZoomFile:
                     part_number = future_map[future]
                     part = future.result()
                     parts.append(
-                        {"PartNumber": part_number, "ETag": part["ETag"]}
+                        {
+                            "PartNumber": part_number,
+                            "ETag": part["ETag"],
+                        }
                     )
 
             # complete_multipart_upload requires parts in order by part number

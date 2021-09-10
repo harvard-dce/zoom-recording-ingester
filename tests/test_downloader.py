@@ -7,7 +7,7 @@ from importlib import import_module
 import requests_mock
 from datetime import datetime, timedelta
 from pytz import timezone
-from mock import patch
+from mock import patch, PropertyMock
 import unittest
 from freezegun import freeze_time
 import copy
@@ -467,11 +467,24 @@ class TestDownload(unittest.TestCase):
             "ffprobe_bytes": 100,
             "ffprobe_seconds": 5,
         }
+        chat_file_info = {
+            "recording_type": "chat_file",
+            "recording_start": "start",
+            "recording_end": "end",
+            "ffprobe_bytes": 0,
+            "ffprobe_seconds": 0,
+        }
+
+        s3_file_names = ["mock_s3_filename", "mock_chat_s3_filename"]
+
+        def mock_s3_file_name(*args):
+            return s3_file_names.pop(0)
 
         self.mocker.patch.object(
             downloader.ZoomFile,
             "s3_filename",
-            "mock_s3_filename",
+            side_effect=mock_s3_file_name,
+            new_callable=PropertyMock,
         )
 
         self.mocker.patch.object(
@@ -494,7 +507,10 @@ class TestDownload(unittest.TestCase):
         }
 
         dl = downloader.Download(None, data)
-        dl.downloaded_files = [downloader.ZoomFile(file_info, 1)]
+        dl.downloaded_files = [
+            downloader.ZoomFile(file_info, 1),
+            downloader.ZoomFile(chat_file_info, 1),
+        ]
         dl.opencast_series_id = "mock_series_id"
         msg = dl.upload_message
 
@@ -523,12 +539,29 @@ class TestDownload(unittest.TestCase):
                     ],
                     "view_bytes": 100,
                     "view_seconds": 5,
-                }
+                },
+                "chat_file": {
+                    "segments": [
+                        {
+                            "ffprobe_bytes": 0,
+                            "ffprobe_seconds": 0,
+                            "filename": "mock_chat_s3_filename",
+                            "recording_end": "end",
+                            "recording_start": "start",
+                            "segment_num": 1,
+                        }
+                    ],
+                    "view_bytes": 0,
+                    "view_seconds": 0,
+                },
             },
             "total_file_bytes": 100,
             "total_file_seconds": 5,
             "total_segment_seconds": 5,
         }
+
+    def new_method(self):
+        return downloader.ZoomFile
 
     def test_upload_to_s3(self):
 

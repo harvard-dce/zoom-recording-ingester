@@ -20,6 +20,8 @@ DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DEFAULT_MESSAGE_DELAY = 300
 ZOOM_WEBINAR_TYPES = [5, 6, 9]
+# ZIP-74: now ingesting chat files
+FILE_TYPES = ["mp4", "chat"]
 
 
 class BadWebhookData(Exception):
@@ -244,7 +246,7 @@ def validate_recording_files(files):
         for f in files:
             if "file_type" not in f:
                 raise BadWebhookData("Missing required file field 'file_type'")
-            if f["file_type"].lower() != "mp4":
+            if f["file_type"].lower() not in FILE_TYPES:
                 continue
             for field in required_file_fields:
                 if field not in f.keys():
@@ -272,7 +274,7 @@ def construct_sqs_message(payload, zip_id, zoom_event, download_token):
 
     recording_files = []
     for file in payload["object"]["recording_files"]:
-        if file["file_type"].lower() == "mp4":
+        if file["file_type"].lower() in FILE_TYPES:
             recording_files.append(
                 {
                     "recording_id": file["id"],

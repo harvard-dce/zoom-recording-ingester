@@ -178,6 +178,7 @@ def process_upload(upload_data):
 class Upload:
     def __init__(self, data):
         self.data = data
+        self.recording_times = ""
 
     @property
     def created(self):
@@ -292,19 +293,50 @@ class Upload:
         away the first file from each view; we have to make sure it's from the
         "000" segment.
 
+        ZIP-74:
+        We also keep recording start/end times for all segments.
+        In the chat file, times are relative to the event start and OC will need
+        start/end times of each segment to add chat messages to the right point into
+        the video. These times will be passed as a workflow configuration:
+        zoomRecordingTimes.
+
         :return: [description]
         :rtype: [type]
         """
 
         if not hasattr(self, "_s3_filenames"):
             self._s3_filenames = {}
+            segment_0_discarded = False
+            chat_has_segment_0 = False
+            # Key = seg number, value = "recordingStart_recordingEnd"
+            rec_times = {}
+
             # the s3_files dict is keyed on view type, e.g. gallery, speaker
 
-            # In this loop we're going to check the first file (segment) of
+            # In this loop we're going to check the first file (segment 0) of
             # each view. If it's < our MINIMUM_DURATION value
             for view, file_info in self.data["s3_files"].items():
-
                 segment_files = file_info["segments"]
+                self._s3_filenames[view] = [
+                    file["filename"] for file in segment_files
+                ]
+
+                # ZIP-74 Remember recording start/end times for each segment.
+                # We need to know the time each segment to be ingested starts and send
+                # that to OC so that the chat messages are added at the right time in
+                # the video.
+                for seg in segment_files:
+                    if seg["segment_num"] not in rec_times:
+                        rec_times[
+                            seg["segment_num"]
+                        ] = f"{seg['recording_start']}_{seg['recording_end']}"
+
+                # ZIP-74: Chat file always have ffprobe_seconds 0 so don't
+                # check their duration. But we need to know if there's a chat
+                # segment 0 in case it needs to be discarded later.
+                if view == "chat_file":
+                    chat_has_segment_0 = segment_files[0]["segment_num"] == 0
+                    continue
 
                 # check the duration of the first file in this view
                 too_short = segment_files[0]["ffprobe_seconds"] < (
@@ -315,11 +347,20 @@ class Upload:
                 is_first_segment = segment_files[0]["segment_num"] == 0
 
                 if too_short and is_first_segment:
-                    segment_files = segment_files[1:]
+                    # Discard file in segment 0
+                    self._s3_filenames[view] = self._s3_filenames[view][1:]
+                    segment_0_discarded = True
 
-                self._s3_filenames[view] = [
-                    file["filename"] for file in segment_files
-                ]
+            # ZIP-74 Remove segment 0 start/end times and chat seg 0 if there
+            if segment_0_discarded:
+                rec_times.pop(0, None)
+                if chat_has_segment_0:
+                    self._s3_filenames["chat_file"] = self._s3_filenames[
+                        "chat_file"
+                    ][1:]
+
+            # ZIP-74 "start1_end1,start2_end2,start3_end3"
+            self.recording_times = ",".join(sorted(rec_times.values()))
 
         return self._s3_filenames
 
@@ -417,6 +458,11 @@ class Upload:
             logger.exception(f"Failed to generate file upload params: {e}")
             raise
 
+        # ZIP-74: this is ingested as an Opencast workflow configuration.
+        # Added here because it's calculated by self.s3_filenames.
+        params.append(
+            ("zoomRecordingTimes", (None, self.recording_times)),
+        )
         params.extend(file_params)
         resp = oc_api_request("POST", endpoint, files=params)
         logger.debug({"addMediaPackage": resp.text})
@@ -428,8 +474,9 @@ class FileParamGenerator(object):
         self.s3_filenames = s3_filenames
         self._params = []
 
-    def _add_view(self, flavor, view):
+    def _add_view(self, flavor, view, is_video=True):
         for s3_file in self.s3_filenames[view]:
+            uri_param = "mediaUri" if is_video else "attachmentUri"
             logger.info(
                 {
                     "adding": {
@@ -443,7 +490,7 @@ class FileParamGenerator(object):
                 [
                     ("flavor", (None, escape(flavor))),
                     (
-                        "mediaUri",
+                        uri_param,
                         (None, self._generate_presigned_url(s3_file)),
                     ),
                 ]
@@ -499,7 +546,11 @@ class PublishFileParamGenerator(FileParamGenerator):
         # this will only ever be used for the pure "gallery_view" and only if
         # it doesn't have to serve as the presentation flavor
         "other": "other/chunked+source",
+        # this will contain the chat file
+        "chat": "chat/chunked+source",
     }
+
+    MEDIA_FLAVORS = ["presenter", "presentation", "other"]
 
     VIEW_PRIORITIES = {
         # if we have this...
@@ -528,11 +579,18 @@ class PublishFileParamGenerator(FileParamGenerator):
     def __init__(self, s3_filenames):
         super().__init__(s3_filenames)
         self._used_views = set()
+        self._used_media_views = set()
         # whatever the max length of any view's list of files is the number
         # of sets of files we're dealing with. When hosts stop/start a meeting
         # it results in multiple file sets being generated
+        # ZIP-74: Ignore chat files when calculating the maximum number of segments
         self._file_sets = max(
-            (len(x) for x in s3_filenames.values()),
+            (
+                len(x[1])
+                for x in filter(
+                    lambda y: y[0] != "chat_file", s3_filenames.items()
+                )
+            ),
             default=0,
         )
 
@@ -542,6 +600,9 @@ class PublishFileParamGenerator(FileParamGenerator):
 
     def _has_view(self, view):
         if view in self.s3_filenames:
+            # Don't look at number of segments for chat files
+            if "chat_file" == view:
+                return True
             if self._file_sets == 1:
                 return True
             # if there's more than one set of files and this particular view
@@ -567,11 +628,11 @@ class PublishFileParamGenerator(FileParamGenerator):
             flavor = self.FLAVORS["other"]
         self._add_view(flavor, view)
 
-    def _add_view(self, flavor, view):
+    def _add_view(self, flavor, view, is_video=True):
         """
         params must be added in pairs
         each "view" consists of a flavor (file type) param and
-        a mediaUri param the s3 url of the file
+        a mediaUri/attachmentUri param the s3 url of the file
         :param flavor:
         :param view:
         :return:
@@ -581,13 +642,15 @@ class PublishFileParamGenerator(FileParamGenerator):
             # we already got this view
             return
 
-        if len(self._used_views) >= len(self.FLAVORS):
+        if is_video and len(self._used_media_views) >= len(self.MEDIA_FLAVORS):
             # we already got all the flavors
             return
 
-        super()._add_view(flavor, view)
+        super()._add_view(flavor, view, is_video)
 
         self._used_views.add(view)
+        if is_video:
+            self._used_media_views.add(view)
 
     def _generate_presigned_url(self, s3_filename):
         return super()._generate_presigned_url(s3_filename)
@@ -616,5 +679,9 @@ class PublishFileParamGenerator(FileParamGenerator):
 
         if not self._has_presentation():
             logger.info("Unable to find a secondary view")
+
+        # ZIP-74 Add chat view if there
+        if "chat_file" in self.s3_filenames:
+            self._add_view(self.FLAVORS["chat"], "chat_file", is_video=False)
 
         return self._params

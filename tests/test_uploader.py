@@ -255,12 +255,16 @@ def test_s3_filename_filter_false_start():
     # in the downloader code so I don't test that case here
 
     single_file = {
+        "created": "2021-08-02T15:44:53Z",
+        "created_local": "2021-08-02T11:44:53Z",
         "s3_files": {
             "speaker_view": {
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:53:14Z",
                         "segment_num": 0,
                     }
                 ]
@@ -270,25 +274,44 @@ def test_s3_filename_filter_false_start():
                     {
                         "filename": "a/b/000-shared_screen.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:53:14Z",
                         "segment_num": 0,
                     }
                 ]
             },
-        }
+            "chat_file": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-chat_file.mp4",
+                        "ffprobe_seconds": 0,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:53:14Z",
+                        "segment_num": 0,
+                    }
+                ]
+            },
+        },
     }
 
     false_start = {
+        "created": "2021-08-02T15:44:53Z",
+        "created_local": "2021-08-02T11:44:53Z",
         "s3_files": {
             "speaker_view": {
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
                         "ffprobe_seconds": 5,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:44:59Z",
                         "segment_num": 0,
                     },
                     {
                         "filename": "a/b/001-speaker_view.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T16:02:20Z",
                         "segment_num": 1,
                     },
                 ]
@@ -298,30 +321,58 @@ def test_s3_filename_filter_false_start():
                     {
                         "filename": "a/b/000-shared_screen.mp4",
                         "ffprobe_seconds": 5,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:44:59Z",
                         "segment_num": 0,
                     },
                     {
                         "filename": "a/b/001-shared_screen.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T16:02:20Z",
                         "segment_num": 1,
                     },
                 ]
             },
-        }
+            "chat_file": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-chat_file.mp4",
+                        "ffprobe_seconds": 0,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:44:59Z",
+                        "segment_num": 0,
+                    },
+                    {
+                        "filename": "a/b/001-chat_file.mp4",
+                        "ffprobe_seconds": 0,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T16:02:20Z",
+                        "segment_num": 1,
+                    },
+                ]
+            },
+        },
     }
 
     false_end = {
+        "created": "2021-08-02T15:44:53Z",
+        "created_local": "2021-08-02T11:44:53Z",
         "s3_files": {
             "speaker_view": {
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:53:14Z",
                         "segment_num": 0,
                     },
                     {
                         "filename": "a/b/001-speaker_view.mp4",
                         "ffprobe_seconds": 5,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T15:54:05Z",
                         "segment_num": 1,
                     },
                 ]
@@ -331,35 +382,47 @@ def test_s3_filename_filter_false_start():
                     {
                         "filename": "a/b/000-shared_screen.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T15:44:54Z",
+                        "recording_end": "2021-08-02T15:53:14Z",
                         "segment_num": 0,
                     },
                     {
                         "filename": "a/b/001-shared_screen.mp4",
                         "ffprobe_seconds": 5,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T15:54:05Z",
                         "segment_num": 1,
                     },
                 ]
             },
-        }
+        },
     }
 
     segment_mismatch = {
+        "created": "2021-08-02T15:41:00Z",
+        "created_local": "2021-08-02T11:41:00Z",
         "s3_files": {
             "speaker_view": {
                 "segments": [
                     {
                         "filename": "a/b/000-speaker_view.mp4",
                         "ffprobe_seconds": 5,
+                        "recording_start": "2021-08-02T15:40:00Z",
+                        "recording_end": "2021-08-02T15:40:05Z",
                         "segment_num": 0,
                     },
                     {
                         "filename": "a/b/001-speaker_view.mp4",
                         "ffprobe_seconds": 10,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T15:54:10Z",
                         "segment_num": 1,
                     },
                     {
                         "filename": "a/b/002-speaker_view.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T16:00:00Z",
+                        "recording_end": "2021-08-02T16:08:20Z",
                         "segment_num": 2,
                     },
                 ]
@@ -369,31 +432,84 @@ def test_s3_filename_filter_false_start():
                     {
                         "filename": "a/b/001-shared_screen.mp4",
                         "ffprobe_seconds": 10,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T15:54:10Z",
                         "segment_num": 1,
                     },
                     {
                         "filename": "a/b/002-shared_screen.mp4",
                         "ffprobe_seconds": 500,
+                        "recording_start": "2021-08-02T16:00:00Z",
+                        "recording_end": "2021-08-02T16:08:20Z",
                         "segment_num": 2,
                     },
                 ]
             },
-        }
+            "chat_file": {
+                "segments": [
+                    {
+                        "filename": "a/b/000-chat_file.mp4",
+                        "ffprobe_seconds": 0,
+                        "recording_start": "2021-08-02T15:40:00Z",
+                        "recording_end": "2021-08-02T15:48:20Z",
+                        "segment_num": 0,
+                    },
+                    {
+                        "filename": "a/b/001-chat_file.mp4",
+                        "ffprobe_seconds": 0,
+                        "recording_start": "2021-08-02T15:54:00Z",
+                        "recording_end": "2021-08-02T15:54:10Z",
+                        "segment_num": 1,
+                    },
+                    {
+                        "filename": "a/b/002-chat_file.mp4",
+                        "ffprobe_seconds": 0,
+                        "recording_start": "2021-08-02T16:00:00Z",
+                        "recording_end": "2021-08-02T16:08:20Z",
+                        "segment_num": 2,
+                    },
+                ]
+            },
+        },
     }
 
     cases = [
-        (single_file, 1, 1),
-        (false_start, 1, 1),
-        (false_end, 2, 2),
-        (segment_mismatch, 2, 2),
+        (single_file, 1, 1, 1, "2021-08-02T15:44:54Z_2021-08-02T15:53:14Z"),
+        (false_start, 1, 1, 1, "2021-08-02T15:54:00Z_2021-08-02T16:02:20Z"),
+        (
+            false_end,
+            2,
+            2,
+            0,
+            "2021-08-02T15:44:54Z_2021-08-02T15:53:14Z,2021-08-02T15:54:00Z_2021-08-02T15:54:05Z",
+        ),
+        (
+            segment_mismatch,
+            2,
+            2,
+            2,
+            "2021-08-02T15:54:00Z_2021-08-02T15:54:10Z,2021-08-02T16:00:00Z_2021-08-02T16:08:20Z",
+        ),
     ]
 
-    for data, expected_speaker, expected_screen_share in cases:
+    for (
+        data,
+        expected_speaker,
+        expected_screen_share,
+        expected_chat,
+        expected_recording_times,
+    ) in cases:
         upload = uploader.Upload(data)
         assert len(upload.s3_filenames["speaker_view"]) == expected_speaker
         assert (
             len(upload.s3_filenames["screen_share"]) == expected_screen_share
         )
+        if expected_chat > 0:
+            assert len(upload.s3_filenames["chat_file"]) == expected_chat
+        else:
+            assert "chat_file" not in upload.s3_filenames
+        print(f"{upload.recording_times = }")
+        assert upload.recording_times == expected_recording_times
 
 
 def test_publish_file_param_generator():
@@ -693,11 +809,55 @@ def test_publish_file_param_generator():
             26,
         ],
         [tuple(), RuntimeError, 27],
+        [
+            ("active_speaker", "shared_screen", "chat_file"),
+            [
+                ("active_speaker", "multipart"),
+                ("shared_screen", "presentation"),
+                ("chat_file", "chat"),
+            ],
+            28,
+        ],
+        [
+            (
+                "active_speaker",
+                "gallery_view",
+                "shared_screen",
+                "shared_screen_with_speaker_view",
+                "shared_screen_with_gallery_view",
+                "chat_file",
+            ),
+            [
+                ("active_speaker", "multipart"),
+                ("shared_screen", "presentation"),
+                ("gallery_view", "other"),
+                ("chat_file", "chat"),
+            ],
+            29,
+        ],
+        [
+            (
+                "shared_screen",
+                "shared_screen_with_speaker_view",
+                "shared_screen_with_gallery_view",
+                "chat_file",
+            ),
+            [
+                ("shared_screen_with_speaker_view", "multipart"),
+                ("shared_screen", "presentation"),
+                ("shared_screen_with_gallery_view", "other"),
+                ("chat_file", "chat"),
+            ],
+            30,
+        ],
     ]
 
     for (incoming, expected, case_no) in cases:
         fpg = uploader.PublishFileParamGenerator(
-            s3_filenames={x: ["{}.MP4".format(x)] for x in incoming}
+            s3_filenames={
+                x: [x + (".MP4" if x != "chat_file" else ".TXT")]
+                for x in incoming
+            }
         )
         fpg._generate_presigned_url = lambda f: "signed-{}".format(f)
         if inspect.isclass(expected):
@@ -706,10 +866,12 @@ def test_publish_file_param_generator():
         else:
             expected_params = []
             for view, flavor in expected:
+                uri_param = "mediaUri" if flavor != "chat" else "attachmentUri"
+                ext = "MP4" if flavor != "chat" else "TXT"
                 expected_params.extend(
                     [
                         ("flavor", (None, "{}/chunked+source".format(flavor))),
-                        ("mediaUri", (None, "signed-{}.MP4".format(view))),
+                        (uri_param, (None, f"signed-{view}.{ext}")),
                     ]
                 )
             upload_params = fpg.generate()
@@ -723,6 +885,7 @@ def test_publish_file_param_generator_multi_set():
             {
                 "active_speaker": ["speaker-000.mp4", "speaker-001.mp4"],
                 "shared_screen": ["screen-001.mp4"],
+                "chat_file": ["chat-000.txt", "chat-001.txt"],
             },
             # shared screen view should be ignored
             [
@@ -730,13 +893,18 @@ def test_publish_file_param_generator_multi_set():
                 ("mediaUri", (None, "signed-speaker-000.mp4")),
                 ("flavor", (None, "multipart/chunked+source")),
                 ("mediaUri", (None, "signed-speaker-001.mp4")),
+                ("flavor", (None, "chat/chunked+source")),
+                ("attachmentUri", (None, "signed-chat-000.txt")),
+                ("flavor", (None, "chat/chunked+source")),
+                ("attachmentUri", (None, "signed-chat-001.txt")),
             ],
         ],
-        # has 2x for both views
+        # has 2x for both views, 1 for chat (but that should not affect the media ingested)
         [
             {
                 "active_speaker": ["speaker-000.mp4", "speaker-001.mp4"],
                 "shared_screen": ["screen-000.mp4", "screen-001.mp4"],
+                "chat_file": ["chat-000.txt"],
             },
             # params should include both files for both views
             [
@@ -748,6 +916,8 @@ def test_publish_file_param_generator_multi_set():
                 ("mediaUri", (None, "signed-screen-000.mp4")),
                 ("flavor", (None, "presentation/chunked+source")),
                 ("mediaUri", (None, "signed-screen-001.mp4")),
+                ("flavor", (None, "chat/chunked+source")),
+                ("attachmentUri", (None, "signed-chat-000.txt")),
             ],
         ],
         # Make sure having 3 segments doesn't break the file param generator!
@@ -762,6 +932,11 @@ def test_publish_file_param_generator_multi_set():
                     "screen-000.mp4",
                     "screen-001.mp4",
                     "screen-002.mp4",
+                ],
+                "chat_file": [
+                    "chat-000.txt",
+                    "chat-001.txt",
+                    "chat-002.txt",
                 ],
             },
             # params should include both files for both views
@@ -778,6 +953,12 @@ def test_publish_file_param_generator_multi_set():
                 ("mediaUri", (None, "signed-screen-001.mp4")),
                 ("flavor", (None, "presentation/chunked+source")),
                 ("mediaUri", (None, "signed-screen-002.mp4")),
+                ("flavor", (None, "chat/chunked+source")),
+                ("attachmentUri", (None, "signed-chat-000.txt")),
+                ("flavor", (None, "chat/chunked+source")),
+                ("attachmentUri", (None, "signed-chat-001.txt")),
+                ("flavor", (None, "chat/chunked+source")),
+                ("attachmentUri", (None, "signed-chat-002.txt")),
             ],
         ],
     ]
