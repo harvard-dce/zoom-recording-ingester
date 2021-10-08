@@ -10,6 +10,7 @@ import requests
 import requests_mock
 import utils
 import logging
+from datetime import datetime
 
 
 @pytest.mark.parametrize(
@@ -161,3 +162,44 @@ def test_zoom_api_request_failures():
         error_msg = "Error requesting https://api.zoom.us/v2/meetings"
         with pytest.raises(utils.common.ZoomApiRequestError, match=error_msg):
             utils.zoom_api_request("meetings")
+
+
+def test_buffer_minutes(monkeypatch):
+    start_time = datetime.now().replace(hour=15, minute=0)
+    event_day = list(utils.schedule_days.keys())[start_time.weekday()]
+    schedule = {
+        "events": [
+            {
+                "title": "Foo",
+                "day": event_day,
+                "time": start_time.strftime("%H:%M"),
+            },
+        ],
+    }
+    # should match exactly
+    match = utils.schedule_match(schedule, start_time)
+    assert match["title"] == "Foo"
+
+    # missed schedule by one hour
+    match = utils.schedule_match(
+        schedule,
+        start_time.replace(hour=16),
+    )
+    assert match is None
+
+    # 40 minutes off with buffer set to 30 minutes (no match)
+    with monkeypatch.context() as mp:
+        mp.setattr("utils.common.BUFFER_MINUTES", 30)
+        match = utils.schedule_match(
+            schedule,
+            start_time.replace(hour=14, minute=20),
+        )
+        assert match is None
+
+        # extend the buffer to 45m and try again
+        mp.setattr("utils.common.BUFFER_MINUTES", 45)
+        match = utils.schedule_match(
+            schedule,
+            start_time.replace(hour=14, minute=20),
+        )
+        assert match["title"] == "Foo"

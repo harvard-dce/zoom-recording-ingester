@@ -22,6 +22,7 @@ using the view to flavor mapping:
         "shared_screen_with_speaker_view": "shared-screen-speaker/chunked+source",
 }
 ```
+- `BUFFER_MINUTES` env var for downloader function
 
 ### Changed
 - Changed env var OC_WORKFLOW to DEFAULT_OC_WORKFLOW.
@@ -134,7 +135,7 @@ mention any channel if `SLACK_ZIP_CHANNEL` is not specified.
 
 ### Added
 - CDK
-- "allow_multiple_ingests" demand ingest endpoint query param 
+- "allow_multiple_ingests" demand ingest endpoint query param
 - `opencast-op-counts` function to check current number of running workflows in Opencast from the uploader lambda
 
 ### Removed
@@ -177,4 +178,3 @@ mention any channel if `SLACK_ZIP_CHANNEL` is not specified.
 # [1.00.2]
 # [1.00.1]
 # [1.00.0]
-
