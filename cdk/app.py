@@ -51,6 +51,7 @@ stack_props = {
     "zoom_api_key": ZOOM_API_KEY,
     "zoom_api_secret": ZOOM_API_SECRET,
     "apigee_key": APIGEE_KEY,
+    "buffer_minutes": getenv("BUFFER_MINUTES"),
     "local_time_zone": getenv("LOCAL_TIME_ZONE"),
     "default_series_id": getenv("DEFAULT_SERIES_ID", required=False),
     "download_message_per_invocation": getenv(
