@@ -135,6 +135,14 @@ def stack_update(ctx):
     ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
 
+@task(pre=[production_failsafe])
+def stack_changeset(ctx):
+    """
+    Create a CloudFormation changeset for manual deployment
+    """
+    ctx.run(f"cdk -c VIA_INVOKE=true deploy --no-execute {profile_arg()}")
+
+
 @task
 def stack_diff(ctx):
     """
@@ -760,6 +768,7 @@ stack_ns.add_task(stack_synth, "synth")
 stack_ns.add_task(stack_diff, "diff")
 stack_ns.add_task(stack_create, "create")
 stack_ns.add_task(stack_update, "update")
+stack_ns.add_task(stack_changeset, "changeset")
 stack_ns.add_task(stack_delete, "delete")
 ns.add_collection(stack_ns)
 

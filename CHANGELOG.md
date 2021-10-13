@@ -23,6 +23,7 @@ using the view to flavor mapping:
 }
 ```
 - `BUFFER_MINUTES` env var for downloader function
+- `stack.changeset` task for more cautious deploys
 
 ### Changed
 - Changed env var OC_WORKFLOW to DEFAULT_OC_WORKFLOW.

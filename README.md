@@ -8,14 +8,14 @@ A set of AWS services for downloading and ingesting Zoom meeting videos into Ope
 
 The Zoom Ingester (a.k.a., "Zoom Ingester Pipeline", a.k.a., "ZIP") is Harvard DCE's mechanism for moving Zoom
 recordings out of the Zoom service and into our own video management and delivery system, Opencast. It allows DCE
-to deliver recorded Zoom class meetings and lectures alongside our other, non-Zoom video content. 
+to deliver recorded Zoom class meetings and lectures alongside our other, non-Zoom video content.
 
 When deployed, the pipeline will have an API endpoint that must be registered in your Zoom account as a receiver of
 completed recording events. When Zoom has completed the processing of a recorded meeting video it will send a "webhook"
-notification to the pipeline's endpoint. From there the recording metadata will be passed along through a series of queues 
+notification to the pipeline's endpoint. From there the recording metadata will be passed along through a series of queues
 and Lambda functions before finally being ingested into Opencast. Along the way, the actual recording files will be
 fetched from Zoom and stored in S3. Alternatively, from the Opencast admin interface, a user can kick off an "on-demand"
-ingestion by entering the identifier of a Zoom recording and the corresponding Opencast series into which it should be 
+ingestion by entering the identifier of a Zoom recording and the corresponding Opencast series into which it should be
 ingested. The On-Demand ingest function then fetches the recording metadata from the Zoom API and emulates a standard
 webhook.
 
@@ -53,11 +53,11 @@ Info on Zoom's API and webhook functionality can be found at:
 ##### node/cdk stuff
 
 * node.js 10.3 or higher
-* the `aws-cdk` node.js toolkit installed 
+* the `aws-cdk` node.js toolkit installed
     * this is usually just `npm install -g aws-cdk`
     * it's best if the version matches the version of the `aws-cdk.core` package in `requirements/base.txt`
     * see [https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html](https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html) for more info
-    
+
 ##### other stuff
 
 * an Opsworks Opencast cluster, including:
@@ -72,7 +72,7 @@ Info on Zoom's API and webhook functionality can be found at:
 
 #### local environment setup
 
-1. Make sure to have run `aws configure` at some point so that you 
+1. Make sure to have run `aws configure` at some point so that you
    at least have one set of credentials in an `~/.aws/configure` file.
 1. Make a python virtualenv and activate it however you normally do those things, e.g.: `virtualenv venv && source venv/bin/activate`
 1. Python dependencies are handled via `pip-tools` so you need to install that first: `pip install pip-tools`
@@ -87,7 +87,7 @@ Info on Zoom's API and webhook functionality can be found at:
 #### deployment
 
 1. Make sure your s3 bucket for packaged lambda code exists. The
-name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`. 
+name of the bucket comes from `LAMBDA_CODE_BUCKET` in `.env`.
 1. Run `invoke stack.create` to build the CloudFormation stack.
 1. (Optional for dev) Populate the Zoom meeting schedule database. See the *Schedule DB* section below for more details.
     1. Export the DCE Zoom schedule google spreadsheet to a CSV file.
@@ -143,7 +143,7 @@ function updateZoomIngester() {
 
 ### Slack integration setup (Optional)
 
-1. Go to <https://api.slack.com/apps>, log in if necessary, go to "Build" then "Your Apps", and click "Create New App". 
+1. Go to <https://api.slack.com/apps>, log in if necessary, go to "Build" then "Your Apps", and click "Create New App".
 1. Select "From scratch", give the app a name, and pick the Slack workspace to develop your app in. Then click "Create App" to create the app.
 1. You should now be on the "Settings" > "Basic Information" page for your app. Open "Add features and functionality".
 1. Click on "Interactive Components", then toggle "Interactivity" on. Paste the slack endpoint url into the "Request URL" filed. (This can be found in the CDK stack outputs and should end with `/slack`.) Save changes.
@@ -174,9 +174,9 @@ Choose app type "Webhook only app."
 and enter the API endpoint under "Event Subscription."
 1. Subscribe to the following events:
 
-    For automatic ingests:. 
-    * Recording - "All recordings have completed". 
-    
+    For automatic ingests:.
+    * Recording - "All recordings have completed".
+
     For status updates:
 
     * Recording - "Recording Started"
@@ -196,8 +196,8 @@ The easiest way to find a listing of the endpoints for your stack is to run `inv
 
 **Description:** Receives webhook notifications from Zoom for ingests or status updates and receives on-demand ingest requests forwarded from the on-demand endpoint.
 
-**Endpoint:** `POST /new_recording`  
-**ExportName** : `<stack-name>-webhook-url`  
+**Endpoint:** `POST /new_recording`
+**ExportName** : `<stack-name>-webhook-url`
 
 **Accepted Zoom webhook notifications for status updates:**
 
@@ -215,7 +215,7 @@ The easiest way to find a listing of the endpoints for your stack is to run `inv
 
 **Description:** Initiate a new on demand ingests from Opencast.
 
-**Endpoint:** `POST /ingest`  
+**Endpoint:** `POST /ingest`
 **ExportName:**`<stack-name>-ingest-url`
 
 **Request Body Schema**
@@ -237,37 +237,37 @@ The easiest way to find a listing of the endpoints for your stack is to run `inv
 	    "allow_multiple_ingests": false,
 	    "ingest_all_mp4": false
 	}
-	
+
 
 
 ### Schedule Update Endpoint
 
 **Description:** Update the ZIP schedule.
 
-**Endpoint:** `POST /schedule_update`  
-**ExportName:** `<stack-name>-schedule-url`  
+**Endpoint:** `POST /schedule_update`
+**ExportName:** `<stack-name>-schedule-url`
 **Parameters:** No parameters. Retrieves schedule from stack associated google sheet.
 
 ### Status Endpoint (requests from Opencast only)
 
 **Description:** Check the status of a recording.
 
-**Endpoint:** `GET /status`  
+**Endpoint:** `GET /status`
 **ExportName:** `<stack-name>-status-url`
 
 **Request Path Parameters**
 
 Provide only one of the following:
 
-`meeting_id` - A Zoom meeting id.  
+`meeting_id` - A Zoom meeting id.
 `seconds` - Retrieve status' updated within the last X seconds.
 
 **Request Examples**
 
-Retrieve all status' updated within the last 10 seconds:  
+Retrieve all status' updated within the last 10 seconds:
 `GET https://<your-stack-endpoint-url>/status?seconds=10`
 
-Retrieve current status of all recordings with Zoom meeting id 86168921331:  
+Retrieve current status of all recordings with Zoom meeting id 86168921331:
 `GET https://<your-stack-endpoint-url>/status?meeting_id=86168921331`
 
 
@@ -280,7 +280,7 @@ Retrieve current status of all recordings with Zoom meeting id 86168921331:
 1. Make changes.
 1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
 Alternatively, to save time, if you are only editing one function, run `invoke deploy.[function name] --do-release`.
-1. If you make changes to the provisioning code in `./cdk` you must also (or instead) run 
+1. If you make changes to the provisioning code in `./cdk` you must also (or instead) run
     1. `invoke stack.diff` to inspect the changes
     1. `invoke stack.update` to apply the changes
 1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
@@ -382,6 +382,10 @@ View a diff of CloudFormation changes to the stack.
 
 Apply changes to the CloudFormation stack.
 
+##### `invoke stack.changeset`
+
+Like `stack.update` except changes are captured in a CloudFormation changeset and execution of the update is deferred and must be done manually, most likely through the CloudFormation web console. Use this instead of `stack.update` if you want to be more cautious with the deployment. There are times when every change an update is going to make is not represented in the diff output of `stack.diff`. A changeset allows you to inspect what's going to change in more detail. A changeset can also be discarded if it contains changes that are unwanted or incorrect for some reason.
+
 ##### `invoke stack.delete`
 
 Delete the stack.
@@ -455,7 +459,7 @@ published and the release alias will be updated to point to this version.
 
 ### Step 1: Update master
 
-Merge all changes for release into master.  
+Merge all changes for release into master.
 Checkout master branch, git pull.
 
 ### Step 2: Test release in dev stack
@@ -478,7 +482,7 @@ Make sure codebuild completes successfully.
 First update your tags:
 
     git tag -l | xargs git tag -d
-    git fetch --tags    
+    git fetch --tags
 
 
 Then tag release:
@@ -493,7 +497,7 @@ Make sure you are working on the correct zoom ingester stack, double check envir
 If there are new functions you must package and ensure the code is in s3:
 
     invoke package -u
-    
+
 then
 
 	invoke stack.update
