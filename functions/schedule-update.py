@@ -23,3 +23,13 @@ def handler(event, context):
         doc.import_to_dynamo(sheet)
 
     return {"statusCode": 200, "headers": {}, "body": "Success"}
+
+
+if __name__ == "__main__":
+
+    class FakeContextObj:
+        def __init__(self):
+            self.aws_request_id = "foo"
+            self.function_name = __file__
+
+    handler({}, FakeContextObj())
