@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Changed
+
+- updated flake8 and black versions
+
 ## [3.1.0] - 2022-01-13
 
 ### Added
