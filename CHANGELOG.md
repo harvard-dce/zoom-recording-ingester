@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [3.1.0] - 2022-01-13
+
 ### Added
 - New optional parameters for on demand ingest (`/ingest` endpoint): `ingest_all_mp4` (boolean),
 and `oc_workflow` (string).
