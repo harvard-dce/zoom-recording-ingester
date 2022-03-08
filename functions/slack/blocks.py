@@ -209,11 +209,20 @@ def ingest_details(rec, schedule):
             )
             on_demand = ingest["origin"] == "on_demand"
 
-            request_time = formatted_local_time(ingest["ingest_request_time"])
+            if "ingest_request_time" in ingest:
+                request_time = formatted_local_time(
+                    ingest["ingest_request_time"]
+                )
+            else:
+                logger.warning(
+                    f"Ingest missing ingest_request_time field: {ingest}"
+                )
+                request_time = "[unknown]"
+
             if on_demand:
                 ingest_details += f"*+Zoom Ingest on {request_time}*\n"
             else:
-                ingest_details += "*Automated Ingest*\n"
+                ingest_details += f"*Automated Ingest on {request_time}*\n"
 
             ingest_details += f"> Status: {pipeline_status_description(ingest, on_demand, match)} (updated {update_time})\n"
 

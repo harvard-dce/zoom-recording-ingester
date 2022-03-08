@@ -45,7 +45,7 @@ def test_slack_results_blocks(mocker):
 
     results_blocks = blocks.slack_results_blocks(mock_id, mock_status_data)
 
-    assert results_blocks == [
+    expected_blocks = [
         {
             "type": "header",
             "text": {
@@ -85,7 +85,7 @@ def test_slack_results_blocks(mocker):
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": "*Automated Ingest*\n> Status: Ignored by ZIP. No opencast series match (updated 05/19/21 9:10AM)\n",
+                "text": "*Automated Ingest on Wednesday, May 19, 2021 at 8:49AM*\n> Status: Ignored by ZIP. No opencast series match (updated 05/19/21 9:10AM)\n",
             },
         },
         {
@@ -97,6 +97,19 @@ def test_slack_results_blocks(mocker):
         },
     ]
 
+    assert results_blocks == expected_blocks
+
+    # test with a missing `ingest_request_time` value
+    del mock_status_data["recordings"][0]["zip_ingests"][0][
+        "ingest_request_time"
+    ]
+    results_blocks = blocks.slack_results_blocks(mock_id, mock_status_data)
+    expected_blocks[-2]["text"][
+        "text"
+    ] = "*Automated Ingest on [unknown]*\n> Status: Ignored by ZIP. No opencast series match (updated 05/19/21 9:10AM)\n"
+    assert results_blocks == expected_blocks
+
+    # test an empty lookup
     results_blocks = blocks.slack_results_blocks(mock_id, {})
     assert results_blocks[-1]["text"]["text"] == "No recent recordings found."
 

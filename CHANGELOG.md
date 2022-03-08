@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - updated flake8 and black versions
+- Fixed bug where slack tool assumed `ingest_request_time` was always present
 
 ## [3.1.0] - 2022-01-13
 
