@@ -355,11 +355,14 @@ class Upload:
         return wf_id
 
     def already_ingested(self, mpid):
-        endpoint = f"/workflow/instances.json?mp={mpid}"
+        # OC11, use the external api endpoint
+        endpoint = f"/api/events/{mpid}"
         try:
             resp = oc_api_request("GET", endpoint)
-            logger.debug(f"Lookup for mpid: {mpid}, {resp.json()}")
-            return int(resp.json()["workflows"]["totalCount"]) > 0
+            logger.debug(
+                f"Lookup for mpid: {mpid}, enpoint: {endpoint}, {resp.json()}"
+            )
+            return resp.json()["identifier"] == mpid
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == "404":
                 return False
