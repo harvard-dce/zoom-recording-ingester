@@ -28,14 +28,14 @@ class ZipCodebuildProject(core.Construct):
             ),
             environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.AMAZON_LINUX_2_2,
-                compute_type=codebuild.ComputeType.MEDIUM,
+                compute_type=codebuild.ComputeType.LARGE,
             ),
             artifacts=codebuild.Artifacts.s3(
                 name=stack_name,
                 bucket=lambda_code_bucket,
             ),
             badge=True,
-            timeout=core.Duration.minutes(5),
+            timeout=core.Duration.minutes(30),
         )
 
         self.project.add_to_role_policy(

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Changed
+
+- bump codebuild environment size from medium to large; increase build timeout to 30m
+
 ## [3.1.1 - 2022-03-10]
 
 ### Changed
