@@ -1,6 +1,6 @@
 invoke
 python-dotenv
-awscli>=1.19.41
+awscli
 boto3
 requests
 tabulate
@@ -19,12 +19,8 @@ aws-cdk.aws_ec2==1.95.*
 aws-cdk.aws_logs==1.95.*
 aws-cdk.aws_iam==1.95.*
 
--r ../function_requirements/zoom-webhook.in
--r ../function_requirements/zoom-downloader.in
--r ../function_requirements/zoom-uploader.in
--r ../function_requirements/zoom-log-notifications.in
+-r ../function_requirements/common-requirements.in
+
+# all functions use a common set of requirements with the exception
+# of opencast-op-counts which needs the mysql library
 -r ../function_requirements/opencast-op-counts.in
--r ../function_requirements/zoom-on-demand.in
--r ../function_requirements/schedule-update.in
--r ../function_requirements/status-query.in
--r ../function_requirements/slack.in
