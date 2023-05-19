@@ -52,34 +52,44 @@ def test_zoom_api_request_missing_creds():
 
 
 def test_apigee_key(caplog):
+    utils.common.ZOOM_API_BASE_URL = "https://www.foo.com"
     utils.common.APIGEE_KEY = "apigee_key"
     utils.common.ZOOM_API_KEY = None
     utils.common.ZOOM_API_SECRET = None
     caplog.set_level(logging.INFO)
-    utils.zoom_api_request("meetings")
-    assert "apigee request" in caplog.text.lower()
+    with requests_mock.mock() as req_mock:
+        req_mock.get(requests_mock.ANY, status_code=200)
+        utils.zoom_api_request("meetings", ignore_failure=True)
+        assert "apigee request" in caplog.text.lower()
 
     # Should still use apigee key even if zoom api key/secret defined
     utils.common.ZOOM_API_KEY = "key"
     utils.common.ZOOM_API_SECRET = "secret"
-    utils.zoom_api_request("meetings")
-    assert "apigee request" in caplog.text.lower()
+    with requests_mock.mock() as req_mock:
+        req_mock.get(requests_mock.ANY, status_code=200)
+        utils.zoom_api_request("meetings")
+        assert "apigee request" in caplog.text.lower()
 
 
 def test_zoom_api_key(caplog):
+    utils.common.ZOOM_API_BASE_URL = "https://www.foo.com"
     utils.common.APIGEE_KEY = None
     utils.common.ZOOM_API_KEY = "key"
     utils.common.ZOOM_API_SECRET = "secret"
     caplog.set_level(logging.INFO)
-    utils.zoom_api_request("meetings")
-    assert "zoom api request" in caplog.text.lower()
+    with requests_mock.mock() as req_mock:
+        req_mock.get(requests_mock.ANY, status_code=200)
+        utils.zoom_api_request("meetings")
+        assert "zoom api request" in caplog.text.lower()
 
     utils.common.APIGEE_KEY = ""
     utils.common.ZOOM_API_KEY = "key"
     utils.common.ZOOM_API_SECRET = "secret"
     caplog.set_level(logging.INFO)
-    utils.zoom_api_request("meetings")
-    assert "zoom api request" in caplog.text.lower()
+    with requests_mock.mock() as req_mock:
+        req_mock.get(requests_mock.ANY, status_code=200)
+        utils.zoom_api_request("meetings")
+        assert "zoom api request" in caplog.text.lower()
 
 
 def test_url_construction(caplog):
