@@ -974,6 +974,29 @@ def __update_function(ctx, func):
     ).format(profile_arg(), func_name, zip_path)
     ctx.run(cmd, hide=1)
 
+    # Wait for function update to complete successfully
+    wait = 1
+    for i in range(5):
+        cmd = (
+            "aws {} lambda get-function --function-name {} "
+            "--query 'Configuration.LastUpdateStatus'"
+        ).format(profile_arg(), func_name)
+        result = ctx.run(cmd, hide=1)
+        # Return will be a string like: '"InProgress"\n', '"Successful"\n'
+        # or '"Failed"\n'
+        if "Successful" in result.stdout:
+            print("Update successful")
+            return
+        print(
+            "Waiting {} second(s) for {} function update to succeed...".format(
+                wait, func_name
+            )
+        )
+        time.sleep(wait)
+        wait *= 2
+
+    print("Update not successful after 5 tries.")
+
 
 def __save_gsheets_credentials(filename):
     auth = GSheetsAuth()
