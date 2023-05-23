@@ -280,7 +280,7 @@ Retrieve current status of all recordings with Zoom meeting id 86168921331:
 1. Make changes.
 1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
 Alternatively, to save time, if you are only editing one function, run `invoke deploy.[function name] --do-release`.
-1. If you make changes to the provisioning code in `./cdk` you must also (or instead) run
+1. If you make changes to the provisioning code in `./cdk` or update environment variables you must also (or instead) run 
     1. `invoke stack.diff` to inspect the changes
     1. `invoke stack.update` to apply the changes
 1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.

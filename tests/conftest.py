@@ -87,7 +87,15 @@ def webhook_payload(aws_request_id):
                             "download_url": "https://zoom.us/rec/play/some-long-id",
                             "file_type": "MP4",
                             "recording_type": "shared_screen_with_speaker_view",
-                        }
+                        },
+                        {
+                            "id": "987654-321",
+                            "recording_start": "2020-01-09T19:50:46Z",
+                            "recording_end": "2020-01-09T20:50:46Z",
+                            "download_url": "https://zoom.us/rec/play/another-long-id",
+                            "file_type": "CHAT",
+                            "recording_type": "chat_file",
+                        },
                     ],
                 },
                 "allow_multiple_ingests": False,
