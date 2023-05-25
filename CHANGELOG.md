@@ -7,10 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [3.3.0 - 2023-05-25]
+
 ### Changed
 
 - bump codebuild environment size from medium to large; increase build timeout to 30m
 - bump max memory for schedule update function to 256 to address out of memory failures
+- Dependency updates
+- ZIP-74: ingest chat files to Opencast
+- Check lambda function update status before publishing. Change to ubuntu-20.04.
+- Fix two zoom api tests
+
+## [3.2.0 - 2022-08-25]
+
+### Changed
+
+- ZIP-81: use the OC external api event endpoint to determine if mp id exists (OC 11.x)
+- Update lint tool versions
 
 ## [3.1.1 - 2022-03-10]
 
