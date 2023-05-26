@@ -400,25 +400,40 @@ a `DEBUG` environment variable in the Lambda function(s) settings.
 Does a bulk `pip-compile` upgrade of all base and function requirements.
 
 
-### Dependency Changes
+## Dependency Changes
 
 Dependencies for the project as a whole and the individual functions are managed using
 the `pip-tools` command, `pip-compile`. Top-level dependencies are listed in a `.in` file
-which is then compiled to a "locked" `.txt` version like so:
+which is then compiled to a "locked" `.txt` version.
 
-`pip-compile requirements/dev.in`
+There are four different contexts that require dependencies to be pip-compiled:
+- the functions themsevles
+- the base context, i.e., running the `invoke` tasks for packaging, deployment and stack updates
+- the tox unittesting context
+- the development context (when you're working on and testing the code)
 
-Both the `.in` and `.txt` files are version-controlled, so the initial compile was
-only necessary once. Now we only have to run `pip-compile` in a couple of situations:
+There is unfortunately not a clean separation between what's required in each of these contexts. For instance, 
+some of the base and dev context requirements require packages that also used in the functions. It would be
+great to reconcile this at some point, but in the meantime just be sure when updating or adding a package to 
+run pip-compile on affected requirements files in this order:
 
-* when upgrading a particular package.
-* to update the project's base requirements list if a dependency for a specific function is changed
+1. `function_requirements/common-requirements.in`
+1. `requirements/base.in`
+1. `requirements/tox.in`
+1. `requirements/dev.in`
 
-In the first case you run `pip-compile -P [package-name] [source file]` where `source_file` is the `.in` file getting the update.
+Running pip-compile on a `.in` file will generate a corresponding `.txt` file which "locks" the dependent package versions. 
+Both the `.in` and `.txt` files should be committed to version control.
 
-Following that you must run `pip-compile` in the project root to pull the function-specific change(s) into the main project list.
+The main situation in which this becomes necessary is when you need to update a particular package due to 
+vulnerability. For example, if the **google-auth** package needed to be updated you would run:
 
-Finally, run `pip-sync requirements/dev.txt` to ensure the packages are updated in your virtualenv .
+`pip-compile -P google-auth function_requirements/common-requirements.in`
+
+Afterwards you would need to also `pip-compile` the remaning three "downstream" requirements files (in order) since they
+use the `-r` flag to import the `common-requirements.txt` file.
+
+Finally, you'll want to run `pip-sync requirements/dev.txt` to ensure the packages are updated in your virtualenv.
 
 ## Testing
 
@@ -427,7 +442,7 @@ execute:
 
 `invoke test`
 
-Alternatively you can run `tox`.
+Alternatively you can just run `tox` directly.
 
 ## Lambda Versions, Release Alias & Initial Code Release
 

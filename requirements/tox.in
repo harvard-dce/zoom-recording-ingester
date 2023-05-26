@@ -1,0 +1,10 @@
+mock
+pytest
+pytest-env
+pytest-mock
+pytest-cov
+requests-mock
+freezegun
+
+-r ../function_requirements/common-requirements.txt
+-r ../function_requirements/opencast-op-counts.txt

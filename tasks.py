@@ -529,7 +529,7 @@ def test(ctx):
     """
     Execute the pytest tests
     """
-    ctx.run("py.test --cov-report term-missing --cov=functions tests -vv")
+    ctx.run("tox -r")
 
 
 @task(pre=[production_failsafe])
@@ -694,7 +694,6 @@ def import_schedule_from_csv(ctx, filepath):
 
 @task
 def logs(ctx, function=None, watch=False):
-
     functions = resolve_function_arg(function)
 
     def _awslogs(group, watch=False):
@@ -830,7 +829,6 @@ def profile_arg():
 
 
 def oc_host(ctx, layer_name):
-
     # this only works on layers with a single instance
     if layer_name.lower() not in ["admin", "engage"]:
         print(
@@ -895,7 +893,6 @@ def __update_release_alias(ctx, func, version, description):
 
 
 def __publish_version(ctx, func, description):
-
     print("Publishing new version of {}".format(func))
     lambda_function_name = f"{STACK_NAME}-{func}"
     if description is None:
@@ -921,9 +918,7 @@ def __build_function(ctx, func, upload_to_s3=False):
         shutil.rmtree(build_path)
 
     if exists(req_file):
-        ctx.run(
-            "pip install -U -r {} -t {}".format(req_file, build_path), hide=1
-        )
+        ctx.run("pip install -r {} -t {}".format(req_file, build_path), hide=0)
 
     mkdir(join(build_path, "utils"))
     modules = ["utils/" + f.split(".")[0] for f in listdir("functions/utils")]
@@ -1137,7 +1132,6 @@ def __move_messages(deadletter_queue, source_queue, limit, uuid=None):
 
 
 def __view_messages(queue_url, limit):
-
     if queue_url is None:
         print("Missing required queues.")
         return
@@ -1207,7 +1201,6 @@ def __view_messages(queue_url, limit):
 
 
 def __get_dynamo_schedule(ctx, table_name):
-
     cmd = "aws {} dynamodb scan --table-name {}".format(
         profile_arg(), table_name
     )
@@ -1235,13 +1228,11 @@ def __show_stack_status(ctx):
 
 
 def __show_function_status(ctx):
-
     status_table = [
         ["function", "released", "desc", "timestamp", "$LATEST timestamp"]
     ]
 
     for func in names.FUNCTIONS:
-
         lambda_function_name = f"{STACK_NAME}-{func}"
         cmd = (
             "aws {} lambda list-aliases --function-name {} "
@@ -1279,7 +1270,6 @@ def __show_function_status(ctx):
 
 
 def __show_sqs_status(ctx):
-
     status_table = [
         [
             "queue",
@@ -1331,7 +1321,6 @@ def __find_recording_log_events(ctx, function, uuid):
     for log_stream, request_id in __request_ids_from_logs(
         ctx, log_group, filter_pattern
     ):
-
         request_id_pattern = '{ $.aws_request_id = "' + request_id + '" }'
         cmd = (
             "aws logs filter-log-events {} --log-group-name {} "
@@ -1348,7 +1337,6 @@ def __find_recording_log_events(ctx, function, uuid):
 
 
 def __request_ids_from_logs(ctx, log_group, filter_pattern):
-
     cmd = (
         "aws logs filter-log-events {} --log-group-name {} "
         "--output text --query 'events[][logStreamName,message]' "
@@ -1396,7 +1384,6 @@ def queue_url(queue_name):
 
 
 def queue_is_empty(ctx, queue_name):
-
     cmd = (
         f"aws {profile_arg()} sqs get-queue-attributes "
         f"--queue-url {queue_url(queue_name)} "

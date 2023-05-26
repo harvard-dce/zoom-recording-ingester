@@ -5,6 +5,9 @@ on:
   push:
   pull_request:
 
+env:
+  AWS_DEFAULT_REGION: us-east-1
+
 jobs:
   unit-tests:
     runs-on: ubuntu-20.04
@@ -23,9 +26,7 @@ jobs:
         run: pip install -r requirements/dev.txt
 
       - name: Run tests
-        run: pytest ./tests
-        env:
-          AWS_DEFAULT_REGION: us-east-1
+        run: tox
 
   lint-check:
     runs-on: ubuntu-20.04
