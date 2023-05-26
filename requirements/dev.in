@@ -1,13 +1,8 @@
-mock
-pytest
-pytest-env
-pytest-mock
-pytest-cov
-requests-mock
-freezegun
 tox
 black
 flake8
 pre-commit
+pipdeptree
 
--r base.in
+-r base.txt
+-r ../function_requirements/common-requirements.txt
