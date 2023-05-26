@@ -42,6 +42,7 @@ class ZipCodebuildProject(core.Construct):
             iam.PolicyStatement(
                 resources=policy_resources,
                 actions=[
+                    "lambda:GetFunction",
                     "lambda:UpdateFunctionCode",
                     "lambda:PublishVersion",
                     "lambda:UpdateAlias",
