@@ -918,9 +918,7 @@ def __build_function(ctx, func, upload_to_s3=False):
         shutil.rmtree(build_path)
 
     if exists(req_file):
-        ctx.run(
-            "pip install -U -r {} -t {}".format(req_file, build_path), hide=1
-        )
+        ctx.run("pip install -r {} -t {}".format(req_file, build_path), hide=0)
 
     mkdir(join(build_path, "utils"))
     modules = ["utils/" + f.split(".")[0] for f in listdir("functions/utils")]

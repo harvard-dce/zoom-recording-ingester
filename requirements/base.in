@@ -5,7 +5,6 @@ boto3
 botocore
 requests
 tabulate
-#awslogs
 aws-cdk.core==1.95.*
 aws-cdk.aws_s3==1.95.*
 aws-cdk.aws_lambda==1.95.*
@@ -19,3 +18,5 @@ aws-cdk.aws_cloudwatch_actions==1.95.*
 aws-cdk.aws_ec2==1.95.*
 aws-cdk.aws_logs==1.95.*
 aws-cdk.aws_iam==1.95.*
+
+-r ../function_requirements/common-requirements.txt
