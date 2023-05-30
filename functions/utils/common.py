@@ -57,7 +57,6 @@ def getenv(param_name, required=True):
 def setup_logging(handler_func):
     @wraps(handler_func)
     def wrapped_func(event, context):
-
         extra_info = {"aws_request_id": context.aws_request_id}
         aws_lambda_logging.setup(
             level=LOG_LEVEL,

@@ -18,7 +18,6 @@ def resp_400(msg):
 
 @setup_logging
 def handler(event, context):
-
     logger.info(event)
 
     meeting_id = None

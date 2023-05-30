@@ -245,7 +245,6 @@ def test_status_by_seconds_invalid(mocker):
     datetime.strptime("2021-02-14", status.DATE_FORMAT).replace(second=1)
 )
 def test_status_by_seconds_day_overlap(mocker):
-
     mocker.patch.object(status, "status_table", "mock_status_table")
 
     mock_recent_items = mocker.patch.object(status, "request_recent_items")
@@ -269,7 +268,6 @@ def test_status_by_seconds_day_overlap(mocker):
     datetime.strptime("2021-02-14", status.DATE_FORMAT).replace(second=59)
 )
 def test_status_by_seconds_no_overlap(mocker):
-
     mocker.patch.object(status, "status_table", "mock_status_table")
 
     mock_recent_items = mocker.patch.object(status, "request_recent_items")

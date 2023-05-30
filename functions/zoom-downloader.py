@@ -186,7 +186,6 @@ class Download:
     @property
     def recording_files(self):
         if not hasattr(self, "_recording_files"):
-
             # all incoming files
             files = self.data["recording_files"]
 
@@ -254,7 +253,6 @@ class Download:
         return None
 
     def oc_series_found(self, ignore_schedule=False, override_series_id=None):
-
         if override_series_id:
             self.opencast_series_id = override_series_id
             logger.info(
@@ -365,7 +363,6 @@ class Download:
         return self._upload_message
 
     def upload_to_s3(self):
-
         logger.info(f"downloading {len(self.recording_files)} files")
 
         self.downloaded_files = []
@@ -603,7 +600,6 @@ class ZoomFile:
         return part
 
     def stream_file_to_s3(self):
-
         metadata = {
             "uuid": self.file_data["meeting_uuid"],
             "file_id": self.file_data["recording_id"],

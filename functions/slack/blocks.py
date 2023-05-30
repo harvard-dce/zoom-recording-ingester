@@ -381,7 +381,6 @@ def recording_status_description(ingest_details):
 
 
 def pipeline_status_description(ingest_details, on_demand=False, match=False):
-
     status = ingest_details["status"]
 
     # Processing

@@ -228,7 +228,6 @@ class ZipApi(core.Construct):
         return resource
 
     def add_monitoring(self, monitoring):
-
         resource_metrics = [
             (self.new_recording_resource, "4XXError"),
             (self.new_recording_resource, "5XXError"),

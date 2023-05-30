@@ -172,7 +172,6 @@ class TestHandler(unittest.TestCase):
             assert log_message == expected
 
     def test_error_while_downloading(self):
-
         message = MockDownloadMessage(copy.deepcopy(SAMPLE_MESSAGE_BODY))
         self.mocker.patch.object(
             downloader,
@@ -564,7 +563,6 @@ class TestDownload(unittest.TestCase):
         return downloader.ZoomFile
 
     def test_upload_to_s3(self):
-
         now = datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
         data = {
             "uuid": "abc",

@@ -17,7 +17,6 @@ sns = boto3.client("sns")
 
 @setup_logging
 def handler(event, context):
-
     logger.info("processing subscribed events")
 
     # log event data comes gzipped & base64 decoded

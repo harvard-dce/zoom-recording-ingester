@@ -199,10 +199,6 @@ class ZipUploaderFunction(ZipFunction):
         )
 
 
-class ZipOpCountsFunction(ZipFunction):
-    pass
-
-
 class ZipLogNotificationsFunction(ZipFunction):
     pass
 

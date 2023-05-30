@@ -1,12 +1,9 @@
-import io
 import os
 import site
-import json
 import pytest
 import inspect
 from os.path import dirname, join
 from importlib import import_module
-from datetime import datetime
 from uuid import UUID
 from hashlib import md5
 from utils import PipelineStatus
@@ -18,76 +15,8 @@ site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 uploader = import_module("zoom-uploader")
 
 
-def test_too_many_uploads(handler, mocker):
-    mocker.patch.object(uploader, "sqs", mocker.Mock())
-    uploader.sqs.get_queue_by_name = mocker.Mock()
-    receive_messages = mocker.Mock(return_value=["mock-sqs-message"])
-    uploader.sqs.get_queue_by_name.return_value.receive_messages = (
-        receive_messages
-    )
-    mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=10)
-    )
-    uploader.process_upload = mocker.Mock()
-
-    # with max = 5 and fake count = 10 the handler should abort
-    # before processing upload
-    mocker.patch.object(uploader, "OC_TRACK_UPLOAD_MAX", 5)
-    handler(uploader, {})
-    assert uploader.process_upload.call_count == 0
-
-
-def test_unknown_uploads(handler, mocker):
-    mocker.patch.object(uploader, "sqs", mocker.Mock())
-    uploader.sqs.get_queue_by_name = mocker.Mock()
-    receive_messages = mocker.Mock(return_value=["mock-sqs-message"])
-    uploader.sqs.get_queue_by_name.return_value.receive_messages = (
-        receive_messages
-    )
-    mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=None)
-    )
-    uploader.process_upload = mocker.Mock()
-
-    # with max = 5 and fake count = None the handler should abort
-    # before processing upload
-    mocker.patch.object(uploader, "OC_TRACK_UPLOAD_MAX", 5)
-    handler(uploader, {})
-    assert uploader.process_upload.call_count == 0
-
-
-def test_upload_count_ok(handler, mocker):
-    mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mock_message = mocker.Mock()
-    mock_message.attribute = "attribute"
-    mock_message.body = json.dumps(
-        {
-            "webhook_received_time": datetime.strftime(
-                datetime.now(), TIMESTAMP_FORMAT
-            ),
-            "zip_id": 123,
-        }
-    )
-    receive_messages = mocker.Mock(return_value=[mock_message])
-    uploader.sqs.get_queue_by_name.return_value.receive_messages = (
-        receive_messages
-    )
-    mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=3)
-    )
-
-    # with max = 3 and fake count = 5 the handler should proceed
-    # to processing the upload
-    mocker.patch.object(uploader, "OC_TRACK_UPLOAD_MAX", 5)
-    handler(uploader, {})
-    assert uploader.process_upload.call_count == 1
-
-
 def test_no_messages_available(handler, mocker, caplog):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=3)
-    )
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = (
         []
     )
@@ -97,9 +26,6 @@ def test_no_messages_available(handler, mocker, caplog):
 
 def test_ingestion_error(handler, mocker, upload_message):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=3)
-    )
     message = upload_message()
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
         message
@@ -114,11 +40,6 @@ def test_ingestion_error(handler, mocker, upload_message):
 
 def test_bad_message_body(handler, mocker):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader,
-        "get_current_upload_count",
-        mocker.Mock(return_value=3),
-    )
     message = mocker.Mock(body="this is definitely not json")
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
         message
@@ -132,9 +53,6 @@ def test_bad_message_body(handler, mocker):
 
 def setup_upload(mocker, upload_message):
     mocker.patch.object(uploader, "sqs", mocker.Mock())
-    mocker.patch.object(
-        uploader, "get_current_upload_count", mocker.Mock(return_value=3)
-    )
     message = upload_message({"zip_id": "mock_zip_id"})
     uploader.sqs.get_queue_by_name.return_value.receive_messages.return_value = [
         message
@@ -229,25 +147,6 @@ def test_multiple_ingests_allowed(mocker):
     upload.already_ingested = mocker.Mock(return_value=True)
     # mock already_ingested to return true
     assert upload.mediapackage_id
-
-
-def test_get_current_upload_count(mocker):
-    uploader.aws_lambda = mocker.Mock()
-    cases = [
-        (10, {"track": 5, "uri-track": 5}),
-        (10, {"track": 5, "uri-track": 5, "foo": 3, "bar": 9}),
-        (35, {"track": 35, "bar": 9}),
-    ]
-    for count, count_data in cases:
-        uploader.aws_lambda.invoke.return_value = {
-            "Payload": io.StringIO(json.dumps(count_data))
-        }
-        assert uploader.get_current_upload_count() == count
-
-    uploader.aws_lambda.invoke.return_value = {
-        "Payload": io.StringIO("no json here either")
-    }
-    assert uploader.get_current_upload_count() is None
 
 
 def test_s3_filename_filter_false_start():
@@ -852,7 +751,7 @@ def test_publish_file_param_generator():
         ],
     ]
 
-    for (incoming, expected, case_no) in cases:
+    for incoming, expected, case_no in cases:
         fpg = uploader.PublishFileParamGenerator(
             s3_filenames={
                 x: [x + (".MP4" if x != "chat_file" else ".TXT")]

@@ -9,7 +9,6 @@ if AWS_PROFILE:
 
 
 def vpc_components():
-
     oc_cluster_name = getenv("OC_CLUSTER_NAME")
     opsworks = boto3.client("opsworks")
 
@@ -34,7 +33,6 @@ def vpc_components():
 
 
 def oc_base_url():
-
     ec2 = boto3.client("ec2")
     oc_cluster_name = getenv("OC_CLUSTER_NAME")
 
@@ -53,7 +51,6 @@ def oc_base_url():
 
 
 def oc_db_url():
-
     rds = boto3.client("rds")
     oc_cluster_name = getenv("OC_CLUSTER_NAME")
     db_password = getenv("OC_DB_PASSWORD")

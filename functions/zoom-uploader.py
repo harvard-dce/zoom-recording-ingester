@@ -31,7 +31,6 @@ DEFAULT_OC_WORKFLOW = env("DEFAULT_OC_WORKFLOW")
 DEFAULT_PUBLISHER = env("DEFAULT_PUBLISHER")
 OVERRIDE_PUBLISHER = env("OVERRIDE_PUBLISHER")
 OVERRIDE_CONTRIBUTOR = env("OVERRIDE_CONTRIBUTOR")
-OC_OP_COUNT_FUNCTION = env("OC_OP_COUNT_FUNCTION")
 OC_TRACK_UPLOAD_MAX = int(env("OC_TRACK_UPLOAD_MAX", 5))
 # Ignore recordings that are less than MIN_DURATION (in minutes)
 MINIMUM_DURATION = int(env("MINIMUM_DURATION", 2))
@@ -77,7 +76,6 @@ def oc_api_request(method, endpoint, **kwargs):
 
 @setup_logging
 def handler(event, context):
-
     upload_queue = sqs.get_queue_by_name(QueueName=UPLOAD_QUEUE_NAME)
 
     messages = upload_queue.receive_messages(
@@ -89,17 +87,6 @@ def handler(event, context):
         return
     else:
         logger.info(f"{len(messages)} upload messages in queue")
-
-    # don't ingest of opencast is overloaded
-    current_uploads = get_current_upload_count()
-    if current_uploads is None:
-        logger.error("Unable to determine number of existing upload ops")
-        return
-    elif current_uploads >= OC_TRACK_UPLOAD_MAX:
-        logger.warning(f"Too many current track uploads: {current_uploads}")
-        return
-    else:
-        logger.info(f"Opencast upload count looks good: {current_uploads}")
 
     upload_message = messages[0]
     logger.info(
@@ -154,21 +141,6 @@ def minutes_in_pipeline(webhook_received_time):
     return duration.total_seconds() // 60
 
 
-def get_current_upload_count():
-    try:
-        resp = aws_lambda.invoke(FunctionName=OC_OP_COUNT_FUNCTION)
-        op_counts = json.load(resp["Payload"])
-        logger.info(f"op counts: {op_counts}")
-        return sum(
-            v
-            for k, v in op_counts.items()
-            if v is not None and k in UPLOAD_OP_TYPES
-        )
-    except Exception as e:
-        logger.exception(e)
-        return None
-
-
 def process_upload(upload_data):
     upload = Upload(upload_data)
     wf_id = upload.upload()
@@ -191,7 +163,6 @@ class Upload:
     @property
     def mediapackage_id(self):
         if not hasattr(self, "_opencast_mpid"):
-
             # first uuid generated should be deterministic
             # regardless of the allow_multiple_ingests flag
             mpid = str(UUID(md5(self.meeting_uuid.encode()).hexdigest()))
@@ -409,7 +380,6 @@ class Upload:
                 return False
 
     def get_series_catalog(self):
-
         logger.info(
             f"Getting series catalog for series: {self.opencast_series_id}"
         )
@@ -513,7 +483,6 @@ class FileParamGenerator(object):
 
 
 class ArchiveFileParamGenerator(FileParamGenerator):
-
     FLAVORS = {
         "active_speaker": "speaker/chunked+source",
         "shared_screen": "shared-screen/chunked+source",
@@ -534,7 +503,6 @@ class ArchiveFileParamGenerator(FileParamGenerator):
 
 
 class PublishFileParamGenerator(FileParamGenerator):
-
     FLAVORS = {
         # The workflow requires at least one of the files have this flavor
         # It will be treated as the "primary" stream and cannot be dropped by

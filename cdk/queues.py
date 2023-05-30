@@ -68,7 +68,6 @@ class ZipQueues(core.Construct):
             )
 
     def add_monitoring(self, monitoring):
-
         upload_queue_alarm = cloudwatch.Alarm(
             self,
             "UploadQueueAlarm",

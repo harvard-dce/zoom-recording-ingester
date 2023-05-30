@@ -70,7 +70,6 @@ def test_started_event(handler, mocker, webhook_payload):
 
 
 def test_validate_payload(webhook_payload):
-
     # should not raise an exception
     minimum_valid_payload = webhook_payload()["payload"]
     webhook.validate_payload(minimum_valid_payload, "recording_completed")

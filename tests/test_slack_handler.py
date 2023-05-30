@@ -379,7 +379,6 @@ def test_allowed_user(mocker):
 
 @freeze_time(FROZEN_TIME)
 def test_valid_slack_request(mocker):
-
     # User-Agent must be Slackbot
     assert not slack_handler.valid_slack_request(
         {"headers": {"User-Agent": "user_agent"}}
