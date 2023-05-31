@@ -1,17 +1,19 @@
 from aws_cdk import (
-    core,
+    Stack,
+    Duration,
     aws_lambda,
     aws_ec2 as ec2,
     aws_cloudwatch as cloudwatch,
     aws_logs as logs,
 )
+from constructs import Construct
 from . import names
 
 
-class ZipFunction(core.Construct):
+class ZipFunction(Construct):
     def __init__(
         self,
-        scope: core.Construct,
+        scope: Construct,
         id: str,
         name,
         lambda_code_bucket,
@@ -24,7 +26,7 @@ class ZipFunction(core.Construct):
     ):
         super().__init__(scope, id)
 
-        self.stack_name = core.Stack.of(self).stack_name
+        self.stack_name = Stack.of(self).stack_name
         environment = {
             key: str(val) for key, val in environment.items() if val
         }
@@ -39,10 +41,11 @@ class ZipFunction(core.Construct):
                 bucket=lambda_code_bucket, key=f"{self.stack_name}/{name}.zip"
             ),
             "handler": handler,
-            "timeout": core.Duration.seconds(timeout),
+            "timeout": Duration.seconds(timeout),
             "memory_size": memory_size,
             "environment": environment,
             "log_retention": logs.RetentionDays.SIX_MONTHS,
+            "description": f"{name} created with cdk v2 for {self.stack_name}",
         }
 
         if vpc_id and security_group_id:
@@ -65,21 +68,22 @@ class ZipFunction(core.Construct):
         self.alias = aws_lambda.Alias(
             self,
             "alias",
-            version=self.function.add_version("$LATEST"),
             description="initial release",
             alias_name=names.LAMBDA_RELEASE_ALIAS,
+            version=self.function.latest_version,
         )
 
     def add_monitoring(self, monitoring):
         errors_alarm = cloudwatch.Alarm(
             self,
             "ErrorsAlarm",
-            metric=self.function.metric_errors(),
+            metric=self.function.metric_errors(
+                statistic="sum",
+                period=Duration.minutes(1),
+            ),
             alarm_name=f"{self.function.function_name}-errors",
-            statistic="sum",
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
             threshold=1,
-            period=core.Duration.minutes(1),
             evaluation_periods=1,
         )
         monitoring.add_alarm_action(errors_alarm)
@@ -139,12 +143,13 @@ class ZipDownloaderFunction(ZipFunction):
         invocations_alarm = cloudwatch.Alarm(
             self,
             "InvocationsAlarm",
-            metric=self.function.metric_invocations(),
+            metric=self.function.metric_invocations(
+                statistic="sum",
+                period=Duration.minutes(1440),
+            ),
             alarm_name=f"{self.function.function_name}-invocations",
-            statistic="sum",
             comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
             threshold=1,
-            period=core.Duration.minutes(1440),
             evaluation_periods=1,
         )
         monitoring.add_alarm_action(invocations_alarm)

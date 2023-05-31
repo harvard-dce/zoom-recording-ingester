@@ -1,14 +1,15 @@
-from aws_cdk import core, aws_dynamodb as dynamodb
+from aws_cdk import Stack, RemovalPolicy, aws_dynamodb as dynamodb
+from constructs import Construct
 from . import names
 
 
-class ZipSchedule(core.Construct):
-    def __init__(self, scope: core.Construct, id: str):
+class ZipSchedule(Construct):
+    def __init__(self, scope: Construct, id: str):
         """
         Class schedule
         """
         super().__init__(scope, id)
-        stack_name = core.Stack.of(self).stack_name
+        stack_name = Stack.of(self).stack_name
 
         self.table = dynamodb.Table(
             self,
@@ -19,5 +20,5 @@ class ZipSchedule(core.Construct):
             ),
             read_capacity=1,
             write_capacity=3,
-            removal_policy=core.RemovalPolicy.DESTROY,
+            removal_policy=RemovalPolicy.DESTROY,
         )

@@ -1,14 +1,15 @@
-from aws_cdk import core, aws_dynamodb as dynamodb
+from aws_cdk import Stack, RemovalPolicy, aws_dynamodb as dynamodb
+from constructs import Construct
 from . import names
 
 
-class ZipStatus(core.Construct):
-    def __init__(self, scope: core.Construct, id: str):
+class ZipStatus(Construct):
+    def __init__(self, scope: Construct, id: str):
         """
         On demand requests status table
         """
         super().__init__(scope, id)
-        stack_name = core.Stack.of(self).stack_name
+        stack_name = Stack.of(self).stack_name
 
         self.table = dynamodb.Table(
             self,
@@ -19,7 +20,7 @@ class ZipStatus(core.Construct):
                 type=dynamodb.AttributeType.STRING,
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=core.RemovalPolicy.DESTROY,
+            removal_policy=RemovalPolicy.DESTROY,
             time_to_live_attribute="expiration",
         )
 
