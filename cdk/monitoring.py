@@ -1,16 +1,17 @@
 from aws_cdk import (
-    core,
+    Stack,
     aws_sns as sns,
     aws_sns_subscriptions as sns_subs,
     aws_cloudwatch_actions as cloudwatch_actions,
 )
+from constructs import Construct
 from . import names
 
 
-class ZipMonitoring(core.Construct):
-    def __init__(self, scope: core.Construct, id: str, notification_email):
+class ZipMonitoring(Construct):
+    def __init__(self, scope: Construct, id: str, notification_email):
         super().__init__(scope, id)
-        stack_name = core.Stack.of(self).stack_name
+        stack_name = Stack.of(self).stack_name
 
         self.topic = sns.Topic(
             self,

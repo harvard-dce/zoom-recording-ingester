@@ -1,4 +1,5 @@
-from aws_cdk import core, aws_s3 as s3, aws_iam as iam
+from aws_cdk import Stack, aws_s3 as s3, aws_iam as iam
+from constructs import Construct
 
 from .bucket import ZipRecordingsBucket
 from .queues import ZipQueues
@@ -21,10 +22,10 @@ from .monitoring import ZipMonitoring
 from . import names
 
 
-class ZipStack(core.Stack):
+class ZipStack(Stack):
     def __init__(
         self,
-        scope: core.Construct,
+        scope: Construct,
         id: str,
         lambda_code_bucket,
         notification_email,

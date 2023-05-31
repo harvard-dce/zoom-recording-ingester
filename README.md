@@ -52,11 +52,9 @@ Info on Zoom's API and webhook functionality can be found at:
 
 ##### node/cdk stuff
 
-* node.js 10.3 or higher
-* the `aws-cdk` node.js toolkit installed
-    * this is usually just `npm install -g aws-cdk`
-    * it's best if the version matches the version of the `aws-cdk.core` package in `requirements/base.txt`
-    * see [https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html](https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html) for more info
+* nodejs v16+ along with npm
+
+Note, as of v4 you no longer need the aws-cdk toolkit installed as a pre-requisite. We will install that as part of the setup detailed below. 
 
 ##### other stuff
 
@@ -76,6 +74,7 @@ Info on Zoom's API and webhook functionality can be found at:
 1. Make a python virtualenv and activate it however you normally do those things, e.g.: `virtualenv venv && source venv/bin/activate`
 1. Python dependencies are handled via `pip-tools` so you need to install that first: `pip install pip-tools`
 1. Install the dependencies by running `pip-sync requirements/dev.txt`.
+1. Install the nodejs aws-cdk CLI locally by running `npm install` in the project root
 1. Copy `example.env` to `.env` and update as necessary. See inline comments for an explanation of each setting.
 1. If you have more than one set of AWS credentials configured you can set `AWS_PROFILE` in your `.env` file. Otherwise
    you'll need to remember to set in your shell session prior to any `invoke` commands.
@@ -433,6 +432,10 @@ Afterwards you would need to also `pip-compile` the remaning three "downstream" 
 use the `-r` flag to import the `common-requirements.txt` file.
 
 Finally, you'll want to run `pip-sync requirements/dev.txt` to ensure the packages are updated in your virtualenv.
+
+### aws-cdk-lib & constructs package updates
+
+**Important**: when updating the versions of `aws-cdk-lib` and `constructs` you must also update the version of `aws-cdk` specified in the `package.json`.
 
 ## Testing
 

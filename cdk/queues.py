@@ -1,15 +1,18 @@
 from aws_cdk import (
-    core,
+    Stack,
+    Duration,
+    CfnOutput,
     aws_sqs as sqs,
     aws_cloudwatch as cloudwatch,
 )
+from constructs import Construct
 from . import names
 
 
-class ZipQueues(core.Construct):
-    def __init__(self, scope: core.Construct, id: str):
+class ZipQueues(Construct):
+    def __init__(self, scope: Construct, id: str):
         super().__init__(scope, id)
-        self.stack_name = core.Stack.of(self).stack_name
+        self.stack_name = Stack.of(self).stack_name
 
         self.download_dlq = sqs.DeadLetterQueue(
             max_receive_count=2,
@@ -17,15 +20,15 @@ class ZipQueues(core.Construct):
                 self,
                 "DownloadDeadLetterQueue",
                 queue_name=f"{self.stack_name}-{names.DOWNLOAD_DLQ}",
-                retention_period=core.Duration.days(14),
+                retention_period=Duration.days(14),
             ),
         )
         self.download_queue = sqs.Queue(
             self,
             "DownloadQueue",
             queue_name=f"{self.stack_name}-{names.DOWNLOAD_QUEUE}",
-            retention_period=core.Duration.days(14),
-            visibility_timeout=core.Duration.seconds(300),
+            retention_period=Duration.days(14),
+            visibility_timeout=Duration.seconds(300),
             dead_letter_queue=self.download_dlq,
         )
 
@@ -35,7 +38,7 @@ class ZipQueues(core.Construct):
                 self,
                 "UploadDeadLetterQueue",
                 queue_name=f"{self.stack_name}-{names.UPLOAD_DLQ}",
-                retention_period=core.Duration.days(14),
+                retention_period=Duration.days(14),
             ),
         )
 
@@ -43,8 +46,8 @@ class ZipQueues(core.Construct):
             self,
             "UploadQueue",
             queue_name=f"{self.stack_name}-{names.UPLOAD_QUEUE}",
-            retention_period=core.Duration.days(14),
-            visibility_timeout=core.Duration.seconds(300),
+            retention_period=Duration.days(14),
+            visibility_timeout=Duration.seconds(300),
             content_based_deduplication=True,
             fifo=True,
             dead_letter_queue=self.upload_dlq,
@@ -60,7 +63,7 @@ class ZipQueues(core.Construct):
             names.UPLOAD_DLQ: self.upload_dlq.queue,
         }
         for name, queue in queues.items():
-            core.CfnOutput(
+            CfnOutput(
                 self,
                 f"{name}-queue-export",
                 export_name=f"{self.stack_name}-{name.replace('.', '-')}-url",
@@ -72,11 +75,11 @@ class ZipQueues(core.Construct):
             self,
             "UploadQueueAlarm",
             metric=self.upload_queue.metric(
-                "ApproximateNumberOfMessagesVisible"
+                "ApproximateNumberOfMessagesVisible",
+                statistic="sum",
+                period=Duration.minutes(5),
             ),
-            statistic="sum",
             threshold=40,
-            period=core.Duration.minutes(5),
             evaluation_periods=1,
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
         )

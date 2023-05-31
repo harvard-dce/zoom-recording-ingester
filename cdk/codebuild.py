@@ -1,11 +1,12 @@
-from aws_cdk import core, aws_codebuild as codebuild, aws_iam as iam
+from aws_cdk import Stack, Duration, aws_codebuild as codebuild, aws_iam as iam
+from constructs import Construct
 from . import names
 
 
-class ZipCodebuildProject(core.Construct):
+class ZipCodebuildProject(Construct):
     def __init__(
         self,
-        scope: core.Construct,
+        scope: Construct,
         id: str,
         project_git_url,
         lambda_code_bucket,
@@ -16,7 +17,7 @@ class ZipCodebuildProject(core.Construct):
         """
         super().__init__(scope, id)
 
-        stack_name = core.Stack.of(self).stack_name
+        stack_name = Stack.of(self).stack_name
 
         self.project = codebuild.Project(
             self,
@@ -35,7 +36,7 @@ class ZipCodebuildProject(core.Construct):
                 bucket=lambda_code_bucket,
             ),
             badge=True,
-            timeout=core.Duration.minutes(30),
+            timeout=Duration.minutes(30),
         )
 
         self.project.add_to_role_policy(

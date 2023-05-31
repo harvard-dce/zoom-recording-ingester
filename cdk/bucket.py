@@ -1,9 +1,10 @@
-from aws_cdk import core, aws_s3 as s3
+from aws_cdk import Stack, Duration, RemovalPolicy, aws_s3 as s3
+from constructs import Construct
 from . import names
 
 
-class ZipRecordingsBucket(core.Construct):
-    def __init__(self, scope: core.Construct, id: str):
+class ZipRecordingsBucket(Construct):
+    def __init__(self, scope: Construct, id: str):
         """
         S3 bucket to store zoom recording files
         """
@@ -12,16 +13,16 @@ class ZipRecordingsBucket(core.Construct):
         one_week_lifecycle_rule = s3.LifecycleRule(
             id="DeleteAfterOneWeek",
             enabled=True,
-            expiration=core.Duration.days(7),
-            abort_incomplete_multipart_upload_after=core.Duration.days(1),
+            expiration=Duration.days(7),
+            abort_incomplete_multipart_upload_after=Duration.days(1),
         )
 
-        stack_name = core.Stack.of(self).stack_name
+        stack_name = Stack.of(self).stack_name
 
         self.bucket = s3.Bucket(
             self,
             "bucket",
             bucket_name=f"{stack_name}-{names.RECORDINGS_BUCKET}",
             lifecycle_rules=[one_week_lifecycle_rule],
-            removal_policy=core.RemovalPolicy.DESTROY,
+            removal_policy=RemovalPolicy.DESTROY,
         )

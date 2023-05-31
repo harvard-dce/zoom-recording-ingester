@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from aws_cdk import core
+from aws_cdk import App, Environment
 from pathlib import Path
 from .helpers import (
     getenv,
@@ -81,7 +81,7 @@ stack_props = {
     "slack_allowed_groups": getenv("SLACK_ALLOWED_GROUPS", required=False),
 }
 
-app = core.App()
+app = App()
 
 # warn if we weren't exec'd via the invoke tasks
 if app.node.try_get_context("VIA_INVOKE") != "true":
@@ -95,7 +95,7 @@ stack = ZipStack(
     app,
     STACK_NAME,
     **stack_props,
-    env=core.Environment(account=aws_account_id(), region=AWS_REGION),
+    env=Environment(account=aws_account_id(), region=AWS_REGION),
     tags=stack_tags()
 )
 

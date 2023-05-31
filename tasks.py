@@ -123,7 +123,7 @@ def stack_create(ctx):
     for func in names.FUNCTIONS:
         __build_function(ctx, func, upload_to_s3=True)
 
-    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
+    ctx.run(f"npx cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
 
 @task(pre=[production_failsafe])
@@ -132,7 +132,7 @@ def stack_update(ctx):
     Updates the CloudFormation stack
     (use the deploy.* tasks to update functions)
     """
-    ctx.run(f"cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
+    ctx.run(f"npx cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
 
 @task(pre=[production_failsafe])
@@ -140,7 +140,7 @@ def stack_changeset(ctx):
     """
     Create a CloudFormation changeset for manual deployment
     """
-    ctx.run(f"cdk -c VIA_INVOKE=true deploy --no-execute {profile_arg()}")
+    ctx.run(f"npx cdk -c VIA_INVOKE=true deploy --no-execute {profile_arg()}")
 
 
 @task
@@ -148,7 +148,7 @@ def stack_diff(ctx):
     """
     Output a cdk diff of the Cloudformation stack
     """
-    ctx.run(f"cdk -c VIA_INVOKE=true diff {profile_arg()}")
+    ctx.run(f"npx cdk -c VIA_INVOKE=true diff {profile_arg()}")
 
 
 @task
@@ -156,7 +156,7 @@ def stack_synth(ctx):
     """
     Output the cdk-generated CloudFormation template
     """
-    ctx.run(f"cdk synth -c VIA_INVOKE=true {profile_arg()}")
+    ctx.run(f"npx cdk synth -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task
@@ -164,7 +164,7 @@ def stack_list(ctx):
     """
     Outputs the name of the cdk CloudFormation stack
     """
-    ctx.run(f"cdk list -c VIA_INVOKE=true {profile_arg()}")
+    ctx.run(f"npx cdk list -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task
@@ -178,7 +178,7 @@ def stack_delete(ctx):
     lambda_code_cmd = (
         f"aws {profile_arg()} s3 rm " f"--recursive {LAMBDA_CODE_URI}"
     )
-    delete_cmd = f"cdk destroy --force -c VIA_INVOKE=true {profile_arg()}"
+    delete_cmd = f"npx cdk destroy --force -c VIA_INVOKE=true {profile_arg()}"
 
     confirm = (
         f"\nAre you sure you want to delete stack '{STACK_NAME}'?\n"
