@@ -5,18 +5,18 @@ boto3
 botocore
 requests
 tabulate
-aws-cdk.core==1.95.*
-aws-cdk.aws_s3==1.95.*
-aws-cdk.aws_lambda==1.95.*
-aws-cdk.aws_dynamodb==1.95.*
-aws-cdk.aws_apigateway==1.95.*
-aws-cdk.aws_events_targets==1.95.*
-aws-cdk.aws_codebuild==1.95.*
-aws-cdk.aws_sns==1.95.*
-aws-cdk.aws_cloudwatch==1.95.*
-aws-cdk.aws_cloudwatch_actions==1.95.*
-aws-cdk.aws_ec2==1.95.*
-aws-cdk.aws_logs==1.95.*
-aws-cdk.aws_iam==1.95.*
+aws-cdk.core==1.111.*
+aws-cdk.aws_s3==1.111.*
+aws-cdk.aws_lambda==1.111.*
+aws-cdk.aws_dynamodb==1.111.*
+aws-cdk.aws_apigateway==1.111.*
+aws-cdk.aws_events_targets==1.111.*
+aws-cdk.aws_codebuild==1.111.*
+aws-cdk.aws_sns==1.111.*
+aws-cdk.aws_cloudwatch==1.111.*
+aws-cdk.aws_cloudwatch_actions==1.111.*
+aws-cdk.aws_ec2==1.111.*
+aws-cdk.aws_logs==1.111.*
+aws-cdk.aws_iam==1.111.*
 
 -r ../function_requirements/common-requirements.txt
