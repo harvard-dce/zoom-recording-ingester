@@ -37,8 +37,14 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: 3.8.16
+          cache: 'pip'
+          cache-dependency-path: './requirements/dev.txt'
 
-      - run: pip install black==22.6.0
-      - run: black --check .
-      - run: pip install flake8==5.0.4
-      - run: flake8
+      - name: Install libraries
+        run: pip install -r requirements/dev.txt
+
+      - name: lint
+        run: flake8
+
+      - name: format
+        run: black --check .
