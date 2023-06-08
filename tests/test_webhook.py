@@ -13,7 +13,9 @@ site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
 LOCAL_TIME_ZONE = os.getenv("LOCAL_TIME_ZONE")
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
+
 webhook = import_module("zoom-webhook")
+webhook.WEBHOOK_VALIDATION_SECRET_TOKEN = "barbaz67890"
 
 tz = timezone(LOCAL_TIME_ZONE)
 FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
@@ -60,7 +62,7 @@ def test_invalid_payload(handler):
     assert "bad data" in res["body"].lower()
 
 
-def test_started_event(handler, mocker, webhook_payload):
+def test_started_event(handler, webhook_payload):
     recording_started = webhook_payload()
     recording_started["event"] = "recording.started"
     event = {"body": json.dumps(recording_started)}
@@ -249,3 +251,40 @@ def test_update_meeting_ended(
 
     handler(webhook, event)
     mock_webhook_set_pipeline_status.assert_not_called()
+
+
+def test_webhook_validation(handler):
+    expected = (
+        "aaca35ce2b1ee8e81c06c0e8c9841f4870bfa2b29b1812688459cf5d6cbdb5df"
+    )
+    event = {
+        "body": json.dumps(
+            {
+                "event": "endpoint.url_validation",
+                "payload": {
+                    "plainToken": "foobar12345",
+                },
+            }
+        )
+    }
+    res = handler(webhook, event)
+    assert res["statusCode"] == 200
+    res_body = json.loads(res["body"])
+    assert res_body["encryptedToken"] == expected
+
+
+def test_webhook_validation_no_secret_token(handler, caplog):
+    webhook.WEBHOOK_VALIDATION_SECRET_TOKEN = None
+    event = {
+        "body": json.dumps(
+            {
+                "event": "endpoint.url_validation",
+                "payload": {
+                    "plainToken": "foobar12345",
+                },
+            }
+        )
+    }
+    res = handler(webhook, event)
+    assert res["statusCode"] == 204
+    assert "validation not enabled for this endpoint" in caplog.text.lower()

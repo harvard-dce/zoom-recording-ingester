@@ -1,4 +1,5 @@
 import json
+import hmac
 from os import getenv as env
 from datetime import datetime, timedelta
 from pytz import timezone
@@ -18,6 +19,7 @@ logger = logging.getLogger()
 
 DOWNLOAD_QUEUE_NAME = env("DOWNLOAD_QUEUE_NAME")
 LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
+WEBHOOK_VALIDATION_SECRET_TOKEN = env("WEBHOOK_VALIDATION_SECRET_TOKEN")
 DEFAULT_MESSAGE_DELAY = 300
 ZOOM_WEBINAR_TYPES = [5, 6, 9]
 # ZIP-74: now ingesting chat files
@@ -67,6 +69,10 @@ INGEST_EVENT_TYPES = {
     "on.demand.ingest": resp_400,
 }
 
+VALID_EVENT_TYPES = (
+    STATUS_EVENT_TYPES + list(INGEST_EVENT_TYPES) + ["endpoint.url_validation"]
+)
+
 
 @setup_logging
 def handler(event, context):
@@ -89,16 +95,43 @@ def handler(event, context):
     zoom_event = body.get("event")
     if not zoom_event:
         return resp_400("Request has no event type?")
-    elif (
-        zoom_event not in INGEST_EVENT_TYPES
-        and zoom_event not in STATUS_EVENT_TYPES
-    ):
+    elif zoom_event not in VALID_EVENT_TYPES:
         return resp_204(f"Handling not implemented for event '{zoom_event}'")
+
     logger.info(f"Processing event type: {zoom_event}")
 
     if "payload" not in body:
         return resp_400("Missing payload field in webhook notification body.")
+
     payload = body["payload"]
+
+    # Yearly webhook endpoint validation event. As in this should only happen once
+    # per year per ZIP instance. We simply hash the provided token with our secret
+    # token value, then respond with both the original and hashed version.
+    if zoom_event == "endpoint.url_validation":
+        logger.info("performing webhook validation")
+
+        if not WEBHOOK_VALIDATION_SECRET_TOKEN:
+            return resp_204("Validation not enabled for this endpoint")
+
+        plain_token = payload["plainToken"]
+        encrypted_token = hmac.new(
+            WEBHOOK_VALIDATION_SECRET_TOKEN.encode("utf-8"),
+            plain_token.encode("utf-8"),
+            "sha256",
+        ).hexdigest()
+
+        response_json = {
+            "plainToken": plain_token,
+            "encryptedToken": encrypted_token,
+        }
+        logger.info(response_json)
+
+        return {
+            "statusCode": 200,
+            "headers": {},
+            "body": json.dumps(response_json),
+        }
 
     if zoom_event == "on.demand.ingest":
         origin = "on_demand"

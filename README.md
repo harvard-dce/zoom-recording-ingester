@@ -160,17 +160,24 @@ function updateZoomIngester() {
 
 ### Setup Zoom webhook notifications (Optional)
 
-Once the Zoom Ingester pipeline is operational you can configure your Zoom account to
-send completed recording notifications to it via the Zoom Webhook settings.
+Once the Zoom Ingester pipeline is deployed you can configure your Zoom account to
+send completed recording and other event notifications to it via the Zoom Webhook settings.
 
 1. Get your ingester's webhook endpoint URL. You can find it in the `invoke stack.status` output
 or by browsing to the release stage of your API Gateway REST api.
-1. Go to [marketplace.zoom.us](marketplace.zoom.us) and log in. Under "Develop" select "Build App."
-1. Give your app a name. Turn off "Intend to publish this app on Zoom Marketplace."
-Choose app type "Webhook only app."
-1. Click "Create." Fill out the rest of the required information,
-and enter the API endpoint under "Event Subscription."
-1. Subscribe to the following events:
+1. Go to [marketplace.zoom.us](marketplace.zoom.us) and log in. Look for the "Develop" menu at the top-right, and select "Build App."
+1. Choose app type "Webhook Only"
+1. Give your app a name. 
+1. Fill in the appropriate developer contact info. Enter "Harvard University" for the company name. Click "Continue".
+1. Copy the Secret Token value. This goes in your `.env` file as `WEBHOOK_VALIDATION_SECRET_TOKEN`.
+1. Run `invoke stack.update` to deploy the new `WEBHOOK_VALIDATION_SECRET_TOKEN` value to the webhook lambda function. This is necessary for 
+    app endpoint validation step coming up.
+1. Toggle "Event Subscriptions" to enabled, then click "+ Add Event Subscription"
+1. Give the subscription a name, e.g. "recording events", and paste your webhook endpoint URL in the space provided.
+1. Click the "Validate" button underneath where you pasted the webhook endpoint URL. If validation does not succeed...
+    1. double-check you got the correct secret token value
+    1. check the webhook lambda function in the AWS console to confirm the environment variable
+1. Click "+ Add Events" and subscritbe to the following events:
 
     For automatic ingests:.
     * Recording - "All recordings have completed".
@@ -183,7 +190,7 @@ and enter the API endpoint under "Event Subscription."
     * Recording - "Recording Stopped"
     * Meeting - "End Meeting"
     * Webinar - "End Webinar"
-1. Activate the app when desired. (For development it's recommended that you only leave the notifications active while you're actively testing.)
+1. Activate the app when desired. **For development it's recommended that you only leave the notifications active while you're actively testing.**
 
 
 ## Endpoints

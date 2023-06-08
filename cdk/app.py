@@ -43,12 +43,24 @@ if not APIGEE_KEY and not (ZOOM_API_KEY and ZOOM_API_SECRET):
         )
     )
 
+WEBHOOK_VALIDATION_SECRET_TOKEN = getenv(
+    "WEBHOOK_VALIDATION_SECRET_TOKEN", required=False
+)
+if not WEBHOOK_VALIDATION_SECRET_TOKEN:
+    print(
+        "\033[93m"
+        + "IMPORANT: Your WEBHOOK_VALIDATION_SECRET_TOKEN is missing. The Zoom API "
+        + "requires webhook enpoint validation. See README for details."
+        + "\033[0m"
+    )
+
 stack_props = {
     "lambda_code_bucket": getenv("LAMBDA_CODE_BUCKET"),
     "notification_email": getenv("NOTIFICATION_EMAIL"),
     "zoom_api_base_url": getenv("ZOOM_API_BASE_URL"),
     "zoom_api_key": ZOOM_API_KEY,
     "zoom_api_secret": ZOOM_API_SECRET,
+    "webhook_validation_secret_token": WEBHOOK_VALIDATION_SECRET_TOKEN,
     "apigee_key": APIGEE_KEY,
     "buffer_minutes": getenv("BUFFER_MINUTES"),
     "local_time_zone": getenv("LOCAL_TIME_ZONE"),
