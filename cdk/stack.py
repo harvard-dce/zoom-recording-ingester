@@ -45,7 +45,6 @@ class ZipStack(core.Stack):
         default_oc_workflow,
         oc_track_upload_max,
         oc_base_url,
-        oc_db_url,
         ingest_allowed_ips,
         oc_vpc_id,
         oc_security_group_id,

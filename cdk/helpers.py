@@ -50,23 +50,6 @@ def oc_base_url():
     return "http://" + dns_name.strip()
 
 
-def oc_db_url():
-    rds = boto3.client("rds")
-    oc_cluster_name = getenv("OC_CLUSTER_NAME")
-    db_password = getenv("OC_DB_PASSWORD")
-
-    result = rds.describe_db_clusters(
-        DBClusterIdentifier=f"{oc_cluster_name}-cluster"
-    )
-
-    if "DBClusters" not in result or not result["DBClusters"]:
-        raise Exception(
-            f"Failed RDS cluster lookup for OC_CLUSTER_NAME {oc_cluster_name}"
-        )
-    reader_endpoint = result["DBClusters"][0]["ReaderEndpoint"]
-    return f"mysql://root:{db_password}@{reader_endpoint}:3306/opencast"
-
-
 def aws_account_id():
     return boto3.client("sts").get_caller_identity()["Account"]
 

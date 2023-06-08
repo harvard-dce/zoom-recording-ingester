@@ -63,7 +63,6 @@ Info on Zoom's API and webhook functionality can be found at:
 * an Opsworks Opencast cluster, including:
     * the base url of the admin node
     * the user/pass combo of the Opencast API system account user
-    * Opencast database password
 * A Zoom account API key and secret
 * Email of Zoom account with privileges to download recordings
 * An email address to receive alerts and other notifications
