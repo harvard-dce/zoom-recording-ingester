@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgrade CDK from v1.95.0 to v1.111.0 to get supported nodejs runtime needed by lambda
   function log retention
 - reworked linting/formatting deps in pre-commit hook and github action
+- Upgrade CDK from v1 to v2
 
 ### Removed
 
