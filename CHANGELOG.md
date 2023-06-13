@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Added
+
+- new env var: `WEBHOOK_VALIDATION_SECRET_TOKEN`
+- Webhook endpoint validation capability added to `zoom-webhook.py`
+
 ### Changed
 
 - Upgrade CDK from v1.95.0 to v1.111.0 to get supported nodejs runtime needed by lambda
