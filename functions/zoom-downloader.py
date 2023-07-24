@@ -5,7 +5,6 @@ from os import getenv as env
 from pathlib import Path
 from utils import (
     setup_logging,
-    zoom_api_request,
     TIMESTAMP_FORMAT,
     retrieve_schedule,
     schedule_match,
@@ -162,14 +161,6 @@ class Download:
         self.title = "Lecture"  # default title
 
         logger.info({"download_message": self.download_message})
-
-    @property
-    def host_name(self):
-        if not hasattr(self, "_host_name"):
-            resp = zoom_api_request(f"users/{self.data['host_id']}").json()
-            logger.info({"Host details": resp})
-            self._host_name = f"{resp['first_name']} {resp['last_name']}"
-        return self._host_name
 
     @property
     def uuid(self):
@@ -335,7 +326,6 @@ class Download:
                 "zoom_series_id": self.data["zoom_series_id"],
                 "opencast_series_id": self.opencast_series_id,
                 "oc_title": self.title,
-                "host_name": self.host_name,
                 "topic": self.data["topic"],
                 "created": datetime.strftime(
                     self._created_utc, TIMESTAMP_FORMAT
