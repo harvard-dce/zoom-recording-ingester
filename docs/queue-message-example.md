@@ -51,7 +51,6 @@
       // meeting room id
       "zoom_series_id": 123456789,
       "opencast_series_id": "20190199999",
-      "host_name": "Foo Bar",
       "topic": "Special Lecture",
       "created": "2020-03-12T20:43:36Z",
       "created_local": "2020-03-12T16:43:36Z",

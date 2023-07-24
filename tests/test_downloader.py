@@ -486,11 +486,11 @@ class TestDownload(unittest.TestCase):
             new_callable=PropertyMock,
         )
 
-        self.mocker.patch.object(
-            downloader.Download,
-            "host_name",
-            "instructor",
-        )
+        # self.mocker.patch.object(
+        #     downloader.Download,
+        #     "host_name",
+        #     "instructor",
+        # )
 
         received_time = (
             datetime.strptime(FROZEN_TIME, TIMESTAMP_FORMAT)
@@ -518,7 +518,6 @@ class TestDownload(unittest.TestCase):
             "zoom_series_id": 123,
             "opencast_series_id": "mock_series_id",
             "oc_title": "Lecture",
-            "host_name": "instructor",
             "topic": "Statistics",
             "created": FROZEN_TIME_UTC,
             "created_local": FROZEN_TIME,
