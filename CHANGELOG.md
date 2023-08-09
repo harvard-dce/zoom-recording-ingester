@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.0.0 - 2023-08-09]
+
 ### Added
 
 - new env var: `WEBHOOK_VALIDATION_SECRET_TOKEN`
@@ -23,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - references and usage of `OC_DB_PASSWORD` which was only needed by the opencast-op-counts 
   function (which was removed in v3.4.0
+- unneeded zoom API call to retrieve `host_name` (the zoom meeting host)
 
 ## [3.4.0 - 2023-05-31]
 
