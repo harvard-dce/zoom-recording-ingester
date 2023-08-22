@@ -478,8 +478,12 @@ class ZoomFile:
     def zoom_filename(self):
         if not hasattr(self, "_zoom_filename"):
             # First request is for retrieving the filename
-            url = f"{self.file_data['download_url']}?access_token={DOWNLOAD_TOKEN}"
-            r = requests.get(url, allow_redirects=False)
+            url = f"{self.file_data['download_url']}"
+            headers = {
+                "Authorization": f"Bearer {DOWNLOAD_TOKEN}",
+                "Content-Type": "application/json",
+            }
+            r = requests.get(url, headers=headers, allow_redirects=False)
             r.raise_for_status()
 
             # If the file has been deleted or if the request is not authorized,
@@ -566,8 +570,12 @@ class ZoomFile:
     def stream(self):
         if not hasattr(self, "_stream"):
             logger.info(f"requesting {self.file_data['download_url']}")
-            url = f"{self.file_data['download_url']}?access_token={DOWNLOAD_TOKEN}"
-            r = requests.get(url, stream=True)
+            url = f"{self.file_data['download_url']}"
+            headers = {
+                "Authorization": f"Bearer {DOWNLOAD_TOKEN}",
+                "Content-Type": "application/json",
+            }
+            r = requests.get(url, headers=headers, stream=True)
             r.raise_for_status()
 
             self._stream = r
