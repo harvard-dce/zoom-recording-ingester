@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.1.0 - 2023-08-22]
+
+### Changed
+
+- Pass download token in Authorization Bearer header when getting the Zoom files
+
 ## [4.0.0 - 2023-08-09]
 
 ### Added
