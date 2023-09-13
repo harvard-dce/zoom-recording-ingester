@@ -11,6 +11,7 @@ from utils import (
     PipelineStatus,
     set_pipeline_status,
     record_exists,
+    set_recording_events,
 )
 
 import logging
@@ -151,6 +152,14 @@ def handler(event, context):
         status = event_status(zoom_event, zip_id)
         if not status:
             return resp_204("Recording status ignored.")
+
+        # Set recording.paused/resumed event times in separate table
+        set_recording_events(
+            zoom_uuid=payload["object"]["uuid"],
+            zoom_event=zoom_event,
+            zoom_event_timestamp=body.get("event_ts"),
+            meeting_id=payload["object"]["id"],
+        )
 
         set_pipeline_status(
             zip_id,

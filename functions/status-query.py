@@ -30,7 +30,7 @@ def handler(event, context):
         request_seconds = query["seconds"]
     else:
         return resp_400(
-            "Missing identifer in query params. "
+            "Missing identifier in query params. "
             "Must include one of 'meeting_id', 'seconds'"
         )
 

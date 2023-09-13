@@ -149,7 +149,7 @@ def test_multiple_ingests_allowed(mocker):
     assert upload.mediapackage_id
 
 
-def test_s3_filename_filter_false_start():
+def test_s3_filename_filter_false_start(mocker):
     # entire meetings < MINIMUM_DURATION should have been filtered out
     # in the downloader code so I don't test that case here
 
@@ -373,14 +373,32 @@ def test_s3_filename_filter_false_start():
     }
 
     cases = [
-        (single_file, 1, 1, 1, "2021-08-02T15:44:54Z_2021-08-02T15:53:14Z"),
-        (false_start, 1, 1, 1, "2021-08-02T15:54:00Z_2021-08-02T16:02:20Z"),
+        (
+            single_file,
+            1,
+            1,
+            1,
+            "2021-08-02T15:44:54Z_2021-08-02T15:53:14Z",
+            ["2021-08-02T15:44:54Z_2021-08-02T15:53:14Z"],
+        ),
+        (
+            false_start,
+            1,
+            1,
+            1,
+            "2021-08-02T15:54:00Z_2021-08-02T16:02:20Z",
+            ["2021-08-02T15:54:00Z_2021-08-02T16:02:20Z"],
+        ),
         (
             false_end,
             2,
             2,
             0,
             "2021-08-02T15:44:54Z_2021-08-02T15:53:14Z,2021-08-02T15:54:00Z_2021-08-02T15:54:05Z",
+            [
+                "2021-08-02T15:44:54Z_2021-08-02T15:53:14Z",
+                "2021-08-02T15:54:00Z_2021-08-02T15:54:05Z",
+            ],
         ),
         (
             segment_mismatch,
@@ -388,6 +406,10 @@ def test_s3_filename_filter_false_start():
             2,
             2,
             "2021-08-02T15:54:00Z_2021-08-02T15:54:10Z,2021-08-02T16:00:00Z_2021-08-02T16:08:20Z",
+            [
+                "2021-08-02T15:54:00Z_2021-08-02T15:54:10Z",
+                "2021-08-02T16:00:00Z_2021-08-02T16:08:20Z",
+            ],
         ),
     ]
 
@@ -397,7 +419,10 @@ def test_s3_filename_filter_false_start():
         expected_screen_share,
         expected_chat,
         expected_recording_times,
+        mock_recording_times,
     ) in cases:
+        data["zip_id"] = "on-demand-mock_zip_id"
+        data["uuid"] = "mock_zip_id"
         upload = uploader.Upload(data)
         assert len(upload.s3_filenames["speaker_view"]) == expected_speaker
         assert (

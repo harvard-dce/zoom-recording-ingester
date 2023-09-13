@@ -5,6 +5,7 @@ METRIC_NAMESPACE = "log-metrics"
 
 SCHEDULE_TABLE = "schedule"
 PIPELINE_STATUS_TABLE = "pipeline-status"
+RECORDING_EVENTS_TABLE = "recording-events"
 
 DOWNLOAD_QUEUE = "download"
 DOWNLOAD_DLQ = "download-dlq"
