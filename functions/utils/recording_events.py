@@ -15,16 +15,9 @@ load_dotenv(join(dirname(__file__), "../.env"))
 
 RECORDING_EVENTS_TABLE = env("RECORDING_EVENTS_TABLE", None)
 
-
-RECORDING_EVENTS = [
-    "recording.started",
-    "recording.paused",
-    "recording.resumed",
-    "recording.stopped",
-]
-
 START_EVENTS = ["recording.started", "recording.resumed"]
 END_EVENTS = ["recording.paused", "recording.stopped"]
+RECORDING_EVENTS = START_EVENTS + END_EVENTS
 
 # This was copied from status.py:
 # If RECORDING_EVENTS_TABLE is not set we assume the events table
@@ -49,7 +42,6 @@ def set_recording_events(
     zoom_uuid,
     zoom_event,
     zoom_event_timestamp,  # in ms
-    meeting_id=None,
 ):
     """
     Records a recording event in the database. Events are stored by zoom uuid in a list of
@@ -94,10 +86,6 @@ def set_recording_events(
             ":new_recording_event": new_recording_event_list,
             ":empty_list": [],
         }
-
-        if meeting_id:
-            update_expression += ", meeting_id = :meeting_id"
-            expression_attribute_values[":meeting_id"] = meeting_id
 
         logger.info(
             {

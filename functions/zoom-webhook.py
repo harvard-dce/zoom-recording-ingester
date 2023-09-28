@@ -158,7 +158,6 @@ def handler(event, context):
             zoom_uuid=payload["object"]["uuid"],
             zoom_event=zoom_event,
             zoom_event_timestamp=body.get("event_ts"),
-            meeting_id=payload["object"]["id"],
         )
 
         set_pipeline_status(

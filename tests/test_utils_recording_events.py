@@ -34,66 +34,6 @@ def test_set_recording_events(mocker):
         "recording.resumed",
         "recording.stopped",
     ]
-    meeting_id = "12345678"
-
-    for event in zoom_events:
-        recording_events.set_recording_events(
-            zoom_uuid,
-            event,
-            zoom_event_ts,
-            meeting_id,
-        )
-
-        new_event_time = [
-            {
-                "event": event,
-                "timestamp": int(zoom_event_ts / 1000),  # in secs
-            }
-        ]
-        mock_update_recording_events_table.assert_called_with(
-            mock_recording_events_table,
-            "zip_id",
-            (
-                "SET "
-                "expiration = :expiration, "
-                "recording_event_times = list_append("
-                "if_not_exists(recording_event_times, :empty_list), "
-                ":new_recording_event"
-                ")"
-                ", meeting_id = :meeting_id"
-            ),
-            {
-                ":expiration": FROZEN_EXPIRATION,
-                ":new_recording_event": new_event_time,
-                ":empty_list": [],
-                ":meeting_id": meeting_id,
-            },
-        )
-
-
-@freeze_time(FROZEN_TIME)
-def test_set_recording_events_no_meeting_id(mocker):
-    """
-    Test that it's ok not to have a meeting id and that empty meeting id will not
-    be saved to the db.
-    """
-    mock_recording_events_table = mocker.Mock()
-    mocker.patch.object(
-        recording_events, "recording_events_table", mock_recording_events_table
-    )
-    mock_update_recording_events_table = mocker.patch.object(
-        recording_events,
-        "update_recording_events_table",
-    )
-
-    zoom_uuid = "zip_id"
-    zoom_event_ts = 1578621046000
-    zoom_events = [
-        "recording.started",
-        "recording.paused",
-        "recording.resumed",
-        "recording.stopped",
-    ]
 
     for event in zoom_events:
         recording_events.set_recording_events(

@@ -5,7 +5,7 @@ from .bucket import ZipRecordingsBucket
 from .queues import ZipQueues
 from .schedule_table import ZipSchedule
 from .status_table import ZipStatus
-from .recording_events_table import RecordingEvents
+from .recording_events_table import ZipRecordingEvents
 from .function import (
     ZipDownloaderFunction,
     ZipOnDemandFunction,
@@ -83,7 +83,7 @@ class ZipStack(Stack):
 
         pipeline_status = ZipStatus(self, "Status")
 
-        recording_events = RecordingEvents(self, "RecordingEvents")
+        recording_events = ZipRecordingEvents(self, "RecordingEvents")
 
         schedule_update = ZipScheduleUpdateFunction(
             self,

@@ -3,7 +3,7 @@ from constructs import Construct
 from . import names
 
 
-class RecordingEvents(Construct):
+class ZipRecordingEvents(Construct):
     def __init__(self, scope: Construct, id: str):
         """
         This table records the times of some webhook events.
@@ -22,12 +22,4 @@ class RecordingEvents(Construct):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
             time_to_live_attribute="expiration",
-        )
-
-        self.table.add_global_secondary_index(
-            index_name="mid_index",
-            partition_key=dynamodb.Attribute(
-                name="meeting_id",
-                type=dynamodb.AttributeType.NUMBER,
-            ),
         )

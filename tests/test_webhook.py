@@ -215,7 +215,6 @@ def test_update_recording_started_paused(
             zoom_uuid="mock_uuid",
             zoom_event=event,
             zoom_event_timestamp=event_ts,
-            meeting_id=mock_payload["object"]["id"],
         )
 
 
