@@ -23,6 +23,9 @@ RECORDING_EVENTS = START_EVENTS + END_EVENTS
 # If RECORDING_EVENTS_TABLE is not set we assume the events table
 # is not being used. (For example tasks.py imports utils but doesn't
 # use the recording times table)
+# This value only ever comes from the lambda function's environment variable
+# configuration. In a local environment i.e. when running `tasks.py`,
+# it will not be set.
 recording_events_table = None
 if RECORDING_EVENTS_TABLE:
     dynamodb = boto3.resource("dynamodb")
