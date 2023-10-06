@@ -53,12 +53,14 @@ def set_recording_events(
         "timestamp": "TIMESTAMP_IN_SECS",
     }
     """
-    # If not one of desired events or no timestamp, ignore
+    # If not one of desired events or no timestamp, ignore.
+    # We are interested in the following events: recording started/paused/resumed/stopped.
+    # The event timestamp is saved in the db (as a list of events keyed by zoom uuid).
+
     if zoom_event not in RECORDING_EVENTS or not zoom_event_timestamp:
         return
 
-    # If this is an event for recording started/paused/resumed/stopped,
-    # record the event time in the table in a list.
+    # This gets the local time for logging purposes only
     formatted_local_time = datetime.strftime(
         datetime.fromtimestamp(int(zoom_event_timestamp / 1000)),
         "%m/%d/%Y %H:%M:%S",
