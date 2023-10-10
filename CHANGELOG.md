@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.2.0 - 2023-10-10]
+
+### Added
+
+- new dynamodb table `RecordingEvents` to keep track of timestamps of events: recording
+start, pause, resume, stop, which are passed to Opencast at ingest time. 
+
 ## [4.1.0 - 2023-08-22]
 
 ### Changed
