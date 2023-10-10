@@ -171,6 +171,7 @@ def test_on_demand_no_delay(
 def test_update_recording_started_paused(
     handler,
     mock_webhook_set_pipeline_status,
+    mock_webhook_set_recording_events,
 ):
     mock_payload = {
         "object": {
@@ -185,10 +186,19 @@ def test_update_recording_started_paused(
         ("recording.started", webhook.ZoomStatus.RECORDING_IN_PROGRESS),
         ("recording.paused", webhook.ZoomStatus.RECORDING_PAUSED),
     ]
+    event_ts = 1578621046000
     for event, expected_status in cases:
         handler(
             webhook,
-            {"body": json.dumps({"event": event, "payload": mock_payload})},
+            {
+                "body": json.dumps(
+                    {
+                        "event": event,
+                        "event_ts": event_ts,
+                        "payload": mock_payload,
+                    }
+                )
+            },
         )
 
         mock_webhook_set_pipeline_status.assert_called_with(
@@ -199,6 +209,12 @@ def test_update_recording_started_paused(
             recording_start_time=mock_payload["object"]["start_time"],
             topic=mock_payload["object"]["topic"],
             origin="webhook_notification",
+        )
+
+        mock_webhook_set_recording_events.assert_called_with(
+            zoom_uuid="mock_uuid",
+            zoom_event=event,
+            zoom_event_timestamp=event_ts,
         )
 
 

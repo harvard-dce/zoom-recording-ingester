@@ -15,6 +15,7 @@ from utils import (
     TIMESTAMP_FORMAT,
     PipelineStatus,
     set_pipeline_status,
+    get_recording_segments,
 )
 
 
@@ -298,10 +299,10 @@ class Upload:
                 # the video.
                 for seg in segment_files:
                     if seg["segment_num"] not in rec_times:
-                        rec_times[
-                            seg["segment_num"]
-                        ] = f"{seg['recording_start']}_{seg['recording_end']}"
-
+                        rec_times[seg["segment_num"]] = {
+                            "start": seg["recording_start"],
+                            "stop": seg["recording_end"],
+                        }
                 # ZIP-74: Chat file always have ffprobe_seconds 0 so don't
                 # check their duration. But we need to know if there's a chat
                 # segment 0 in case it needs to be discarded later.
@@ -331,7 +332,15 @@ class Upload:
                     ][1:]
 
             # ZIP-74 "start1_end1,start2_end2,start3_end3"
-            self.recording_times = ",".join(sorted(rec_times.values()))
+            # ZIP-91 Start/stop times need to include pause/resume events
+            self.recording_times = get_recording_segments(
+                zoom_uuid=self.data["uuid"],
+                start_stop_segments=rec_times,
+            )
+            logger.info(
+                f"Recording times for zoom uuid {self.data['uuid']}: "
+                f"{self.recording_times}"
+            )
 
         return self._s3_filenames
 

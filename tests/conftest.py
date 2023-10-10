@@ -100,6 +100,7 @@ def webhook_payload(aws_request_id):
                 "allow_multiple_ingests": False,
             },
             "event": "recording.completed",
+            "event_ts": 1578621046000,
             "download_token": "mock_download_token",
         }
         if on_demand:
@@ -168,6 +169,15 @@ def mock_downloader_set_pipeline_status():
 def mock_webhook_set_pipeline_status():
     with mock.patch(
         "zoom-webhook.set_pipeline_status",
+        mock.Mock(),
+    ) as _fixture:
+        yield _fixture
+
+
+@pytest.fixture(autouse=True)
+def mock_webhook_set_recording_events():
+    with mock.patch(
+        "zoom-webhook.set_recording_events",
         mock.Mock(),
     ) as _fixture:
         yield _fixture
