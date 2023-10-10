@@ -425,6 +425,7 @@ class Upload:
             ("seriesDCCatalog", (None, self.series_catalog)),
             ("source", (None, escape(f"ZIP-{self.meeting_uuid}"))),
             ("spatial", (None, f"Zoom {self.zoom_series_id}")),
+            ("zoomMeetingStart", (None, self.created)),
         ]
 
         if self.data.get("ingest_all_mp4"):
