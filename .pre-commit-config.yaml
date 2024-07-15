@@ -8,6 +8,6 @@ repos:
       types: [python]
     - id: black
       name: black
-      entry: black
+      entry: black -v 
       language: system
       types: [python]

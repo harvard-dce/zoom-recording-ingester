@@ -17,6 +17,14 @@ from datetime import datetime
 import logging
 import concurrent.futures
 from copy import deepcopy
+from botocore.config import Config
+from tenacity import (
+    Retrying,
+    RetryError,
+    stop_after_attempt,
+    wait_fixed,
+    retry_if_exception_type,
+)
 
 logger = logging.getLogger()
 
@@ -33,6 +41,8 @@ LOCAL_TIME_ZONE = env("LOCAL_TIME_ZONE")
 DOWNLOAD_MESSAGES_PER_INVOCATION = env("DOWNLOAD_MESSAGES_PER_INVOCATION")
 # Ignore recordings that are less than MIN_DURATION (in minutes)
 MINIMUM_DURATION = int(env("MINIMUM_DURATION", 2))
+STREAM_FROM_ZOOM_TO_S3_RETRIES = 5
+STREAM_FROM_ZOOM_TO_S3_RETRY_WAIT = 120
 
 
 class PermanentDownloadError(Exception):
@@ -48,7 +58,7 @@ class ZoomDownloadLinkError(Exception):
 
 
 sqs = boto3.resource("sqs")
-s3 = boto3.client("s3")
+s3 = boto3.client("s3", config=Config(tcp_keepalive=True))
 
 
 @setup_logging
@@ -358,8 +368,24 @@ class Download:
         self.downloaded_files = []
         for file in self.recording_files:
             try:
-                file.stream_file_to_s3()
+                retry_attempts = Retrying(
+                    reraise=True,
+                    stop=stop_after_attempt(STREAM_FROM_ZOOM_TO_S3_RETRIES),
+                    wait=wait_fixed(STREAM_FROM_ZOOM_TO_S3_RETRY_WAIT),
+                    retry=retry_if_exception_type(RetryableDownloadError),
+                )
+                for attempt in retry_attempts:
+                    with attempt:
+                        logger.info({"retry state": attempt.retry_state})
+                        file.stream_file_to_s3()
                 self.downloaded_files.append(file)
+            # RetryError means we've exhausted all retries
+            except RetryError:
+                logger.exception(
+                    {"Giving up trying to download file": file.file_data}
+                )
+                # raise this so the whole lambda call will be retried
+                raise RetryableDownloadError()
             except ZoomDownloadLinkError:
                 logger.warning(
                     {"Error accessing possibly deleted file": file.file_data}
@@ -663,7 +689,7 @@ class ZoomFile:
                 Key=self.s3_filename,
                 UploadId=mpu["UploadId"],
             )
-            raise
+            raise RetryableDownloadError()
 
         if self.file_extension == "mp4":
             if not self.valid_mp4_file():

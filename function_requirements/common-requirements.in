@@ -1,6 +1,7 @@
 boto3
 aws-lambda-logging
 requests
+tenacity
 PyJWT
 pytz
 python-dotenv

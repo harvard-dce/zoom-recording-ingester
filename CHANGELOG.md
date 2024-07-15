@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.2.2 - 2024-08-02]
+
+- added internal retry mechanism when downloading from zoom
+- added `tcp_keepalive=True` to the boto3 s3 client
+
 ## [4.2.0 - 2023-10-10]
 
 ### Added

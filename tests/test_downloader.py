@@ -612,6 +612,40 @@ class TestDownload(unittest.TestCase):
                 dl.upload_to_s3()
                 assert len(dl.downloaded_files) == expected_count
 
+    def test_upload_to_s3_retries(self):
+        now = datetime.strftime(datetime.now(), TIMESTAMP_FORMAT)
+        dl = downloader.Download(
+            None,
+            {
+                "uuid": "abc",
+                "zoom_series_id": "02334",
+                "start_time": now,
+                "recording_files": [
+                    {"recording_start": now, "recording_type": "view_type_1"},
+                ],
+            },
+        )
+
+        downloader.STREAM_FROM_ZOOM_TO_S3_RETRY_WAIT = 0.1
+
+        downloader.STREAM_FROM_ZOOM_TO_S3_RETRIES = 3
+
+        num_retries = 0
+
+        def count_retries(*args):
+            nonlocal num_retries
+            num_retries += 1
+            raise downloader.RetryableDownloadError("connection reset, loser!")
+
+        self.mocker.patch.object(
+            downloader.ZoomFile, "stream_file_to_s3", side_effect=count_retries
+        )
+
+        with pytest.raises(Exception):
+            dl.upload_to_s3()
+
+        assert num_retries == 3
+
 
 """
 Tests for class ZoomFile
