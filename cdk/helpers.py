@@ -9,45 +9,81 @@ if AWS_PROFILE:
 
 
 def vpc_components():
+    stack_type = getenv("STACK_TYPE", False)
     oc_cluster_name = getenv("OC_CLUSTER_NAME")
-    opsworks = boto3.client("opsworks")
+    if not stack_type or stack_type != "ecs":
+        # Opsworks
+        opsworks = boto3.client("opsworks")
 
-    stacks = opsworks.describe_stacks()
-    vpc_id = jmespath.search(
-        f"Stacks[?Name=='{oc_cluster_name}'].VpcId", stacks
-    )[0]
+        stacks = opsworks.describe_stacks()
+        vpc_id = jmespath.search(
+            f"Stacks[?Name=='{oc_cluster_name}'].VpcId", stacks
+        )[0]
 
-    ec2_boto = boto3.client("ec2")
-    security_groups = ec2_boto.describe_security_groups(
-        Filters=[
-            {"Name": "vpc-id", "Values": [vpc_id]},
-            {
-                "Name": "tag:aws:cloudformation:logical-id",
-                "Values": ["OpsworksLayerSecurityGroupCommon"],
-            },
-        ]
-    )
-    sg_id = jmespath.search("SecurityGroups[0].GroupId", security_groups)
+        ec2_boto = boto3.client("ec2")
+        security_groups = ec2_boto.describe_security_groups(
+            Filters=[
+                {"Name": "vpc-id", "Values": [vpc_id]},
+                {
+                    "Name": "tag:aws:cloudformation:logical-id",
+                    "Values": ["OpsworksLayerSecurityGroupCommon"],
+                },
+            ]
+        )
+        sg_id = jmespath.search("SecurityGroups[0].GroupId", security_groups)
 
-    return vpc_id, sg_id
+        return vpc_id, sg_id
+    else:
+        # ECS deployment
+        # Get the VPC id and the common "internal" security group id
+        # from the stack exports
+        vpc_id = _get_stack_export(f"{oc_cluster_name}-vpc-id")
+        sg_id = _get_stack_export(
+            f"{oc_cluster_name}-internal-security-group-id"
+        )
+        return vpc_id, sg_id
 
 
 def oc_base_url():
-    ec2 = boto3.client("ec2")
+    stack_type = getenv("STACK_TYPE", False)
     oc_cluster_name = getenv("OC_CLUSTER_NAME")
+    if not stack_type or stack_type != "ecs":
+        # Opsworks
+        ec2 = boto3.client("ec2")
 
-    result = ec2.describe_instances(
-        Filters=[
-            {"Name": "tag:opsworks:stack", "Values": [oc_cluster_name]},
-            {"Name": "tag:opsworks:layer:admin", "Values": ["Admin"]},
-        ]
-    )
-    if "Reservations" not in result or not result["Reservations"]:
-        raise Exception(
-            f"No dns name found for OC_CLUSTER_NAME {oc_cluster_name}"
+        result = ec2.describe_instances(
+            Filters=[
+                {"Name": "tag:opsworks:stack", "Values": [oc_cluster_name]},
+                {"Name": "tag:opsworks:layer:admin", "Values": ["Admin"]},
+            ]
         )
-    dns_name = result["Reservations"][0]["Instances"][0]["PublicDnsName"]
-    return "http://" + dns_name.strip()
+        if "Reservations" not in result or not result["Reservations"]:
+            raise Exception(
+                f"No dns name found for OC_CLUSTER_NAME {oc_cluster_name}"
+            )
+        dns_name = result["Reservations"][0]["Instances"][0]["PublicDnsName"]
+        return "http://" + dns_name.strip()
+    else:
+        # ECS deployment
+        host = _get_stack_export(f"{oc_cluster_name}-admin-public-hostname")
+        if not host:
+            raise Exception(
+                f"No admin host name found for OC_CLUSTER_NAME {oc_cluster_name}"
+            )
+        return "https://" + host
+
+
+def _get_stack_export(export_name):
+    oc_cluster_name = getenv("OC_CLUSTER_NAME")
+    stack_name = f"opencast-ecs-{oc_cluster_name}-ecs-cluster"
+    cloudformation = boto3.client("cloudformation")
+
+    result = cloudformation.describe_stacks(StackName=stack_name)
+    value = jmespath.search(
+        f"Stacks[0].Outputs[?ExportName=='{export_name}'].OutputValue",
+        result,
+    )
+    return value[0] if value else None
 
 
 def aws_account_id():
