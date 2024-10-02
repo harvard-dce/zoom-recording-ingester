@@ -280,7 +280,7 @@ Retrieve current status of all recordings with Zoom meeting id 86168921331:
 
 ### Development Guide
 
-1. Create a dev/test stack by setting your `.env` `STACK_NAME` to a unique value.
+1. Create a dev/test stack by setting your `.env` `STACK_NAME` to a unique value. If using ECS deployment, also set STACK_TYPE=ecs.
 1. Follow the usual stack creation steps outlined at the top.
 1. Make changes.
 1. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
