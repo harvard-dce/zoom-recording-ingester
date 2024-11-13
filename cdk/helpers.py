@@ -35,11 +35,11 @@ def vpc_components():
         return vpc_id, sg_id
     else:
         # ECS deployment
-        # Get the VPC id and the common "internal" security group id
+        # Get the VPC id and the deployment's "private" security group id
         # from the stack exports
         vpc_id = _get_stack_export(f"{oc_cluster_name}-vpc-id")
         sg_id = _get_stack_export(
-            f"{oc_cluster_name}-internal-security-group-id"
+            f"{oc_cluster_name}-private-security-group-id"
         )
         return vpc_id, sg_id
 
@@ -75,7 +75,7 @@ def oc_base_url():
 
 def _get_stack_export(export_name):
     oc_cluster_name = getenv("OC_CLUSTER_NAME")
-    stack_name = f"opencast-ecs-{oc_cluster_name}-ecs-cluster"
+    stack_name = f"opencast-ecs-{oc_cluster_name}-database"
     cloudformation = boto3.client("cloudformation")
 
     result = cloudformation.describe_stacks(StackName=stack_name)
