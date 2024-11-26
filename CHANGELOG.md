@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.2.4 - 2024-08-02]
+
+### Changed
+
+- opencast-ecs deployment values now come from the database stack
+
+## [4.2.3 - 2024-08-02]
+
+### Added
+
+- Support for ECS deployment
+
 ## [4.2.2 - 2024-08-02]
 
 - added internal retry mechanism when downloading from zoom
