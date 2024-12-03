@@ -3,11 +3,11 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      python: 3.8
+      python: 3.10
   pre_build:
     commands:
-      - python -m virtualenv venv
-      - source venv/bin/activate
+      - python -m venv venv
+      - . venv/bin/activate
       - pip install -U pip pip-tools
       - pip-sync requirements/dev.txt
       - invoke test

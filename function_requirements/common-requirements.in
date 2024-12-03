@@ -1,6 +1,7 @@
 boto3
 aws-lambda-logging
 requests
+urllib3>2
 tenacity
 PyJWT
 pytz

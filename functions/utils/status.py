@@ -154,9 +154,9 @@ def set_pipeline_status(
                 "OR pipeline_state = :recording_stopped "
             )
         elif state in ZoomStatus:
-            expression_attribute_values[
-                ":recording_processing"
-            ] = ZoomStatus.RECORDING_PROCESSING.name
+            expression_attribute_values[":recording_processing"] = (
+                ZoomStatus.RECORDING_PROCESSING.name
+            )
 
             # Enforce cannot transition back to a recording in progress state
             # from recording processing
