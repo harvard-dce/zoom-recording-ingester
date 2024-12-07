@@ -4,177 +4,181 @@
 #
 #    pip-compile requirements/dev.in
 #
-attrs==23.1.0
+attrs==24.2.0
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   cattrs
     #   jsii
-aws-cdk-asset-awscli-v1==2.2.185
+aws-cdk-asset-awscli-v1==2.2.213
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   aws-cdk-lib
-aws-cdk-asset-kubectl-v20==2.1.1
+aws-cdk-asset-kubectl-v20==2.1.3
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   aws-cdk-lib
-aws-cdk-asset-node-proxy-agent-v5==2.0.155
+aws-cdk-asset-node-proxy-agent-v5==2.0.166
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   aws-cdk-lib
 aws-cdk-lib==2.81.0
-    # via -r requirements/base.txt
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
 aws-lambda-logging==0.1.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-awscli==1.27.142
-    # via -r requirements/base.txt
-black==23.3.0
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+awscli==1.36.17
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+black==24.10.0
     # via -r requirements/dev.in
-boto3==1.26.142
+boto3==1.35.76
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-botocore==1.29.142
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+botocore==1.35.76
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   awscli
     #   boto3
     #   s3transfer
-cachetools==5.3.0
+cachetools==5.5.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-auth
-cattrs==22.2.0
+    #   tox
+cattrs==24.1.2
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   jsii
-certifi==2023.5.7
+certifi==2024.8.30
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   requests
-cfgv==3.3.1
+cfgv==3.4.0
     # via pre-commit
-charset-normalizer==3.1.0
+chardet==5.2.0
+    # via tox
+charset-normalizer==3.4.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   requests
-click==8.1.3
+click==8.1.7
     # via black
-colorama==0.4.4
+colorama==0.4.6
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   awscli
-constructs==10.2.37
+    #   tox
+constructs==10.4.2
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   aws-cdk-lib
-coverage[toml]==7.2.6
+coverage[toml]==7.6.9
     # via
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   pytest-cov
-distlib==0.3.6
+distlib==0.3.9
     # via virtualenv
 docutils==0.16
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   awscli
-exceptiongroup==1.1.1
+exceptiongroup==1.2.2
     # via
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   cattrs
     #   pytest
-filelock==3.12.0
+filelock==3.16.1
     # via
     #   tox
     #   virtualenv
-flake8==6.0.0
+flake8==7.1.1
     # via -r requirements/dev.in
-freezegun==1.2.2
-    # via -r requirements/tox.txt
-google-api-core==2.11.0
+freezegun==1.5.1
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+google-api-core==2.23.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-python-client
-google-api-python-client==2.87.0
+google-api-python-client==2.154.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-google-auth==2.19.0
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+google-auth==2.36.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-core
     #   google-api-python-client
     #   google-auth-httplib2
     #   google-auth-oauthlib
-google-auth-httplib2==0.1.0
+google-auth-httplib2==0.2.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-python-client
-google-auth-oauthlib==1.0.0
+google-auth-oauthlib==1.2.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-googleapis-common-protos==1.59.0
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+googleapis-common-protos==1.66.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-core
 httplib2==0.22.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-python-client
     #   google-auth-httplib2
-identify==2.5.24
+identify==2.6.3
     # via pre-commit
-idna==3.4
+idna==3.10
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   requests
-importlib-resources==5.12.0
+importlib-resources==6.4.5
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   jsii
 iniconfig==2.0.0
     # via
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   pytest
-invoke==2.1.2
-    # via -r requirements/base.txt
+invoke==2.2.0
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
 jmespath==1.0.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   boto3
     #   botocore
-jsii==1.82.0
+jsii==1.105.0
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   aws-cdk-asset-awscli-v1
     #   aws-cdk-asset-kubectl-v20
     #   aws-cdk-asset-node-proxy-agent-v5
@@ -182,207 +186,217 @@ jsii==1.82.0
     #   constructs
 mccabe==0.7.0
     # via flake8
-mock==5.0.2
-    # via -r requirements/tox.txt
+mock==5.1.0
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
 mypy-extensions==1.0.0
     # via black
-nodeenv==1.8.0
+nodeenv==1.9.1
     # via pre-commit
 oauthlib==3.2.2
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   requests-oauthlib
-packaging==23.1
+packaging==24.2
     # via
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   black
+    #   pipdeptree
+    #   pyproject-api
     #   pytest
     #   tox
-pathspec==0.11.1
+pathspec==0.12.1
     # via black
-pipdeptree==2.7.1
+pipdeptree==2.24.0
     # via -r requirements/dev.in
-platformdirs==3.5.1
+platformdirs==4.3.6
     # via
     #   black
+    #   tox
     #   virtualenv
-pluggy==1.0.0
+pluggy==1.5.0
     # via
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   pytest
     #   tox
-pre-commit==3.3.2
+pre-commit==4.0.1
     # via -r requirements/dev.in
-protobuf==4.23.2
+proto-plus==1.25.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+    #   google-api-core
+protobuf==5.29.1
+    # via
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-core
     #   googleapis-common-protos
+    #   proto-plus
 publication==0.0.3
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   aws-cdk-asset-awscli-v1
     #   aws-cdk-asset-kubectl-v20
     #   aws-cdk-asset-node-proxy-agent-v5
     #   aws-cdk-lib
     #   constructs
     #   jsii
-py==1.11.0
-    # via tox
-pyasn1==0.5.0
+pyasn1==0.6.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   pyasn1-modules
     #   rsa
-pyasn1-modules==0.3.0
+pyasn1-modules==0.4.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-auth
-pycodestyle==2.10.0
+pycodestyle==2.12.1
     # via flake8
-pyflakes==3.0.1
+pyflakes==3.2.0
     # via flake8
-pyjwt==2.7.0
+pyjwt==2.10.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-pyparsing==3.0.9
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+pyparsing==3.2.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   httplib2
-pytest==7.3.1
+pyproject-api==1.8.0
+    # via tox
+pytest==8.3.4
     # via
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   pytest-cov
     #   pytest-env
     #   pytest-mock
-pytest-cov==4.1.0
-    # via -r requirements/tox.txt
-pytest-env==0.8.1
-    # via -r requirements/tox.txt
-pytest-mock==3.10.0
-    # via -r requirements/tox.txt
-python-dateutil==2.8.2
+pytest-cov==6.0.0
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+pytest-env==1.1.5
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+pytest-mock==3.14.0
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+python-dateutil==2.9.0.post0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   botocore
     #   freezegun
     #   jsii
-python-dotenv==1.0.0
+python-dotenv==1.0.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-pytz==2023.3
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+pytz==2024.2
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-pyyaml==5.3.1
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+pyyaml==6.0.2
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   awscli
     #   pre-commit
-requests==2.31.0
+requests==2.32.3
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-core
     #   requests-mock
     #   requests-oauthlib
-requests-mock==1.10.0
-    # via -r requirements/tox.txt
-requests-oauthlib==1.3.1
+requests-mock==1.12.1
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+requests-oauthlib==2.0.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-auth-oauthlib
 rsa==4.7.2
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   awscli
     #   google-auth
-s3transfer==0.6.1
+s3transfer==0.10.4
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   awscli
     #   boto3
-six==1.16.0
+six==1.17.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-    #   google-auth
-    #   google-auth-httplib2
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   python-dateutil
-    #   requests-mock
-    #   tox
 tabulate==0.9.0
-    # via -r requirements/base.txt
-tenacity==8.5.0
+    # via -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+tenacity==9.0.0
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
-tomli==2.0.1
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
+tomli==2.2.1
     # via
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   black
     #   coverage
+    #   pyproject-api
     #   pytest
+    #   pytest-env
     #   tox
-tox==3.28.0
+tox==4.23.2
     # via -r requirements/dev.in
 typeguard==2.13.3
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
     #   aws-cdk-asset-awscli-v1
     #   aws-cdk-asset-kubectl-v20
     #   aws-cdk-asset-node-proxy-agent-v5
     #   aws-cdk-lib
     #   constructs
     #   jsii
-typing-extensions==4.6.2
+typing-extensions==4.12.2
     # via
-    #   -r requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   black
+    #   cattrs
     #   jsii
+    #   tox
 uritemplate==4.1.1
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   google-api-python-client
-urllib3==1.26.16
+urllib3==2.2.3
     # via
-    #   -r requirements/../function_requirements/common-requirements.txt
-    #   -r requirements/base.txt
-    #   -r requirements/tox.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/function_requirements/common-requirements.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/base.txt
+    #   -r /home/jluker/projects/zoom-recording-ingester/requirements/tox.txt
     #   botocore
-    #   google-auth
     #   requests
-virtualenv==20.23.0
+virtualenv==20.28.0
     # via
     #   pre-commit
     #   tox
 
 # The following packages are considered to be unsafe in a requirements file:
-# setuptools
+# pip

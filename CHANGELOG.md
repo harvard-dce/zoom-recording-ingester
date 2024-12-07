@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Changed
+
+- bumped python runtime from 3.8 to 3.10
+- updated package versions for requests, urllib3, certifi and idna
+
 ## [4.2.4 - 2024-08-02]
 
 ### Changed

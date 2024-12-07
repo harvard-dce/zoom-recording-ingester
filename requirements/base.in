@@ -5,7 +5,7 @@ boto3
 botocore
 requests
 tabulate
-aws-cdk-lib
+aws-cdk-lib==2.81.0
 constructs
 tenacity
 pyyaml!=6.0.0,!=5.4.0,!=5.4.1, # pyyaml later versions are broken with cython 3

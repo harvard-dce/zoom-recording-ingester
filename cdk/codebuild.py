@@ -28,7 +28,7 @@ class ZipCodebuildProject(Construct):
                 clone_depth=1,
             ),
             environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.AMAZON_LINUX_2_2,
+                build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
                 compute_type=codebuild.ComputeType.LARGE,
             ),
             artifacts=codebuild.Artifacts.s3(
