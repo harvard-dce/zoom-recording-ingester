@@ -69,8 +69,7 @@ def oc_api_request(method, endpoint, **kwargs):
     logger.info({"url": url, "kwargs": kwargs})
     try:
         resp = session.request(method, url, **kwargs)
-    except requests.RequestException as e:
-        logger.exception(f"requests raised an exception: {e}")
+    except requests.RequestException:
         raise OpencastConnectionError
     resp.raise_for_status()
     return resp
