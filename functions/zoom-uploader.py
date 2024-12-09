@@ -40,19 +40,6 @@ s3 = boto3.resource("s3")
 aws_lambda = boto3.client("lambda")
 sqs = boto3.resource("sqs")
 
-session = requests.Session()
-session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
-session.headers.update(
-    {
-        "X-REQUESTED-AUTH": "Digest",
-        # TODO: it's possible this header is not necessary for the endpoints
-        # being used here. It seems like for Opencast endpoints where the
-        # header *is* necessary the correct value is actually
-        # "X-Opencast-Matterhorn-Authorization"
-        "X-Opencast-Matterhorn-Authentication": "true",
-    }
-)
-
 UPLOAD_OP_TYPES = ["track", "uri-track"]
 
 
@@ -67,6 +54,16 @@ class InvalidOpencastSeriesId(Exception):
 def oc_api_request(method, endpoint, **kwargs):
     url = urljoin(OPENCAST_BASE_URL, endpoint)
     logger.info({"url": url, "kwargs": kwargs})
+
+    session = requests.Session()
+    session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
+    session.headers.update(
+        {
+            "X-REQUESTED-AUTH": "Digest",
+            "X-Opencast-Matterhorn-Authentication": "true",
+        }
+    )
+
     try:
         resp = session.request(method, url, **kwargs)
     except requests.RequestException:
