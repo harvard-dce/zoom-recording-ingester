@@ -235,4 +235,6 @@ def from_utc_to_timestamp(date_str):
 
 
 def from_timestamp_to_utc(ts):
-    return datetime.strftime(datetime.utcfromtimestamp(ts), TIMESTAMP_FORMAT)
+    return datetime.strftime(
+        datetime.utcfromtimestamp(int(ts)), TIMESTAMP_FORMAT
+    )
