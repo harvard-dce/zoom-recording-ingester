@@ -41,6 +41,7 @@ aws_lambda = boto3.client("lambda")
 sqs = boto3.resource("sqs")
 
 UPLOAD_OP_TYPES = ["track", "uri-track"]
+SESSION = None
 
 
 class OpencastConnectionError(Exception):
@@ -52,20 +53,12 @@ class InvalidOpencastSeriesId(Exception):
 
 
 def oc_api_request(method, endpoint, **kwargs):
+
     url = urljoin(OPENCAST_BASE_URL, endpoint)
     logger.info({"url": url, "kwargs": kwargs})
 
-    session = requests.Session()
-    session.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
-    session.headers.update(
-        {
-            "X-REQUESTED-AUTH": "Digest",
-            "X-Opencast-Matterhorn-Authentication": "true",
-        }
-    )
-
     try:
-        resp = session.request(method, url, **kwargs)
+        resp = SESSION.request(method, url, **kwargs)
     except requests.RequestException:
         raise OpencastConnectionError
     resp.raise_for_status()
@@ -85,6 +78,16 @@ def handler(event, context):
         return
     else:
         logger.info(f"{len(messages)} upload messages in queue")
+
+    global SESSION
+    SESSION = requests.Session()
+    SESSION.auth = HTTPDigestAuth(OPENCAST_API_USER, OPENCAST_API_PASSWORD)
+    SESSION.headers.update(
+        {
+            "X-REQUESTED-AUTH": "Digest",
+            "X-Opencast-Matterhorn-Authentication": "true",
+        }
+    )
 
     upload_message = messages[0]
     logger.info(
@@ -115,6 +118,7 @@ def handler(event, context):
         else:
             final_status = PipelineStatus.IGNORED
             logger.info("No workflow initiated.")
+
     except Exception as e:
         logger.exception(e)
         final_status = PipelineStatus.UPLOADER_FAILED
@@ -130,6 +134,7 @@ def handler(event, context):
                 final_status,
                 reason=reason,
             )
+        SESSION.close()
 
 
 def minutes_in_pipeline(webhook_received_time):
