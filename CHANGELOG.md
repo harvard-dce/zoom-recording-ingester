@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.2.5 - 2024-12-11]
+
+### Changed
+
+- uploader function now creates a new `requests.Session` object for each invocation
+  to work around connection errors we see when re-using https connections
+
 ## [4.2.4 - 2024-08-02]
 
 ### Changed
