@@ -53,7 +53,6 @@ class InvalidOpencastSeriesId(Exception):
 
 
 def oc_api_request(method, endpoint, **kwargs):
-
     url = urljoin(OPENCAST_BASE_URL, endpoint)
     logger.info({"url": url, "kwargs": kwargs})
 
