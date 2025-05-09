@@ -808,12 +808,14 @@ def test_publish_file_param_generator_multi_set():
                 "shared_screen": ["screen-001.mp4"],
                 "chat_file": ["chat-000.txt", "chat-001.txt"],
             },
-            # shared screen view should be ignored
+            # ZIP-98 shared screen view should still be ingested
             [
                 ("flavor", (None, "multipart/chunked+source")),
                 ("mediaUri", (None, "signed-speaker-000.mp4")),
                 ("flavor", (None, "multipart/chunked+source")),
                 ("mediaUri", (None, "signed-speaker-001.mp4")),
+                ("flavor", (None, "presentation/chunked+source")),
+                ("mediaUri", (None, "signed-screen-001.mp4")),
                 ("flavor", (None, "chat/chunked+source")),
                 ("attachmentUri", (None, "signed-chat-000.txt")),
                 ("flavor", (None, "chat/chunked+source")),
