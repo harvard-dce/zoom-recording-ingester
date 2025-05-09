@@ -36,7 +36,7 @@ class ZipFunction(Construct):
 
         function_props = {
             "function_name": f"{self.stack_name}-{name}",
-            "runtime": aws_lambda.Runtime.PYTHON_3_8,
+            "runtime": aws_lambda.Runtime.PYTHON_3_12,
             "code": aws_lambda.Code.from_bucket(
                 bucket=lambda_code_bucket, key=f"{self.stack_name}/{name}.zip"
             ),
