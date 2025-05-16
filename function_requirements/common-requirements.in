@@ -8,4 +8,5 @@ python-dotenv
 google-api-python-client
 google-auth
 google-auth-oauthlib
+# constrain rsa version to something supported by awscli==1.27.142 in requirements/base.txt
 rsa==4.7.2

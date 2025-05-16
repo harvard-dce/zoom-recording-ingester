@@ -432,7 +432,6 @@ def test_s3_filename_filter_false_start(mocker):
             assert len(upload.s3_filenames["chat_file"]) == expected_chat
         else:
             assert "chat_file" not in upload.s3_filenames
-        print(f"{upload.recording_times = }")
         assert upload.recording_times == expected_recording_times
 
 
