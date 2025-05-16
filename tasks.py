@@ -121,7 +121,7 @@ def stack_create(ctx):
     and build the CloudFormation stack
     """
     for func in names.FUNCTIONS:
-        __build_function(ctx, func, upload_to_s3=True)
+        __build_function(ctx, func)
 
     ctx.run(f"npx cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
@@ -195,13 +195,13 @@ def stack_delete(ctx):
 
 
 @task(help={"function": "name of a specific function"})
-def package(ctx, function=None, upload_to_s3=False):
+def package(ctx, function=None):
     """
     Package function(s) + deps into a zip file.
     """
     functions = resolve_function_arg(function)
     for func in functions:
-        __build_function(ctx, func, upload_to_s3)
+        __build_function(ctx, func)
 
 
 @task(
@@ -899,7 +899,7 @@ def __publish_version(ctx, func, description):
     return int(res.stdout.replace('"', ""))
 
 
-def __build_function(ctx, func, upload_to_s3=False):
+def __build_function(ctx, func):
     print(f"Building {func} function")
     req_file = join(
         dirname(__file__), "function_requirements/{}.txt".format(func)
@@ -943,10 +943,10 @@ def __build_function(ctx, func, upload_to_s3=False):
     with ctx.cd(build_path):
         ctx.run("zip -r {} .".format(zip_path), hide=1)
 
-    if upload_to_s3:
-        s3_path = f"{LAMBDA_CODE_URI}/{func}.zip"
-        print(f"uploading {func} to {s3_path}")
-        ctx.run(f"aws {profile_arg()} s3 cp {zip_path} {s3_path}", hide=1)
+    # ZIP-98 Some functions are now > 50MB so we are always using s3
+    s3_path = f"{LAMBDA_CODE_URI}/{func}.zip"
+    print(f"uploading {func} to {s3_path}")
+    ctx.run(f"aws {profile_arg()} s3 cp {zip_path} {s3_path}", hide=1)
 
 
 def __update_function(ctx, func):
@@ -957,10 +957,13 @@ def __update_function(ctx, func):
     if not exists(zip_path):
         raise Exit("{} not found!".format(zip_path))
 
+    print(
+        f"Getting {func} function code from bucket {LAMBDA_CODE_BUCKET}, key {STACK_NAME}/{func}.zip"
+    )
     cmd = (
         "aws {} lambda update-function-code "
-        "--function-name {} --zip-file fileb://{}"
-    ).format(profile_arg(), func_name, zip_path)
+        "--function-name {} --s3-bucket {} --s3-key {}/{}.zip"
+    ).format(profile_arg(), func_name, LAMBDA_CODE_BUCKET, STACK_NAME, func)
     ctx.run(cmd, hide=1)
 
     # Wait for function update to complete successfully
