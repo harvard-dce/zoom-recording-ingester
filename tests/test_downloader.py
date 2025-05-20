@@ -3,7 +3,6 @@ import os
 import json
 from os.path import dirname, join
 import pytest
-from importlib import import_module
 import requests_mock
 from datetime import datetime, timedelta
 from pytz import timezone
@@ -14,7 +13,8 @@ import copy
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
-downloader = import_module("zoom-downloader")
+import zoom_downloader as downloader
+
 downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 10
 downloader.CLASS_SCHEDULE_TABLE = "mock-schedule-table"
 
@@ -39,7 +39,7 @@ DAYS = ["M", "T", "W", "R", "F", "S", "U"]
 class MockContext:
     def __init__(self, aws_request_id):
         self.aws_request_id = aws_request_id
-        self.function_name = "zoom-downloader"
+        self.function_name = "zoom_downloader"
 
 
 class MockDownloadMessage:
@@ -706,7 +706,7 @@ def test_zoom_filename(mocker):
                 content=content,
             )
             file = downloader.ZoomFile(file_data, 1)
-            if isinstance(expected, type) and expected.__base__ == Exception:
+            if isinstance(expected, type) and expected.__base__ is Exception:
                 with pytest.raises(expected) as exc_info:
                     file.zoom_filename
                 if msg is not None:

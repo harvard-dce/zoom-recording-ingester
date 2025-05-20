@@ -1,7 +1,6 @@
 import site
 from os.path import dirname, join
 import pytest
-from importlib import import_module
 from freezegun import freeze_time
 from pytz import timezone
 from datetime import datetime
@@ -9,12 +8,11 @@ import os
 import json
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
-
+import zoom_webhook as webhook
 
 LOCAL_TIME_ZONE = os.getenv("LOCAL_TIME_ZONE")
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 
-webhook = import_module("zoom-webhook")
 webhook.WEBHOOK_VALIDATION_SECRET_TOKEN = "barbaz67890"
 
 tz = timezone(LOCAL_TIME_ZONE)
@@ -24,7 +22,7 @@ FROZEN_TIME = datetime.strftime(tz.localize(datetime.now()), TIMESTAMP_FORMAT)
 class MockContext:
     def __init__(self, aws_request_id):
         self.aws_request_id = aws_request_id
-        self.function_name = "zoom-webhook"
+        self.function_name = "zoom_webhook"
 
 
 def test_missing_body(handler):

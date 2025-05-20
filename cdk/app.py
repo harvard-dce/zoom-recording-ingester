@@ -55,7 +55,6 @@ if not WEBHOOK_VALIDATION_SECRET_TOKEN:
     )
 
 stack_props = {
-    "lambda_code_bucket": getenv("LAMBDA_CODE_BUCKET"),
     "notification_email": getenv("NOTIFICATION_EMAIL"),
     "zoom_api_base_url": getenv("ZOOM_API_BASE_URL"),
     "zoom_api_key": ZOOM_API_KEY,

@@ -4,11 +4,11 @@ from datetime import datetime
 import os
 import json
 import requests_mock
-from importlib import import_module
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
-on_demand = import_module("zoom-on-demand")
+import zoom_on_demand as on_demand
+
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 
 

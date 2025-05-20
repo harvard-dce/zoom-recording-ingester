@@ -1,3 +1,4 @@
+from pathlib import Path
 from aws_cdk import (
     Stack,
     Duration,
@@ -16,13 +17,11 @@ class ZipFunction(Construct):
         scope: Construct,
         id: str,
         name,
-        lambda_code_bucket,
         environment,
         timeout=30,
         memory_size=128,
         vpc_id=None,
         security_group_id=None,
-        handler=None,
     ):
         super().__init__(scope, id)
 
@@ -31,16 +30,12 @@ class ZipFunction(Construct):
             key: str(val) for key, val in environment.items() if val
         }
 
-        if not handler:
-            handler = f"{name}.handler"
-
         function_props = {
             "function_name": f"{self.stack_name}-{name}",
-            "runtime": aws_lambda.Runtime.PYTHON_3_12,
-            "code": aws_lambda.Code.from_bucket(
-                bucket=lambda_code_bucket, key=f"{self.stack_name}/{name}.zip"
+            "code": aws_lambda.DockerImageCode.from_image_asset(
+                str(Path(__file__).parent.parent / "functions"),
+                cmd=[f"{name}.handler"],
             ),
-            "handler": handler,
             "timeout": Duration.seconds(timeout),
             "memory_size": memory_size,
             "environment": environment,
@@ -64,7 +59,9 @@ class ZipFunction(Construct):
                 }
             )
 
-        self.function = aws_lambda.Function(self, "function", **function_props)
+        self.function = aws_lambda.DockerImageFunction(
+            self, "function", **function_props
+        )
         self.alias = aws_lambda.Alias(
             self,
             "alias",

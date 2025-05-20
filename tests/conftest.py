@@ -5,16 +5,14 @@ import pytest
 from os.path import join, dirname
 from datetime import datetime, timedelta
 from unittest import mock
-from importlib import import_module
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
+import zoom_downloader
+import zoom_on_demand
+import zoom_uploader
+import zoom_webhook
 
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
-
-zoom_downloader = import_module("zoom-downloader")
-zoom_on_demand = import_module("zoom-on-demand")
-zoom_uploader = import_module("zoom-uploader")
-zoom_webhook = import_module("zoom-webhook")
 
 
 @pytest.fixture
