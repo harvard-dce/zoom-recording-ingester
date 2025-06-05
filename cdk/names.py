@@ -18,9 +18,9 @@ WEBHOOK_FUNCTION = "zoom_webhook"
 DOWNLOAD_FUNCTION = "zoom_downloader"
 UPLOAD_FUNCTION = "zoom_uploader"
 LOG_NOTIFICATION_FUNCTION = "zoom_log_notifications"
-SCHEDULE_UPDATE_FUNCTION = "schedule_update"
-STATUS_FUNCTION = "status_query"
-SLACK_FUNCTION = "slack"
+SCHEDULE_UPDATE_FUNCTION = "zoom_schedule_update"
+STATUS_FUNCTION = "zoom_status_query"
+SLACK_FUNCTION = "zoom_slack"
 FUNCTIONS = [
     ON_DEMAND_FUNCTION,
     WEBHOOK_FUNCTION,

@@ -14,7 +14,7 @@ import hmac
 import hashlib
 from urllib.parse import urlencode
 
-import slack
+import zoom_slack as slack
 
 FROZEN_TIME = utc.localize(datetime.now())
 TIMESTAMP_FORMAT = getenv("TIMESTAMP_FORMAT")

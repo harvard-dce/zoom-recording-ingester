@@ -81,7 +81,7 @@ class ZipStack(Stack):
 
         schedule_update = ZipScheduleUpdateFunction(
             self,
-            "ScheduleUpdateFunction",
+            "ZipScheduleUpdateFunction",
             name=names.SCHEDULE_UPDATE_FUNCTION,
             memory_size=256,
             environment={
@@ -101,7 +101,7 @@ class ZipStack(Stack):
 
         status_query = ZipStatusQueryFunction(
             self,
-            "StatusFunction",
+            "ZipStatusFunction",
             name=names.STATUS_FUNCTION,
             memory_size=500,
             environment={
@@ -114,7 +114,7 @@ class ZipStack(Stack):
 
         slack = ZipSlackQueryFunction(
             self,
-            "SlackFunction",
+            "ZipSlackFunction",
             name=names.SLACK_FUNCTION,
             environment={
                 "STACK_NAME": self.stack_name,
@@ -134,7 +134,7 @@ class ZipStack(Stack):
 
         on_demand = ZipOnDemandFunction(
             self,
-            "OnDemandFunction",
+            "ZipOnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
             environment={
                 "ZOOM_API_BASE_URL": zoom_api_base_url,
@@ -150,7 +150,7 @@ class ZipStack(Stack):
 
         webhook = ZipWebhookFunction(
             self,
-            "WebhookFunction",
+            "ZipWebhookFunction",
             name=names.WEBHOOK_FUNCTION,
             environment={
                 "ZOOM_API_BASE_URL": zoom_api_base_url,
@@ -175,7 +175,7 @@ class ZipStack(Stack):
         # and uploads matching recordings to S3
         downloader = ZipDownloaderFunction(
             self,
-            "DownloadFunction",
+            "ZipDownloadFunction",
             name=names.DOWNLOAD_FUNCTION,
             timeout=900,
             memory_size=500,
@@ -210,7 +210,7 @@ class ZipStack(Stack):
         # uploader lambda uploads recordings to opencast
         uploader = ZipUploaderFunction(
             self,
-            "UploaderFunction",
+            "ZipUploaderFunction",
             name=names.UPLOAD_FUNCTION,
             timeout=900,
             vpc_id=oc_vpc_id,
@@ -247,7 +247,7 @@ class ZipStack(Stack):
 
         log_notify = ZipLogNotificationsFunction(
             self,
-            "LogNotificationFunction",
+            "ZipLogNotificationFunction",
             name=names.LOG_NOTIFICATION_FUNCTION,
             environment={},
         )

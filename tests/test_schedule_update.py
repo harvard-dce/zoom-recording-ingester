@@ -3,7 +3,7 @@ from os.path import dirname, join
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
-import schedule_update
+import zoom_schedule_update as schedule_update
 
 
 def test_handler(mocker, handler):
