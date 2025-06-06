@@ -6,6 +6,7 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_cloudwatch as cloudwatch,
     aws_logs as logs,
+    aws_ecr_assets as ecr_assets,
 )
 from constructs import Construct
 from . import names
@@ -35,6 +36,7 @@ class ZipFunction(Construct):
             "code": aws_lambda.DockerImageCode.from_image_asset(
                 str(Path(__file__).parent.parent / "functions"),
                 cmd=[f"{name}.handler"],
+                platform=ecr_assets.Platform.LINUX_AMD64,
             ),
             "timeout": Duration.seconds(timeout),
             "memory_size": memory_size,
