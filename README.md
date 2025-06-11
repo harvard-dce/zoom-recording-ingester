@@ -10,14 +10,9 @@ The Zoom Ingester (a.k.a., "Zoom Ingester Pipeline", a.k.a., "ZIP") is Harvard D
 recordings out of the Zoom service and into our own video management and delivery system, Opencast. It allows DCE
 to deliver recorded Zoom class meetings and lectures alongside our other, non-Zoom video content.
 
-When deployed, the pipeline will have an API endpoint that must be registered in your Zoom account as a receiver of
-completed recording events. When Zoom has completed the processing of a recorded meeting video it will send a "webhook"
-notification to the pipeline's endpoint. From there the recording metadata will be passed along through a series of queues
-and Lambda functions before finally being ingested into Opencast. Along the way, the actual recording files will be
-fetched from Zoom and stored in S3. Alternatively, from the Opencast admin interface, a user can kick off an "on-demand"
-ingestion by entering the identifier of a Zoom recording and the corresponding Opencast series into which it should be
-ingested. The On-Demand ingest function then fetches the recording metadata from the Zoom API and emulates a standard
-webhook.
+When deployed, the pipeline will have an API endpoint that must be registered in your Zoom account as a receiver of completed recording events. When Zoom has completed the processing of a recorded meeting video it will send a "webhook" notification to the pipeline's endpoint. From there the recording metadata will be passed along through a series of queues and Lambda functions before finally being ingested into Opencast. Along the way, the actual recording files will be fetched from Zoom and stored in S3.
+
+Alternatively, from the Opencast admin interface, a user can kick off an "on-demand" ingestion by entering the identifier of a Zoom recording and the corresponding Opencast series into which it should be ingested. The On-Demand ingest function then fetches the recording metadata from the Zoom API and emulates a standard webhook.
 
 Info on Zoom's API and webhook functionality can be found at:
 
@@ -93,6 +88,10 @@ Note, as of v4 you no longer need the aws-cdk toolkit installed as a pre-requisi
 That's it. Your Zoom Ingester is deployed and operational. To see a summary of the
 state of the CloudFormation stack and the Lambda functions run `invoke stack.status`.
 
+#### A note about `.env` management
+
+If you are working on a zip deployment that is potentially shared with other developers you should ensure that the values in the `.env` file are stored and kept up-to-date in a parameter store entry. DCE's Parameter store entry names use the format `/zip-configs/<zip-name>` and should be created as SecureString values.
+
 ### Google Sheets integration setup
 
 #### Google Sheets API Auth
@@ -107,8 +106,7 @@ only needs to be done once per AWS account:
 
 #### Finding the ZIP stack API endpoint
 
-The ZIP API endpoint is available in the output of `invoke stack.deploy`,
-`invoke stack.update` and `invoke stack.status` under `Outputs`.
+The ZIP API endpoint is available in the output of `invoke stack.deploy` and `invoke stack.status` under `Outputs`.
 
 #### Setting up the schedule update trigger from Google Sheets
 
@@ -162,7 +160,7 @@ function updateZoomIngester() {
    * Set `SLACK_ZIP_CHANNEL` to the name of the Slack channel in which you would like to allow usage of the Slack integration.
    * Set `SLACK_ALLOWED_GROUPS` to a comma delimited list of Slack groups whose members will be allowed to use the integration.
 
-9. Run `invoke stack.update` and `invoke deploy.slack --do-release` to release new values of the environment variables.
+9. Run `invoke stack.deploy` to release new values of the environment variables.
 
 ### Setup Zoom webhook notifications (Optional)
 
@@ -176,7 +174,7 @@ send completed recording and other event notifications to it via the Zoom Webhoo
 4. Give your app a name.
 5. Fill in the appropriate developer contact info. Enter "Harvard University" for the company name. Click "Continue".
 6. Copy the Secret Token value. This goes in your `.env` file as `WEBHOOK_VALIDATION_SECRET_TOKEN`.
-7. Run `invoke stack.update` to deploy the new `WEBHOOK_VALIDATION_SECRET_TOKEN` value to the webhook lambda function. This is necessary for
+7. Run `invoke stack.deploy` to deploy the new `WEBHOOK_VALIDATION_SECRET_TOKEN` value to the webhook lambda function. This is necessary for
    app endpoint validation step coming up.
 8. Toggle "Event Subscriptions" to enabled, then click "+ Add Event Subscription"
 9. Give the subscription a name, e.g. "recording events", and paste your webhook endpoint URL in the space provided.
@@ -286,15 +284,12 @@ Retrieve current status of all recordings with Zoom meeting id 86168921331:
 ### Development Guide
 
 1. Create a dev/test stack by setting your `.env` `STACK_NAME` to a unique value. If using ECS deployment, also set STACK\_TYPE=ecs.
-2. Follow the usual stack creation steps outlined at the top.
-3. Make changes.
-4. Run `invoke deploy.all --do-release` to push changes to your Lambda functions.
-   Alternatively, to save time, if you are only editing one function, run `invoke deploy.[function name] --do-release`.
-5. If you make changes to the provisioning code in `./cdk` or update environment variables you must also (or instead) run
-   1. `invoke stack.diff` to inspect the changes
-   2. `invoke stack.update` to apply the changes
-6. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
-7. Repeat.
+1. Follow the usual stack creation steps outlined at the top.
+1. Make changes.
+1. Run `invoke stack.diff` to inspect the changes
+1. Run `invoke stack.deploy` to apply the changes. Alternatively you can run `invoke stack.changeset` to generate a cloudformation changeset which you will then need to inspect and execute in the web console.
+1. Run `invoke exec.webhook [options]` to initiate the pipeline. See below for options.
+1. Repeat.
 
 ##### `invoke exec.webhook [uuid]`
 
@@ -354,21 +349,15 @@ you would run them and/or their importance.
 
 ##### `invoke stack.deploy`
 
-Does the following:
-
-1. Packages each function and uploads the zip files to your s3 code bucket
-2. Builds all of the AWS resources as part of a CloudFormation stack using the AWS CDK tool
-3. Releases an initial version "1" of each Lambda function
+Execute the initial deploy or apply changes to an existing CloudFormation stack.
 
 **Notes**:
 
-* When running this command you will be presented with a
+* When running this command for a stack for the first time you will be presented with a
   confirmation prompt to approve some of provisioning operations or changes, typical those realted
   to security and/or permissions
 * The output from this command can be a bit verbose. You will see real-time updates from
   Cloudformation as resource creation is initiated and completed.
-
-Use `stack.update` to modify an existing stack.
 
 ##### `invoke stack.status`
 
@@ -379,13 +368,11 @@ CloudFormation stack and the Lambda functions.
 
 View a diff of CloudFormation changes to the stack.
 
-##### `invoke stack.deploy`
-
-Apply changes to the CloudFormation stack.
-
 ##### `invoke stack.changeset`
 
 Like `stack.deploy` except changes are captured in a CloudFormation changeset and execution of the update is deferred and must be done manually, most likely through the CloudFormation web console. Use this instead of `stack.deploy` if you want to be more cautious with the deployment. There are times when every change an update is going to make is not represented in the diff output of `stack.diff`. A changeset allows you to inspect what's going to change in more detail. A changeset can also be discarded if it contains changes that are unwanted or incorrect for some reason.
+
+`stack.changeset` only works with stacks that have already been created with `stack.deploy`.
 
 ##### `invoke stack.delete`
 
@@ -413,10 +400,7 @@ There are four different contexts that require dependencies to be pip-compiled:
 * the tox unittesting context
 * the development context (when you're working on and testing the code)
 
-There is unfortunately not a clean separation between what's required in each of these contexts. For instance,
-some of the base and dev context requirements require packages that also used in the functions. It would be
-great to reconcile this at some point, but in the meantime just be sure when updating or adding a package to
-run pip-compile on affected requirements files in this order:
+When updating or adding a package you should run pip-compile on affected requirements files in this order:
 
 1. `functions/requirements.in`
 2. `requirements/base.in`
@@ -429,10 +413,10 @@ Both the `.in` and `.txt` files should be committed to version control.
 The main situation in which this becomes necessary is when you need to update a particular package due to
 vulnerability. For example, if the **google-auth** package needed to be updated you would run:
 
-`pip-compile -P google-auth function/requirements.in`
+`pip-compile -P google-auth functions/requirements.in`
 
 Afterwards you would need to also `pip-compile` the remaning three "downstream" requirements files (in order) since they
-use the `-r` flag to import the `requirements.txt` file.
+use the `-r` flag to import the `functions/requirements.txt` file.
 
 Finally, you'll want to run `pip-sync requirements/dev.txt` to ensure the packages are updated in your virtualenv.
 
@@ -449,67 +433,35 @@ execute:
 
 Alternatively you can just run `tox` directly.
 
-## Lambda Versions, Release Alias & Initial Code Release
-
-Lambda functions employ the concepts of "versions" and "aliases". Each time you push new
-code to a Lambda function it updates a special version signifier, `$LATEST`. If you wish
-to assign an actual version number to what is referenced by `$LATEST` you "publish" a
-new version. Versions are immutable and version numbers always increment by 1.
-
-Aliases allow us to control which versions of the Lambda functions are invoked by the system.
-The Zoom Ingester uses a single alias defined by the `.env` variable, `LAMBDA_RELEASE_ALIAS` (default "live"),
-to designate the currently released versions of each function. A new version of each
-function can be published independent of the alias as many times as you like. It is only
-when the release alias is updated to point to one of the new versions that the behavior
-of the ingester will change.
-
-When you first build the stack using the above "Initial Setup" steps, the version of the Lambda functions
-code will be whatever was current in your cloned repo. The Lambda function versions will
-be set to "1" and the release aliases ("live") will be pointing to this same version.
-At this point you may wish to re-release a specific tag or branch of the function code.
-In a production environment this should be done via the CodeBuild project, like so:
-
-```
-invoke codebuild -r release-v1.0.0
-```
-
-This command will trigger CodeBuild to package and release the function code from the github
-repo identified by the "release-v1.0.0" tag. Each function will have a new Lambda version "2"
-published and the release alias will be updated to point to this version.
-
-## Release Process
+## Production Release Process
 
 ### Step 1: Update master
 
-Merge all changes for release into master.
-Checkout master branch, git pull.
+All changes should be merged into the main branch
 
-### Step 2: Test release in dev stack
+### Step 2: Update CHANGELOG.md
 
-```
-invoke stack.deploy
-```
+Any changes detailed in the `[unreleased]` section should be moved to a new `[vX.X.X]` section.
+
+Commit the change with a message like `release vX.X.X prep`
 
 ### Step 3: Tag management
-
-First update your tags:
-
-```
-git tag -l | xargs git tag -d
-git fetch --tags
-```
-
-Then tag release:
 
 ```
 git tag release-vX.X.X
 git push --tags
 ```
 
-### Step 4: Release to production stack
+### Step 4: Update .env
+
+Sync your local `.env` file with the appropriate zip config param.
+```
+aws ssm get-parameter --name /zip-configs/prod --with-decription --output text --query Parameter.Value > .env
+```
+
+### Step 5: Release to production stack
 
 Make sure you are working on the correct zoom ingester stack, double check environment variables. Then:
 
-```
-invoke stack.update
-```
+Run `invoke stack.diff` to verify the changes
+Run `invoke stack.deploy` to deploy the changes
