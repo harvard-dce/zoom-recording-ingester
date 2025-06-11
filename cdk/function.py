@@ -1,3 +1,4 @@
+from pathlib import Path
 from aws_cdk import (
     Stack,
     Duration,
@@ -5,6 +6,7 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_cloudwatch as cloudwatch,
     aws_logs as logs,
+    aws_ecr_assets as ecr_assets,
 )
 from constructs import Construct
 from . import names
@@ -16,13 +18,11 @@ class ZipFunction(Construct):
         scope: Construct,
         id: str,
         name,
-        lambda_code_bucket,
         environment,
         timeout=30,
         memory_size=128,
         vpc_id=None,
         security_group_id=None,
-        handler=None,
     ):
         super().__init__(scope, id)
 
@@ -31,16 +31,13 @@ class ZipFunction(Construct):
             key: str(val) for key, val in environment.items() if val
         }
 
-        if not handler:
-            handler = f"{name}.handler"
-
         function_props = {
             "function_name": f"{self.stack_name}-{name}",
-            "runtime": aws_lambda.Runtime.PYTHON_3_12,
-            "code": aws_lambda.Code.from_bucket(
-                bucket=lambda_code_bucket, key=f"{self.stack_name}/{name}.zip"
+            "code": aws_lambda.DockerImageCode.from_image_asset(
+                str(Path(__file__).parent.parent / "functions"),
+                cmd=[f"{name}.handler"],
+                platform=ecr_assets.Platform.LINUX_AMD64,
             ),
-            "handler": handler,
             "timeout": Duration.seconds(timeout),
             "memory_size": memory_size,
             "environment": environment,
@@ -64,7 +61,9 @@ class ZipFunction(Construct):
                 }
             )
 
-        self.function = aws_lambda.Function(self, "function", **function_props)
+        self.function = aws_lambda.DockerImageFunction(
+            self, "function", **function_props
+        )
         self.alias = aws_lambda.Alias(
             self,
             "alias",

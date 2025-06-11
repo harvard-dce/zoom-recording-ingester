@@ -3,16 +3,14 @@ import site
 import pytest
 import inspect
 from os.path import dirname, join
-from importlib import import_module
 from uuid import UUID
 from hashlib import md5
 from utils import PipelineStatus
 
-TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
-
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
+import zoom_uploader as uploader
 
-uploader = import_module("zoom-uploader")
+TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 
 
 def test_no_messages_available(handler, mocker, caplog):

@@ -13,9 +13,8 @@ import pytest
 import hmac
 import hashlib
 from urllib.parse import urlencode
-from importlib import import_module
 
-slack_handler = uploader = import_module("slack.handler")
+import zoom_slack as slack
 
 FROZEN_TIME = utc.localize(datetime.now())
 TIMESTAMP_FORMAT = getenv("TIMESTAMP_FORMAT")
@@ -23,29 +22,29 @@ TIMESTAMP_FORMAT = getenv("TIMESTAMP_FORMAT")
 
 def test_invalid_slack_request(handler, mocker):
     mocker.patch.object(
-        slack_handler,
+        slack,
         "valid_slack_request",
         mocker.Mock(return_value=False),
     )
-    r = handler(slack_handler, {})
+    r = handler(slack, {})
     assert r["statusCode"] == 200
     assert "Slack request verification failed." in r["body"]
 
 
 def test_error_validating_request(handler, mocker):
     mocker.patch.object(
-        slack_handler,
+        slack,
         "valid_slack_request",
         mocker.Mock(side_effect=Exception("boom!")),
     )
-    r = handler(slack_handler, {})
+    r = handler(slack, {})
     assert r["statusCode"] == 200
     assert "Error while validating Slack request." in r["body"]
 
 
 def test_ignore_action(handler, mocker):
     mocker.patch.object(
-        slack_handler,
+        slack,
         "valid_slack_request",
         mocker.Mock(return_value=True),
     )
@@ -66,18 +65,18 @@ def test_ignore_action(handler, mocker):
 
     event = {"body": urlencode(payload)}
 
-    r = handler(slack_handler, event)
+    r = handler(slack, event)
     assert r["statusCode"] == 204
 
 
 def test_unauthorized_user(handler, mocker):
     mocker.patch.object(
-        slack_handler,
+        slack,
         "valid_slack_request",
         mocker.Mock(return_value=True),
     )
     mocker.patch.object(
-        slack_handler,
+        slack,
         "allowed_user",
         mocker.Mock(return_value=False),
     )
@@ -92,20 +91,20 @@ def test_unauthorized_user(handler, mocker):
 
     event = {"body": urlencode(query)}
 
-    r = handler(slack_handler, event)
+    r = handler(slack, event)
     assert r["statusCode"] == 200
     assert "You are not authorized to use command /zip." in r["body"]
 
 
 def test_unauthorized_channel(handler, mocker):
     mocker.patch.object(
-        slack_handler,
+        slack,
         "valid_slack_request",
         mocker.Mock(return_value=True),
     )
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "allowed_user",
         mocker.Mock(return_value=True),
     )
@@ -131,31 +130,31 @@ def test_unauthorized_channel(handler, mocker):
 
     for slack_zip_channel, expected in cases:
         mocker.patch.object(
-            slack_handler,
+            slack,
             "SLACK_ZIP_CHANNEL",
             slack_zip_channel,
         )
 
-        r = handler(slack_handler, event)
+        r = handler(slack, event)
         assert r["statusCode"] == 200
         assert json.loads(r["body"])["text"] == expected
 
 
 def setup_valid_request(mocker):
     mocker.patch.object(
-        slack_handler,
+        slack,
         "valid_slack_request",
         mocker.Mock(return_value=True),
     )
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "allowed_user",
         mocker.Mock(return_value=True),
     )
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "status_by_mid",
         mocker.Mock(return_value={}),
     )
@@ -165,7 +164,7 @@ def test_help_menu(handler, mocker):
     setup_valid_request(mocker)
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "slack_help_menu_blocks",
         mocker.Mock(return_value="help_menu"),
     )
@@ -181,7 +180,7 @@ def test_help_menu(handler, mocker):
 
         event = {"body": urlencode(query)}
 
-        r = handler(slack_handler, event)
+        r = handler(slack, event)
         assert r["statusCode"] == 200
         body = json.loads(r["body"])
 
@@ -204,7 +203,7 @@ def test_mid_formats(handler, mocker):
 
     for mid, valid in commands:
         mock_results_blocks = mocker.patch.object(
-            slack_handler,
+            slack,
             "slack_results_blocks",
         )
 
@@ -219,7 +218,7 @@ def test_mid_formats(handler, mocker):
 
         event = {"body": urlencode(query)}
 
-        r = handler(slack_handler, event)
+        r = handler(slack, event)
         assert r["statusCode"] == 200
 
         if valid:
@@ -233,7 +232,7 @@ def test_slash_command_response(handler, mocker):
     setup_valid_request(mocker)
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "slack_results_blocks",
         mocker.Mock(return_value="results_blocks"),
     )
@@ -249,7 +248,7 @@ def test_slash_command_response(handler, mocker):
 
     event = {"body": urlencode(query)}
 
-    r = handler(slack_handler, event)
+    r = handler(slack, event)
     assert r["statusCode"] == 200
 
     body = json.loads(r["body"])
@@ -262,13 +261,13 @@ def test_interaction_response(handler, mocker):
     max_records_per_msg = 5
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "MAX_RECORDS_PER_MSG",
         max_records_per_msg,
     )
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "slack_results_blocks",
         mocker.Mock(return_value="results_blocks"),
     )
@@ -281,7 +280,7 @@ def test_interaction_response(handler, mocker):
 
     for count, add_new_message in cases:
         mock_send_interaction_response = mocker.patch.object(
-            slack_handler, "send_interaction_response"
+            slack, "send_interaction_response"
         )
 
         blocks = ["block1", "block2", "divider", "button"]
@@ -314,7 +313,7 @@ def test_interaction_response(handler, mocker):
 
         event = {"body": urlencode(payload)}
 
-        r = handler(slack_handler, event)
+        r = handler(slack, event)
         assert r["statusCode"] == 204
 
         if add_new_message:
@@ -359,28 +358,28 @@ def test_allowed_user(mocker):
                 return {"users": ["non_allowed_user"]}
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "slack_api_request",
         mock_slack_api_request,
     )
 
     with pytest.raises(Exception, match="No slack allowed groups found"):
-        slack_handler.allowed_user("allowed_user")
+        slack.allowed_user("allowed_user")
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "SLACK_ALLOWED_GROUPS",
         "staff_group_handle",
     )
 
-    assert slack_handler.allowed_user("allowed_user")
-    assert not slack_handler.allowed_user("non_allowed_user")
+    assert slack.allowed_user("allowed_user")
+    assert not slack.allowed_user("non_allowed_user")
 
 
 @freeze_time(FROZEN_TIME)
 def test_valid_slack_request(mocker):
     # User-Agent must be Slackbot
-    assert not slack_handler.valid_slack_request(
+    assert not slack.valid_slack_request(
         {"headers": {"User-Agent": "user_agent"}}
     )
 
@@ -396,7 +395,7 @@ def test_valid_slack_request(mocker):
     valid_signature = f"1={valid_hash}"
 
     mocker.patch.object(
-        slack_handler,
+        slack,
         "SLACK_SIGNING_SECRET",
         mock_secret,
     )
@@ -419,4 +418,4 @@ def test_valid_slack_request(mocker):
             },
             "body": mock_body,
         }
-        assert slack_handler.valid_slack_request(event) == expected
+        assert slack.valid_slack_request(event) == expected

@@ -1,10 +1,9 @@
 import site
 from os.path import dirname, join
-from importlib import import_module
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
-log_notifications = import_module("zoom-log-notifications")
+import zoom_log_notifications as log_notifications
 
 
 def test_log_notifications_handler(mocker, handler, monkeypatch):

@@ -10,4 +10,4 @@ constructs
 tenacity
 pyyaml!=6.0.0,!=5.4.0,!=5.4.1, # pyyaml later versions are broken with cython 3
 
--r ../function_requirements/common-requirements.txt
+-r ../functions/requirements.txt

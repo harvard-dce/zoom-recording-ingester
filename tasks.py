@@ -1,35 +1,37 @@
-import sys
 import json
+import logging
+import sys
+import time
+from datetime import date as datetime_date
+from datetime import datetime, timedelta
+from functools import lru_cache
+from multiprocessing import Process
+from os import getenv as env
+from os.path import dirname, join
+from pprint import pprint
+from urllib.parse import quote, urlparse
+from uuid import uuid4
+
 import boto3
 import requests
-from requests.auth import HTTPDigestAuth
-import time
-import shutil
-from datetime import datetime, timedelta, date as datetime_date
-from invoke import task, Collection
-from invoke.exceptions import Exit
-from os import symlink, mkdir, listdir, getenv as env
-from dotenv import load_dotenv
-from os.path import join, dirname, exists, relpath
-from tabulate import tabulate
-from pprint import pprint
-from uuid import uuid4
-from functions.utils import (
-    getenv,
-    zoom_api_request,
-    GSheetsAuth,
-    schedule_json_to_dynamo,
-    schedule_csv_to_dynamo,
-)
-from multiprocessing import Process
-from urllib.parse import urlparse, quote
-from cdk import names
-from functools import lru_cache
-import logging
 
 # suppress warnings for cases where we want to ignore dev
 # cluster dummy certificates
 import urllib3
+from dotenv import load_dotenv
+from invoke import Collection, task
+from invoke.exceptions import Exit
+from requests.auth import HTTPDigestAuth
+from tabulate import tabulate
+
+from cdk import names
+from functions.utils import (
+    GSheetsAuth,
+    getenv,
+    schedule_csv_to_dynamo,
+    schedule_json_to_dynamo,
+    zoom_api_request,
+)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -46,8 +48,6 @@ PROD_IDENTIFIER = "prod"
 NONINTERACTIVE = env("NONINTERACTIVE")
 INGEST_ALLOWED_IPS = env("INGEST_ALLOWED_IPS", "")
 
-LAMBDA_CODE_BUCKET = env("LAMBDA_CODE_BUCKET")
-LAMBDA_CODE_URI = f"s3://{LAMBDA_CODE_BUCKET}/{STACK_NAME}"
 RECORDINGS_URI = f"s3://{STACK_NAME}-{names.RECORDINGS_BUCKET}"
 
 if AWS_PROFILE is not None:
@@ -72,67 +72,14 @@ def production_failsafe(ctx):
             raise Exit("Aborting")
 
 
-@task(
-    pre=[production_failsafe],
-    help={"revision": "tag or branch name to build and release (required)"},
-)
-def codebuild(ctx, revision):
+@task(pre=[production_failsafe])
+def stack_deploy(ctx):
     """
-    Execute a codebuild run. Optional: --revision=[tag or branch]
+    Deploys or updates the CloudFormation stack
     """
-    project_name = f"{STACK_NAME}-{names.CODEBUILD_PROJECT}"
-    cmd = (
-        "aws {} codebuild start-build "
-        "--project-name {} --source-version {} "
-        " --environment-variables-override"
-        " name='STACK_NAME',value={},type=PLAINTEXT"
-        " name='NONINTERACTIVE',value=1"
-    ).format(profile_arg(), project_name, revision, STACK_NAME)
-
-    res = ctx.run(cmd, hide="out")
-    build_id = json.loads(res.stdout)["build"]["id"]
-
-    cmd = "aws {} codebuild batch-get-builds --ids={}".format(
-        profile_arg(), build_id
+    ctx.run(
+        f"npm run cdk deploy -- -c VIA_INVOKE=true {profile_arg()}", pty=True
     )
-    current_phase = "IN_PROGRESS"
-    print("Waiting for codebuild to finish...")
-    while True:
-        time.sleep(5)
-        res = ctx.run(cmd, hide="out")
-        build = json.loads(res.stdout)["builds"][0]
-
-        new_phase = build["currentPhase"]
-        if new_phase != current_phase:
-            print(current_phase)
-            current_phase = new_phase
-
-        build_complete = build["buildComplete"]
-        if build_complete:
-            build_status = build["buildStatus"]
-            print("Build finished with status {}".format(build_status))
-            break
-
-
-@task(pre=[production_failsafe])
-def stack_create(ctx):
-    """
-    Package & upload the lambda function code
-    and build the CloudFormation stack
-    """
-    for func in names.FUNCTIONS:
-        __build_function(ctx, func)
-
-    ctx.run(f"npx cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
-
-
-@task(pre=[production_failsafe])
-def stack_update(ctx):
-    """
-    Updates the CloudFormation stack
-    (use the deploy.* tasks to update functions)
-    """
-    ctx.run(f"npx cdk deploy -c VIA_INVOKE=true {profile_arg()}", pty=True)
 
 
 @task(pre=[production_failsafe])
@@ -140,7 +87,9 @@ def stack_changeset(ctx):
     """
     Create a CloudFormation changeset for manual deployment
     """
-    ctx.run(f"npx cdk -c VIA_INVOKE=true deploy --no-execute {profile_arg()}")
+    ctx.run(
+        f"npm run cdk -- -c VIA_INVOKE=true deploy --no-execute {profile_arg()}"
+    )
 
 
 @task
@@ -148,7 +97,7 @@ def stack_diff(ctx):
     """
     Output a cdk diff of the Cloudformation stack
     """
-    ctx.run(f"npx cdk -c VIA_INVOKE=true diff {profile_arg()}")
+    ctx.run(f"npm run cdk -- -c VIA_INVOKE=true diff {profile_arg()}")
 
 
 @task
@@ -156,7 +105,7 @@ def stack_synth(ctx):
     """
     Output the cdk-generated CloudFormation template
     """
-    ctx.run(f"npx cdk synth -c VIA_INVOKE=true {profile_arg()}")
+    ctx.run(f"npm run cdk synth -- -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task
@@ -164,7 +113,7 @@ def stack_list(ctx):
     """
     Outputs the name of the cdk CloudFormation stack
     """
-    ctx.run(f"npx cdk list -c VIA_INVOKE=true {profile_arg()}")
+    ctx.run(f"npm run cdk list -- -c VIA_INVOKE=true {profile_arg()}")
 
 
 @task
@@ -173,115 +122,22 @@ def stack_delete(ctx):
     Deletes the cdk CloudFormation stack
     """
     empty_bucket_cmd = (
-        f"aws {profile_arg()} s3 rm " f"--recursive {RECORDINGS_URI}"
+        f"aws {profile_arg()} s3 rm --recursive {RECORDINGS_URI}"
     )
-    lambda_code_cmd = (
-        f"aws {profile_arg()} s3 rm " f"--recursive {LAMBDA_CODE_URI}"
+    delete_cmd = (
+        f"npm run cdk destroy -- --force -c VIA_INVOKE=true {profile_arg()}"
     )
-    delete_cmd = f"npx cdk destroy --force -c VIA_INVOKE=true {profile_arg()}"
 
     confirm = (
         f"\nAre you sure you want to delete stack '{STACK_NAME}'?\n"
         "WARNING: This will also delete all recording files "
-        f"in '{RECORDINGS_URI}' and all lambda function code "
-        f"in '{LAMBDA_CODE_URI}'.\n"
+        f"in '{RECORDINGS_URI}'"
         "Type the stack name to confirm deletion: "
     )
 
     if input(confirm).strip() == STACK_NAME:
         ctx.run(empty_bucket_cmd)
-        ctx.run(lambda_code_cmd)
         ctx.run(delete_cmd)
-
-
-@task(help={"function": "name of a specific function"})
-def package(ctx, function=None):
-    """
-    Package function(s) + deps into a zip file.
-    """
-    functions = resolve_function_arg(function)
-    for func in functions:
-        __build_function(ctx, func)
-
-
-@task(
-    pre=[production_failsafe], help={"function": "name of specific function"}
-)
-def deploy(ctx, function=None, do_release=False):
-    """
-    Package, upload and register new code for all lambda functions
-    """
-    functions = resolve_function_arg(function)
-    for func in functions:
-        __build_function(ctx, func)
-        __update_function(ctx, func)
-        if do_release:
-            release(ctx, func)
-
-
-@task(pre=[production_failsafe])
-def deploy_schedule_update(ctx, do_release=False):
-    deploy(ctx, names.SCHEDULE_UPDATE_FUNCTION, do_release)
-
-
-@task(pre=[production_failsafe])
-def deploy_status(ctx, do_release=False):
-    deploy(ctx, names.STATUS_FUNCTION, do_release)
-
-
-@task(pre=[production_failsafe])
-def deploy_slack(ctx, do_release=False):
-    deploy(ctx, names.SLACK_FUNCTION, do_release)
-
-
-@task(pre=[production_failsafe])
-def deploy_on_demand(ctx, do_release=False):
-    deploy(ctx, names.ON_DEMAND_FUNCTION, do_release)
-
-
-@task(pre=[production_failsafe])
-def deploy_webhook(ctx, do_release=False):
-    deploy(ctx, names.WEBHOOK_FUNCTION, do_release)
-
-
-@task(pre=[production_failsafe])
-def deploy_downloader(ctx, do_release=False):
-    deploy(ctx, names.DOWNLOAD_FUNCTION, do_release)
-
-
-@task(pre=[production_failsafe])
-def deploy_uploader(ctx, do_release=False):
-    deploy(ctx, names.UPLOAD_FUNCTION, do_release)
-
-
-@task(
-    pre=[production_failsafe], help={"function": "name of specific function"}
-)
-def release(ctx, function=None, description=None):
-    """
-    Publish a new version of the function(s)
-    and update the release alias to point to it
-    """
-    functions = resolve_function_arg(function)
-    for func in functions:
-        new_version = __publish_version(ctx, func, description)
-        __update_release_alias(ctx, func, new_version, description)
-
-
-@task
-def update_requirements(ctx):
-    """
-    Run a `pip-compile -U` on all requirements files
-    """
-    req_file = relpath(join(dirname(__file__), "requirements.in"))
-    ctx.run(
-        "pip install -U pip-tools && pip-compile -r -U {}".format(req_file)
-    )
-    for func in names.FUNCTIONS:
-        req_file = relpath(
-            join(dirname(__file__), "function_requirements/{}.in".format(func))
-        )
-        ctx.run("pip-compile -r -U {}".format(req_file))
 
 
 @task(
@@ -289,7 +145,7 @@ def update_requirements(ctx):
         "uuid": "meeting instance uuid",
         "oc_series_id": "opencast series id",
         "allow_multiple_ingests": (
-            "whether to allow this recording to " "be ingested multiple times"
+            "whether to allow this recording to be ingested multiple times"
         ),
     }
 )
@@ -332,11 +188,9 @@ def exec_on_demand(
     help={
         "uuid": "meeting instance uuid",
         "ignore_schedule": (
-            "ignore schedule, use default series if " "available"
+            "ignore schedule, use default series if available"
         ),
-        "oc_series_id": (
-            "opencast series id to use regardless of " "schedule"
-        ),
+        "oc_series_id": ("opencast series id to use regardless of schedule"),
     }
 )
 def exec_pipeline(ctx, uuid, ignore_schedule=False, oc_series_id=None):
@@ -434,8 +288,7 @@ def exec_webhook(ctx, uuid, oc_series_id=None):
     help={
         "series_id": "override normal opencast series id lookup",
         "ignore_schedule": (
-            "do opencast series id lookup but"
-            " ignore if meeting times don't match",
+            "do opencast series id lookup but ignore if meeting times don't match",
         ),
     }
 )
@@ -458,7 +311,7 @@ def exec_downloader(
         qualifier = names.LAMBDA_RELEASE_ALIAS
 
     cmd = (
-        "aws lambda invoke --function-name='{}-zoom-downloader' "
+        "aws lambda invoke --function-name='{}-zoom_downloader' "
         "--payload='{}' --qualifier {} outfile.txt"
     ).format(STACK_NAME, json.dumps(payload), qualifier)
     print(cmd)
@@ -480,7 +333,7 @@ def exec_uploader(ctx, qualifier=None):
         qualifier = names.LAMBDA_RELEASE_ALIAS
 
     cmd = (
-        "aws lambda invoke --function-name='{}-zoom-uploader' "
+        "aws lambda invoke --function-name='{}-zoom_uploader' "
         "--qualifier {} outfile.txt"
     ).format(STACK_NAME, qualifier)
 
@@ -750,32 +603,16 @@ def save_gsheets_creds(ctx, filename=None):
 
 ns = Collection()
 ns.add_task(test)
-ns.add_task(codebuild)
-ns.add_task(package)
-ns.add_task(release)
-ns.add_task(update_requirements)
 
 stack_ns = Collection("stack")
 stack_ns.add_task(status)
 stack_ns.add_task(stack_list, "list")
 stack_ns.add_task(stack_synth, "synth")
 stack_ns.add_task(stack_diff, "diff")
-stack_ns.add_task(stack_create, "create")
-stack_ns.add_task(stack_update, "update")
+stack_ns.add_task(stack_deploy, "deploy")
 stack_ns.add_task(stack_changeset, "changeset")
 stack_ns.add_task(stack_delete, "delete")
 ns.add_collection(stack_ns)
-
-deploy_ns = Collection("deploy")
-deploy_ns.add_task(deploy, "all")
-deploy_ns.add_task(deploy_schedule_update, "schedule-update")
-deploy_ns.add_task(deploy_webhook, "webhook")
-deploy_ns.add_task(deploy_downloader, "downloader")
-deploy_ns.add_task(deploy_uploader, "uploader")
-deploy_ns.add_task(deploy_on_demand, "on-demand")
-deploy_ns.add_task(deploy_status, "status-query")
-deploy_ns.add_task(deploy_slack, "slack")
-ns.add_collection(deploy_ns)
 
 exec_ns = Collection("exec")
 exec_ns.add_task(exec_on_demand, "on-demand")
@@ -864,132 +701,6 @@ def __invoke_api(resource_id, event_body):
     return resp
 
 
-def __update_release_alias(ctx, func, version, description):
-    print(
-        f"Setting {func} '{names.LAMBDA_RELEASE_ALIAS}' alias"
-        f" to version {version}"
-    )
-    lambda_function_name = f"{STACK_NAME}-{func}"
-    if description is None:
-        description = "''"
-    alias_cmd = (
-        "aws {} lambda update-alias --function-name {} "
-        "--name {} --function-version '{}' "
-        "--description '{}'"
-    ).format(
-        profile_arg(),
-        lambda_function_name,
-        names.LAMBDA_RELEASE_ALIAS,
-        version,
-        description,
-    )
-    ctx.run(alias_cmd)
-
-
-def __publish_version(ctx, func, description):
-    print("Publishing new version of {}".format(func))
-    lambda_function_name = f"{STACK_NAME}-{func}"
-    if description is None:
-        description = "''"
-    version_cmd = (
-        "aws {} lambda publish-version --function-name {} "
-        "--description '{}' --query 'Version'"
-    ).format(profile_arg(), lambda_function_name, description)
-    res = ctx.run(version_cmd, hide=1)
-    return int(res.stdout.replace('"', ""))
-
-
-def __build_function(ctx, func):
-    print(f"Building {func} function")
-    req_file = join(
-        dirname(__file__), "function_requirements/{}.txt".format(func)
-    )
-
-    zip_path = join(dirname(__file__), "dist/{}.zip".format(func))
-
-    build_path = join(dirname(__file__), "dist/{}".format(func))
-    if exists(build_path):
-        shutil.rmtree(build_path)
-
-    if exists(req_file):
-        ctx.run("pip install -r {} -t {}".format(req_file, build_path), hide=0)
-
-    mkdir(join(build_path, "utils"))
-    modules = ["utils/" + f.split(".")[0] for f in listdir("functions/utils")]
-    if func == names.SLACK_FUNCTION:
-        mkdir(join(build_path, "slack"))
-        modules.extend(
-            ["slack/" + f.split(".")[0] for f in listdir("functions/slack")]
-        )
-    else:
-        modules.append(func)
-    for module in modules:
-        module_path = join(dirname(__file__), f"functions/{module}.py")
-        module_dist_path = join(build_path, f"{module}.py")
-        try:
-            symlink(module_path, module_dist_path)
-        except FileExistsError:
-            pass
-
-    # include the ffprobe binary with the downloader function package
-    if func == names.DOWNLOAD_FUNCTION:
-        ffprobe_path = join(dirname(__file__), "bin/ffprobe")
-        ffprobe_dist_path = join(build_path, "ffprobe")
-        try:
-            symlink(ffprobe_path, ffprobe_dist_path)
-        except FileExistsError:
-            pass
-
-    with ctx.cd(build_path):
-        ctx.run("zip -r {} .".format(zip_path), hide=1)
-
-    # ZIP-98 Some functions are now > 50MB so we are always using s3
-    s3_path = f"{LAMBDA_CODE_URI}/{func}.zip"
-    print(f"uploading {func} to {s3_path}")
-    ctx.run(f"aws {profile_arg()} s3 cp {zip_path} {s3_path}", hide=1)
-
-
-def __update_function(ctx, func):
-    print(f"Updating {func} function")
-    func_name = f"{STACK_NAME}-{func}"
-    zip_path = join(dirname(__file__), "dist", func + ".zip")
-
-    if not exists(zip_path):
-        raise Exit("{} not found!".format(zip_path))
-
-    print(
-        f"Getting {func} function code from bucket {LAMBDA_CODE_BUCKET}, key {STACK_NAME}/{func}.zip"
-    )
-    cmd = (
-        "aws {} lambda update-function-code "
-        "--function-name {} --s3-bucket {} --s3-key {}/{}.zip"
-    ).format(profile_arg(), func_name, LAMBDA_CODE_BUCKET, STACK_NAME, func)
-    ctx.run(cmd, hide=1)
-
-    # Wait for function update to complete successfully
-    wait = 1
-    for i in range(5):
-        cmd = (
-            "aws {} lambda get-function --function-name {} "
-            "--query 'Configuration.LastUpdateStatus'"
-        ).format(profile_arg(), func_name)
-        result = ctx.run(cmd, hide=1)
-        # Return will be a string like: '"InProgress"\n', '"Successful"\n'
-        # or '"Failed"\n'
-        if "Successful" in result.stdout:
-            print("Update successful")
-            return
-        print(
-            "Waiting {} second(s) for {} function update to succeed...".format(
-                wait, func_name
-            )
-        )
-        time.sleep(wait)
-        wait *= 2
-
-    print("Update not successful after 5 tries.")
-
-
 def __save_gsheets_credentials(filename):
     auth = GSheetsAuth()
     if not filename:
@@ -1005,8 +716,7 @@ def __set_debug(ctx, debug_val):
     ]:
         func_name = f"{STACK_NAME}-{func}"
         cmd = (
-            "aws {} lambda get-function-configuration --output json "
-            "--function-name {}"
+            "aws {} lambda get-function-configuration --output json --function-name {}"
         ).format(profile_arg(), func_name)
         res = ctx.run(cmd, hide=1)
         config = json.loads(res.stdout)
@@ -1217,9 +927,8 @@ def __get_dynamo_schedule(ctx, table_name):
 
 
 def __show_stack_status(ctx):
-    cmd = (
-        "aws {} cloudformation describe-stacks "
-        "--stack-name {} --output table".format(profile_arg(), STACK_NAME)
+    cmd = "aws {} cloudformation describe-stacks --stack-name {} --output table".format(
+        profile_arg(), STACK_NAME
     )
     ctx.run(cmd)
 
@@ -1281,8 +990,7 @@ def __show_sqs_status(ctx):
         url = queue_url(queue_name)
 
         cmd = (
-            "aws {} sqs get-queue-attributes --queue-url {} "
-            "--attribute-names All"
+            "aws {} sqs get-queue-attributes --queue-url {} --attribute-names All"
         ).format(profile_arg(), url)
 
         res = json.loads(ctx.run(cmd, hide=True).stdout)["Attributes"]
@@ -1306,9 +1014,9 @@ def __show_sqs_status(ctx):
 
 
 def __find_recording_log_events(ctx, function, uuid):
-    if function == "zoom-webhook":
+    if function == "zoom_webhook":
         filter_pattern = '{ $.message.payload.uuid = "' + uuid + '" }'
-    elif function == "zoom-downloader" or function == "zoom-uploader":
+    elif function == "zoom_downloader" or function == "zoom_uploader":
         filter_pattern = '{ $.message.uuid = "' + uuid + '" }'
     else:
         return
