@@ -559,19 +559,6 @@ class PublishFileParamGenerator(FileParamGenerator):
         super().__init__(s3_filenames)
         self._used_views = set()
         self._used_media_views = set()
-        # whatever the max length of any view's list of files is the number
-        # of sets of files we're dealing with. When hosts stop/start a meeting
-        # it results in multiple file sets being generated
-        # ZIP-74: Ignore chat files when calculating the maximum number of segments
-        self._file_sets = max(
-            (
-                len(x[1])
-                for x in filter(
-                    lambda y: y[0] != "chat_file", s3_filenames.items()
-                )
-            ),
-            default=0,
-        )
 
     @property
     def flavors(self):
@@ -582,12 +569,10 @@ class PublishFileParamGenerator(FileParamGenerator):
             # Don't look at number of segments for chat files
             if "chat_file" == view:
                 return True
-            if self._file_sets == 1:
+            # OPC-1071
+            if len(self.s3_filenames[view]) > 0:
                 return True
-            # if there's more than one set of files and this particular view
-            # isn't present in all of them, then it's not ingestable
-            elif len(self.s3_filenames[view]) == self._file_sets:
-                return True
+
         return False
 
     def _has_presenter(self):
