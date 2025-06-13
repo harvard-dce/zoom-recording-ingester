@@ -1,10 +1,9 @@
 import site
 from os.path import dirname, join
-from importlib import import_module
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
-schedule_update = import_module("schedule-update")
+import zoom_schedule_update as schedule_update
 
 
 def test_handler(mocker, handler):

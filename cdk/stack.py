@@ -1,26 +1,26 @@
-from aws_cdk import Stack, aws_s3 as s3, aws_iam as iam
+from aws_cdk import Stack
+from aws_cdk import aws_iam as iam
 from constructs import Construct
 
+from . import names
+from .api import ZipApi
 from .bucket import ZipRecordingsBucket
-from .queues import ZipQueues
-from .schedule_table import ZipSchedule
-from .status_table import ZipStatus
-from .recording_events_table import ZipRecordingEvents
+from .events import ZipEvent
 from .function import (
     ZipDownloaderFunction,
+    ZipLogNotificationsFunction,
     ZipOnDemandFunction,
+    ZipScheduleUpdateFunction,
     ZipSlackQueryFunction,
+    ZipStatusQueryFunction,
     ZipUploaderFunction,
     ZipWebhookFunction,
-    ZipLogNotificationsFunction,
-    ZipScheduleUpdateFunction,
-    ZipStatusQueryFunction,
 )
-from .api import ZipApi
-from .events import ZipEvent
-from .codebuild import ZipCodebuildProject
 from .monitoring import ZipMonitoring
-from . import names
+from .queues import ZipQueues
+from .recording_events_table import ZipRecordingEvents
+from .schedule_table import ZipSchedule
+from .status_table import ZipStatus
 
 
 class ZipStack(Stack):
@@ -28,7 +28,6 @@ class ZipStack(Stack):
         self,
         scope: Construct,
         id: str,
-        lambda_code_bucket,
         notification_email,
         zoom_api_base_url,
         zoom_api_key,
@@ -60,7 +59,7 @@ class ZipStack(Stack):
         slack_zip_channel,
         slack_allowed_groups,
         slack_api_token,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
@@ -68,11 +67,6 @@ class ZipStack(Stack):
             self,
             "ZipMonitoring",
             notification_email=notification_email,
-        )
-
-        # S3 bucket that stores packaged lambda functions
-        lambda_code_bucket = s3.Bucket.from_bucket_name(
-            self, "LambdaCodeBucket", lambda_code_bucket
         )
 
         recordings_bucket = ZipRecordingsBucket(self, "RecordingsBucket")
@@ -87,9 +81,8 @@ class ZipStack(Stack):
 
         schedule_update = ZipScheduleUpdateFunction(
             self,
-            "ScheduleUpdateFunction",
+            "ZipScheduleUpdateFunction",
             name=names.SCHEDULE_UPDATE_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             memory_size=256,
             environment={
                 "CLASS_SCHEDULE_TABLE": schedule.table.table_name,
@@ -108,9 +101,8 @@ class ZipStack(Stack):
 
         status_query = ZipStatusQueryFunction(
             self,
-            "StatusFunction",
+            "ZipStatusFunction",
             name=names.STATUS_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             memory_size=500,
             environment={
                 "STACK_NAME": self.stack_name,
@@ -122,9 +114,8 @@ class ZipStack(Stack):
 
         slack = ZipSlackQueryFunction(
             self,
-            "SlackFunction",
+            "ZipSlackFunction",
             name=names.SLACK_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             environment={
                 "STACK_NAME": self.stack_name,
                 "PIPELINE_STATUS_TABLE": pipeline_status.table.table_name,
@@ -136,7 +127,6 @@ class ZipStack(Stack):
                 "SLACK_API_TOKEN": slack_api_token,
                 "OC_CLUSTER_NAME": oc_cluster_name,
             },
-            handler="slack.handler.handler",
         )
         # grant slack function permissions
         pipeline_status.table.grant_read_write_data(slack.function)
@@ -144,9 +134,8 @@ class ZipStack(Stack):
 
         on_demand = ZipOnDemandFunction(
             self,
-            "OnDemandFunction",
+            "ZipOnDemandFunction",
             name=names.ON_DEMAND_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             environment={
                 "ZOOM_API_BASE_URL": zoom_api_base_url,
                 "ZOOM_API_KEY": zoom_api_key,
@@ -161,9 +150,8 @@ class ZipStack(Stack):
 
         webhook = ZipWebhookFunction(
             self,
-            "WebhookFunction",
+            "ZipWebhookFunction",
             name=names.WEBHOOK_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             environment={
                 "ZOOM_API_BASE_URL": zoom_api_base_url,
                 "ZOOM_API_KEY": zoom_api_key,
@@ -187,9 +175,8 @@ class ZipStack(Stack):
         # and uploads matching recordings to S3
         downloader = ZipDownloaderFunction(
             self,
-            "DownloadFunction",
+            "ZipDownloadFunction",
             name=names.DOWNLOAD_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             timeout=900,
             memory_size=500,
             environment={
@@ -223,9 +210,8 @@ class ZipStack(Stack):
         # uploader lambda uploads recordings to opencast
         uploader = ZipUploaderFunction(
             self,
-            "UploaderFunction",
+            "ZipUploaderFunction",
             name=names.UPLOAD_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             timeout=900,
             vpc_id=oc_vpc_id,
             security_group_id=oc_security_group_id,
@@ -261,9 +247,8 @@ class ZipStack(Stack):
 
         log_notify = ZipLogNotificationsFunction(
             self,
-            "LogNotificationFunction",
+            "ZipLogNotificationFunction",
             name=names.LOG_NOTIFICATION_FUNCTION,
-            lambda_code_bucket=lambda_code_bucket,
             environment={},
         )
 
@@ -290,23 +275,6 @@ class ZipStack(Stack):
             "UploadEvent",
             function=uploader.function,
             event_rate=uploader_event_rate,
-        )
-
-        ZipCodebuildProject(
-            self,
-            "CodebuildProject",
-            lambda_code_bucket=lambda_code_bucket,
-            project_git_url=project_git_url,
-            policy_resources=[
-                on_demand.function.function_arn,
-                webhook.function.function_arn,
-                downloader.function.function_arn,
-                uploader.function.function_arn,
-                log_notify.function.function_arn,
-                schedule_update.function.function_arn,
-                status_query.function.function_arn,
-                slack.function.function_arn,
-            ],
         )
 
         schedule_update.add_monitoring(monitoring)

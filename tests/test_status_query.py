@@ -1,12 +1,11 @@
 import site
 from os.path import dirname, join
-from importlib import import_module
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
 from utils import InvalidStatusQuery
 
-status_query = import_module("status-query")
+import status_query
 
 
 def test_successful_request(handler, mocker):

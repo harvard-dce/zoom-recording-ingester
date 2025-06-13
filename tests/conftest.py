@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
+import zoom_downloader
+import zoom_on_demand
+import zoom_uploader
+import zoom_webhook
 
 TIMESTAMP_FORMAT = os.getenv("TIMESTAMP_FORMAT")
 
@@ -158,8 +162,9 @@ def sqs_message_from_webhook_payload():
 
 @pytest.fixture(autouse=True)
 def mock_downloader_set_pipeline_status():
-    with mock.patch(
-        "zoom-downloader.set_pipeline_status",
+    with mock.patch.object(
+        zoom_downloader,
+        "set_pipeline_status",
         mock.Mock(),
     ) as _fixture:
         yield _fixture
@@ -167,8 +172,9 @@ def mock_downloader_set_pipeline_status():
 
 @pytest.fixture(autouse=True)
 def mock_webhook_set_pipeline_status():
-    with mock.patch(
-        "zoom-webhook.set_pipeline_status",
+    with mock.patch.object(
+        zoom_webhook,
+        "set_pipeline_status",
         mock.Mock(),
     ) as _fixture:
         yield _fixture
@@ -176,8 +182,9 @@ def mock_webhook_set_pipeline_status():
 
 @pytest.fixture(autouse=True)
 def mock_webhook_set_recording_events():
-    with mock.patch(
-        "zoom-webhook.set_recording_events",
+    with mock.patch.object(
+        zoom_webhook,
+        "set_recording_events",
         mock.Mock(),
     ) as _fixture:
         yield _fixture
@@ -185,8 +192,9 @@ def mock_webhook_set_recording_events():
 
 @pytest.fixture(autouse=True)
 def mock_uploader_set_pipeline_status():
-    with mock.patch(
-        "zoom-uploader.set_pipeline_status",
+    with mock.patch.object(
+        zoom_uploader,
+        "set_pipeline_status",
         mock.Mock(),
     ) as _fixture:
         yield _fixture
@@ -194,8 +202,9 @@ def mock_uploader_set_pipeline_status():
 
 @pytest.fixture(autouse=True)
 def mock_on_demand_set_pipeline_status():
-    with mock.patch(
-        "zoom-on-demand.set_pipeline_status",
+    with mock.patch.object(
+        zoom_on_demand,
+        "set_pipeline_status",
         mock.Mock(),
     ) as _fixture:
         yield _fixture

@@ -4,7 +4,7 @@ from os.path import dirname, join
 site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
 from urllib.parse import quote
-from slack import blocks
+from utils import slack_blocks as blocks
 
 STACK_NAME = "mock-stack-name"
 

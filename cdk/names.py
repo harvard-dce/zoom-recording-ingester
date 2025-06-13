@@ -13,14 +13,14 @@ UPLOAD_QUEUE = "upload.fifo"
 UPLOAD_DLQ = "upload-dlq.fifo"
 QUEUES = [DOWNLOAD_QUEUE, DOWNLOAD_DLQ, UPLOAD_QUEUE, UPLOAD_DLQ]
 
-ON_DEMAND_FUNCTION = "zoom-on-demand"
-WEBHOOK_FUNCTION = "zoom-webhook"
-DOWNLOAD_FUNCTION = "zoom-downloader"
-UPLOAD_FUNCTION = "zoom-uploader"
-LOG_NOTIFICATION_FUNCTION = "zoom-log-notifications"
-SCHEDULE_UPDATE_FUNCTION = "schedule-update"
-STATUS_FUNCTION = "status-query"
-SLACK_FUNCTION = "slack"
+ON_DEMAND_FUNCTION = "zoom_on_demand"
+WEBHOOK_FUNCTION = "zoom_webhook"
+DOWNLOAD_FUNCTION = "zoom_downloader"
+UPLOAD_FUNCTION = "zoom_uploader"
+LOG_NOTIFICATION_FUNCTION = "zoom_log_notifications"
+SCHEDULE_UPDATE_FUNCTION = "zoom_schedule_update"
+STATUS_FUNCTION = "zoom_status_query"
+SLACK_FUNCTION = "zoom_slack"
 FUNCTIONS = [
     ON_DEMAND_FUNCTION,
     WEBHOOK_FUNCTION,
@@ -39,7 +39,5 @@ ON_DEMAND_ENDPOINT = "ingest"
 SCHEDULE_UPDATE_ENDPOINT = "schedule"
 STATUS_ENDPOINT = "status"
 SLACK_ENDPOINT = "slack"
-
-CODEBUILD_PROJECT = "codebuild"
 
 LAMBDA_RELEASE_ALIAS = "live"
