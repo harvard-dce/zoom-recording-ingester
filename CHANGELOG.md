@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.3.0 - 2025-06-13]
+
+### Changed
+
+- Use python 3.12 and upgrade all dependencies
+- Package function and dependencies as a docker image
+
 ## [4.2.5 - 2024-12-11]
 
 ### Changed
