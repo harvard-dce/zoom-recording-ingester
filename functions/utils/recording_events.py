@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import boto3
 from botocore.exceptions import ClientError
 from os import getenv as env
@@ -235,4 +235,6 @@ def from_utc_to_timestamp(date_str):
 
 
 def from_timestamp_to_utc(ts):
-    return datetime.strftime(datetime.utcfromtimestamp(ts), TIMESTAMP_FORMAT)
+    return datetime.strftime(
+        datetime.fromtimestamp(int(ts), UTC), TIMESTAMP_FORMAT
+    )
