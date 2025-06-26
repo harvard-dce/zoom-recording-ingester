@@ -756,7 +756,7 @@ def test_handler_duration_check(handler, mocker):
     assert mock_msg.delete.call_count == 1
 
 
-def test_ignore_duration_check_for_on_demand(handler, mocker):
+def test_do_not_ignore_duration_check_for_on_demand(handler, mocker):
     downloader.DOWNLOAD_MESSAGES_PER_INVOCATION = 1
     mocker.patch.object(downloader, "sqs", mocker.Mock())
     mocker.patch.object(
@@ -779,9 +779,8 @@ def test_ignore_duration_check_for_on_demand(handler, mocker):
     )
     handler(downloader, {})
 
-    # if we got here it means we passed the duration check
-    # should pass because the ingest is an on demand ingest
-    assert downloader.Download.oc_series_found.call_count == 1
+    # should not have gotten here past the duration check
+    assert downloader.Download.oc_series_found.call_count == 0
     assert mock_msg.delete.call_count == 1
 
 
