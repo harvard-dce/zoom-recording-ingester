@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.4.0 - 2025-07-15]
+
+### Changed
+
+- ZIP-100 Fix decimal to int conversion error
+- ZIP-101 Block on-demand ingests < minimum duration at the downloader phase
+- ZIP-98 Do not ignore views that are not present in all segments anymore.
+Segment holes will be filled by black video in Opencast.
+
 ## [4.3.0 - 2025-06-13]
 
 ### Changed
@@ -43,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - new dynamodb table `RecordingEvents` to keep track of timestamps of events: recording
-start, pause, resume, stop, which are passed to Opencast at ingest time. 
+start, pause, resume, stop, which are passed to Opencast at ingest time.
 
 ## [4.1.0 - 2023-08-22]
 
@@ -67,7 +76,7 @@ start, pause, resume, stop, which are passed to Opencast at ingest time.
 
 ### Removed
 
-- references and usage of `OC_DB_PASSWORD` which was only needed by the opencast-op-counts 
+- references and usage of `OC_DB_PASSWORD` which was only needed by the opencast-op-counts
   function (which was removed in v3.4.0
 - unneeded zoom API call to retrieve `host_name` (the zoom meeting host)
 
