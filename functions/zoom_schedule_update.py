@@ -1,8 +1,7 @@
-from os import getenv as env
 import logging
+from os import getenv as env
 
-from utils import setup_logging, GSheet
-
+from utils import GSheet, setup_logging
 
 GSHEETS_DOC_ID = env("GSHEETS_DOC_ID")
 GSHEETS_SHEET_NAMES = env("GSHEETS_SHEET_NAMES")
