@@ -1,8 +1,8 @@
 {
-  "dependencies": {
-    "aws-cdk": "^2.1014.0"
-  },
   "scripts": {
     "cdk": "cdk"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.1124.0"
   }
 }
