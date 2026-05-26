@@ -6,4 +6,4 @@ pytest-cov
 requests-mock
 freezegun
 
--r ../function_requirements/common-requirements.txt
+-r ../functions/requirements.txt

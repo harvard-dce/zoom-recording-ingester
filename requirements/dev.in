@@ -6,4 +6,4 @@ pipdeptree
 
 -r base.txt
 -r tox.txt
--r ../function_requirements/common-requirements.txt
+-r ../functions/requirements.txt
