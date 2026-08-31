@@ -5,6 +5,9 @@ site.addsitedir(join(dirname(dirname(__file__)), "functions"))
 
 import pytest
 import jwt
+import json
+import re
+import sys
 import time
 import requests
 import requests_mock
@@ -213,3 +216,172 @@ def test_buffer_minutes(monkeypatch):
             start_time.replace(hour=14, minute=20),
         )
         assert match["title"] == "Foo"
+
+
+# logging setup / formatter tests (ZIP-104)
+
+
+def _make_record(msg, level=logging.INFO, exc_info=None):
+    return logging.LogRecord(
+        name="test.module",
+        level=level,
+        pathname=__file__,
+        lineno=42,
+        msg=msg,
+        args=(),
+        exc_info=exc_info,
+        func="myfunc",
+    )
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, False),
+        ("", False),
+        ("0", False),
+        ("false", False),
+        ("no", False),
+        ("off", False),
+        ("1", True),
+        ("true", True),
+        ("TRUE", True),
+        ("yes", True),
+        ("on", True),
+    ],
+)
+def test_env_flag(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv("SOME_FLAG", raising=False)
+    else:
+        monkeypatch.setenv("SOME_FLAG", value)
+    assert utils.common._env_flag("SOME_FLAG") is expected
+
+
+def test_formatter_basic_fields():
+    formatter = utils.common._JsonLambdaFormatter()
+    record = _make_record("hello there")
+    record.aws_request_id = "req-123"
+    formatted = formatter.format(record)
+    # the trailing newline is the record terminator; without it successive
+    # records get concatenated into a single CloudWatch event (ZIP-104)
+    assert formatted.endswith("\n")
+    assert "\n" not in formatted[:-1]
+    parsed = json.loads(formatted)
+    assert parsed["level"] == "INFO"
+    assert parsed["location"] == "test.module.myfunc:42"
+    assert parsed["aws_request_id"] == "req-123"
+    assert parsed["message"] == "hello there"
+    # ISO 8601 UTC with millisecond precision
+    assert re.match(
+        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", parsed["timestamp"]
+    )
+
+
+def test_formatter_dict_message():
+    formatter = utils.common._JsonLambdaFormatter()
+    record = _make_record({"foo": {"bar": 1}})
+    parsed = json.loads(formatter.format(record))
+    assert parsed["message"] == {"foo": {"bar": 1}}
+
+
+def test_formatter_json_string_message():
+    formatter = utils.common._JsonLambdaFormatter()
+    record = _make_record('{"foo": 1}')
+    parsed = json.loads(formatter.format(record))
+    assert parsed["message"] == {"foo": 1}
+
+
+def test_formatter_exception():
+    formatter = utils.common._JsonLambdaFormatter()
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        record = _make_record("failed", exc_info=sys.exc_info())
+    parsed = json.loads(formatter.format(record))
+    assert "ValueError: boom" in parsed["exception"]
+
+
+def test_formatter_metric_filter_contract():
+    """
+    The cdk metric filters (cdk/function.py) match on these json paths;
+    the formatter must keep emitting them.
+    """
+    formatter = utils.common._JsonLambdaFormatter()
+
+    cases = [
+        (
+            {"payload": {"status": "RECORDING_MEETING_COMPLETED"}},
+            lambda m: m["payload"]["status"] == "RECORDING_MEETING_COMPLETED",
+        ),
+        ({"duration": 12.5}, lambda m: m["duration"] > 0),
+        ({"minutes_in_pipeline": 5}, lambda m: m["minutes_in_pipeline"] > 0),
+    ]
+    for msg, check in cases:
+        parsed = json.loads(formatter.format(_make_record(msg)))
+        assert check(parsed["message"])
+
+
+@pytest.fixture
+def preserved_root_handlers():
+    root_logger = logging.getLogger()
+    saved = root_logger.handlers[:]
+    yield root_logger
+    root_logger.handlers = saved
+
+
+def test_setup_logging_reuses_existing_handler(preserved_root_handlers):
+    """
+    The lambda runtime's pre-installed handler must be kept (its transport
+    guarantees one CloudWatch event per record), not replaced.
+    """
+    root_logger = preserved_root_handlers
+    runtime_handler = logging.StreamHandler()
+    root_logger.handlers = [runtime_handler]
+
+    utils.common._setup_logging()
+    assert root_logger.handlers == [runtime_handler]
+    assert isinstance(
+        runtime_handler.formatter, utils.common._JsonLambdaFormatter
+    )
+    assert utils.common._REQUEST_ID_FILTER in runtime_handler.filters
+
+    # repeat invocation (warm container) must not stack handlers/filters
+    utils.common._setup_logging()
+    assert root_logger.handlers == [runtime_handler]
+    assert runtime_handler.filters.count(utils.common._REQUEST_ID_FILTER) == 1
+
+
+def test_setup_logging_creates_handler_when_none(preserved_root_handlers):
+    root_logger = preserved_root_handlers
+    root_logger.handlers = []
+
+    utils.common._setup_logging()
+    assert len(root_logger.handlers) == 1
+    assert isinstance(
+        root_logger.handlers[0].formatter, utils.common._JsonLambdaFormatter
+    )
+
+
+def test_request_id_filter_defers_to_existing_id():
+    """
+    In lambda, the runtime's own filter stamps a fresher request id before
+    ours runs; ours must only fill in when no id is present.
+    """
+    f = utils.common._AwsRequestIdFilter()
+    f.set_request_id("stale-id")
+
+    record = _make_record("hello")
+    record.aws_request_id = "runtime-id"
+    f.filter(record)
+    assert record.aws_request_id == "runtime-id"
+
+    # empty string (runtime init phase) and absent id fall back to ours
+    record = _make_record("hello")
+    record.aws_request_id = ""
+    f.filter(record)
+    assert record.aws_request_id == "stale-id"
+
+    record = _make_record("hello")
+    f.filter(record)
+    assert record.aws_request_id == "stale-id"

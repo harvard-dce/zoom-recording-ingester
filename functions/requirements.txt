@@ -4,8 +4,6 @@
 #
 #    pip-compile functions/requirements.in
 #
-aws-lambda-logging==0.1.1
-    # via -r functions/requirements.in
 boto3==1.43.11
     # via -r functions/requirements.in
 botocore==1.43.11

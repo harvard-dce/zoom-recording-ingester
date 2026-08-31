@@ -1,22 +1,31 @@
-import jwt
-import time
+import json
 import logging
-import requests
-import aws_lambda_logging
+import time
+from collections import OrderedDict
+from datetime import datetime, timezone
 from functools import wraps
 from os import getenv as env
-from dotenv import load_dotenv
-from os.path import join, dirname
+from os.path import dirname, join
+
 import boto3
-from collections import OrderedDict
-from datetime import datetime
+import jwt
+import requests
+from dotenv import load_dotenv
 
 logger = logging.getLogger()
 
 load_dotenv(join(dirname(__file__), "../../.env"))
 
-LOG_LEVEL = env("DEBUG") and "DEBUG" or "INFO"
-BOTO_LOG_LEVEL = env("BOTO_DEBUG") and "DEBUG" or "INFO"
+
+def _env_flag(name):
+    value = env(name)
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+LOG_LEVEL = "DEBUG" if _env_flag("DEBUG") else "INFO"
+BOTO_LOG_LEVEL = "DEBUG" if _env_flag("BOTO_DEBUG") else "INFO"
 ZOOM_API_BASE_URL = env("ZOOM_API_BASE_URL")
 ZOOM_API_KEY = env("ZOOM_API_KEY")
 ZOOM_API_SECRET = env("ZOOM_API_SECRET")
@@ -47,6 +56,84 @@ class ZoomApiRequestError(Exception):
     pass
 
 
+class _AwsRequestIdFilter(logging.Filter):
+    def __init__(self):
+        super().__init__()
+        self.aws_request_id = None
+
+    def set_request_id(self, aws_request_id):
+        self.aws_request_id = aws_request_id
+
+    def filter(self, record):
+        # The lambda runtime's own LambdaLoggerFilter (added to the handler
+        # before this one) stamps records with an always-fresh request id;
+        # defer to it and only fill in when it's absent (local scripts,
+        # tests) so we never overwrite a fresher value with a stale one.
+        if not getattr(record, "aws_request_id", None):
+            record.aws_request_id = self.aws_request_id
+        return True
+
+
+class _JsonLambdaFormatter(logging.Formatter):
+    def format(self, record):
+        record_dict = record.__dict__.copy()
+        timestamp = (
+            datetime.fromtimestamp(record.created, tz=timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+
+        payload = {
+            "timestamp": timestamp,
+            "level": record.levelname,
+            "location": f"{record.name}.{record.funcName}:{record.lineno}",
+            "aws_request_id": record_dict.get("aws_request_id"),
+            "message": record_dict.get("msg"),
+        }
+
+        if not isinstance(payload["message"], dict):
+            payload["message"] = record.getMessage()
+            try:
+                payload["message"] = json.loads(payload["message"])
+            except (TypeError, ValueError):
+                pass
+
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+
+        # The trailing newline is the record terminator in the lambda
+        # logging contract: without it, successive records are buffered
+        # and flushed as one giant concatenated CloudWatch event (the
+        # ZIP-104 garbling). The runtime's own formatters do the same.
+        return json.dumps(payload, default=str) + "\n"
+
+
+_REQUEST_ID_FILTER = _AwsRequestIdFilter()
+
+
+def _setup_logging():
+    root_logger = logging.getLogger()
+
+    # The lambda runtime pre-installs a root handler wired to the runtime's
+    # log sink. Reformat it rather than replacing it (see
+    # docs/adr/0001-preserve-lambda-runtime-log-handler.md); only create a
+    # handler when none exists (local scripts, tests).
+    if not root_logger.handlers:
+        root_logger.addHandler(logging.StreamHandler())
+
+    for handler in root_logger.handlers:
+        if not isinstance(handler.formatter, _JsonLambdaFormatter):
+            handler.setFormatter(_JsonLambdaFormatter())
+        if _REQUEST_ID_FILTER not in handler.filters:
+            handler.addFilter(_REQUEST_ID_FILTER)
+
+    root_logger.setLevel(LOG_LEVEL)
+
+    boto_level = logging.DEBUG if BOTO_LOG_LEVEL == "DEBUG" else logging.INFO
+    for logger_name in ("boto", "boto3", "botocore", "s3transfer", "urllib3"):
+        logging.getLogger(logger_name).setLevel(boto_level)
+
+
 # wrap the default getenv so we can enforce required vars
 def getenv(param_name, required=True):
     val = env(param_name)
@@ -58,11 +145,9 @@ def getenv(param_name, required=True):
 def setup_logging(handler_func):
     @wraps(handler_func)
     def wrapped_func(event, context):
-        extra_info = {"aws_request_id": context.aws_request_id}
-        aws_lambda_logging.setup(
-            level=LOG_LEVEL,
-            boto_level=BOTO_LOG_LEVEL,
-            **extra_info,
+        _setup_logging()
+        _REQUEST_ID_FILTER.set_request_id(
+            getattr(context, "aws_request_id", None)
         )
 
         logger = logging.getLogger()

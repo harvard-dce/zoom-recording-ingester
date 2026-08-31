@@ -4,8 +4,6 @@
 #
 #    pip-compile requirements/tox.in
 #
-aws-lambda-logging==0.1.1
-    # via -r functions/requirements.txt
 boto3==1.43.11
     # via -r functions/requirements.txt
 botocore==1.43.11

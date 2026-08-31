@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Fixed
+
+- ZIP-104 Fix garbled CloudWatch log events: replace the unmaintained
+  `aws-lambda-logging` package with an in-repo JSON formatter that
+  newline-terminates every record (the missing terminator was the root
+  cause of records concatenating into single giant events), reuse the
+  Lambda runtime's log handler instead of replacing it, and correct
+  `DEBUG` env flag parsing so `DEBUG=0` no longer enables debug logging
+
 ## [4.5.0 - 2026-05-26]
 
 ### Changed

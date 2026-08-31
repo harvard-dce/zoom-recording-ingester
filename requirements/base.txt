@@ -16,8 +16,6 @@ aws-cdk-cloud-assembly-schema==53.26.0
     # via aws-cdk-lib
 aws-cdk-lib==2.256.0
     # via -r requirements/base.in
-aws-lambda-logging==0.1.1
-    # via -r functions/requirements.txt
 awscli==1.45.11
     # via -r requirements/base.in
 boto3==1.43.11

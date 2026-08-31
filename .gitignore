@@ -14,3 +14,6 @@ outfile.txt
 cdk.out
 cdk.context.json
 node_modules
+
+# cloudwatch log exports (may contain institutional data)
+log-events-viewer-result*.csv
