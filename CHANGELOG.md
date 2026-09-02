@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [4.5.1 - 2026-09-02]
+
 ### Fixed
 
 - ZIP-104 Fix garbled CloudWatch log events: replace the unmaintained
